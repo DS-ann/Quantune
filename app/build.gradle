@@ -31,13 +31,14 @@ android {
         }
     }
 
-    // Produce only the ARM64-v8a APK; do not emit universal or other-ABI APKs.
+    // Produce one universal ARM APK plus dedicated 32-bit and 64-bit ARM variants.
+    // The universal APK contains native libraries for both supported ARM ABIs.
     splits {
         abi {
             enable true
             reset()
-            include 'arm64-v8a'
-            universalApk false
+            include 'armeabi-v7a', 'arm64-v8a'
+            universalApk true
         }
     }
 
