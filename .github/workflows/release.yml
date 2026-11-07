@@ -148,7 +148,7 @@ jobs:
           } > release-description.md
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           tag_name: ${{ inputs.release_tag }}
           target_commitish: ${{ inputs.source_ref }}
