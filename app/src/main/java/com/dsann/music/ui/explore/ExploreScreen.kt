@@ -2513,7 +2513,7 @@ private fun ExploreCustomizerDialog(
 
                             CreditsTextSection(
                                 title = "Produced by",
-                                content = listOf(if (contributors.size > 1) contributors.last() else "D.S Music Engine")
+                                content = listOf(if (contributors.size > 1) contributors.last() else "Quantune Engine")
                             )
 
                             CreditsTextSection(
@@ -2580,7 +2580,7 @@ private fun ExploreCustomizerDialog(
 
                             CreditsTextSection(
                                 title = "Produced by",
-                                content = listOf(if (contributors.size > 1) contributors.last() else "D.S Music Engine")
+                                content = listOf(if (contributors.size > 1) contributors.last() else "Quantune Engine")
                             )
 
                             CreditsTextSection(
@@ -3068,7 +3068,7 @@ private fun ExploreCustomizerDialog(
                     DsmusicPageHeading(
                         title = if (isSearchDestination) "Search" else "Explore",
                         subtitle = if (isSearchDestination) "Find your next favourite." else null,
-                        kicker = if (isSearchDestination) "FIND YOUR SOUND" else "D.S MUSIC",
+                        kicker = if (isSearchDestination) "FIND YOUR SOUND" else "QUANTUNE",
                         modifier = Modifier.weight(1f)
                     )
                 } else {

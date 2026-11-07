@@ -890,7 +890,7 @@ fun LibraryScreen(
                                                     fontWeight = FontWeight.ExtraBold
                                                 )
                                                 Text(
-                                                    "D.S Music · ${sourceSongs.size} songs",
+                                                    "Quantune · ${sourceSongs.size} songs",
                                                     style = DsmusicTheme.typography.bodyMedium,
                                                     color = DsmusicTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -2554,7 +2554,7 @@ private fun LocalPlaylistDetailsScreen(
                     try {
                         val remotePlaylistId = YouTubeMusic.createPlaylist(
                             title = playlist.title,
-                            description = "Created with D.S Music",
+                            description = "Created with Quantune",
                             privacyStatus = "PRIVATE",
                             videoIds = uploadableVideoIds
                         ).getOrThrow()
@@ -2563,7 +2563,7 @@ private fun LocalPlaylistDetailsScreen(
                             viewModel.markLocalPlaylistUploaded(playlist.id, remotePlaylistId)
                         } catch (saveError: Exception) {
                             com.dsann.music.ui.SnackbarController.showMessage(
-                                "Uploaded to YouTube Music, but D.S Music could not save the link. Do not upload again."
+                                "Uploaded to YouTube Music, but Quantune could not save the link. Do not upload again."
                             )
                             return@launch
                         }
@@ -2702,7 +2702,7 @@ private fun LocalPlaylistDetailsScreen(
                         LibraryGradientPlaylistHero(
                             title = playlist.title,
                             subtitle = songs.size.toString() + " songs · On this device",
-                            status = "Saved in D.S Music",
+                            status = "Saved in Quantune",
                             artwork = artworkUrl,
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -2818,7 +2818,7 @@ private fun LocalPlaylistDetailsScreen(
                             LibraryGradientPlaylistHero(
                                 title = playlist.title,
                                 subtitle = songs.size.toString() + " songs · On this device",
-                                status = "Saved in D.S Music",
+                                status = "Saved in Quantune",
                                 artwork = artworkUrl,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -3918,7 +3918,7 @@ fun RecapTabContent(
                                     scope.launch {
                                         YouTubeMusic.createPlaylist(
                                             title = "Replay - " + selectedPeriod,
-                                            description = "Made with D.S Music Replay",
+                                            description = "Made with Quantune Replay",
                                             privacyStatus = "PRIVATE",
                                             videoIds = ids
                                         ).onSuccess {
@@ -4339,6 +4339,7 @@ private val attemptedCacheTitleRepairs =
 private fun isGenericCachedSongTitle(value: String?): Boolean {
     val title = value?.trim().orEmpty()
     return title.isBlank() ||
+        title.equals("Quantune", ignoreCase = true) ||
         title.equals("D.S Music", ignoreCase = true) ||
         title.equals("Unknown Title", ignoreCase = true) ||
         title.equals("<unknown>", ignoreCase = true) ||

@@ -543,7 +543,7 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
             if (layoutId != R.layout.widget_small) {
                 views.setTextViewText(
                         R.id.widget_song_title,
-                        song != null && song.title != null ? song.title : "D.S Music"
+                        song != null && song.title != null ? song.title : "Quantune"
                 );
                 views.setTextViewText(
                         R.id.widget_artist_name,
@@ -660,7 +660,7 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
                 if (layoutId != R.layout.widget_small) {
                     fallback.setTextViewText(
                             R.id.widget_song_title,
-                            song != null && song.title != null ? song.title : "D.S Music"
+                            song != null && song.title != null ? song.title : "Quantune"
                     );
                     fallback.setTextViewText(
                             R.id.widget_artist_name,
