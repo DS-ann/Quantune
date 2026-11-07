@@ -1,5 +1,5 @@
 name: Quantune • Official Android Release
-run-name: Publish Quantune \${{ inputs.release_tag }}
+run-name: Publish Quantune ${{ inputs.release_tag }}
 
 on:
   workflow_dispatch:
@@ -27,7 +27,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: quantune-release-\${{ inputs.release_tag }}
+  group: quantune-release-${{ inputs.release_tag }}
   cancel-in-progress: false
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: DS-ann/Quantune
-          ref: \${{ inputs.source_ref }}
+          ref: ${{ inputs.source_ref }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v6
@@ -77,16 +77,16 @@ jobs:
 
       - name: Sign and verify the release APK
         env:
-          SIGNING_KEYSTORE_BASE64: \${{ secrets.BATTERYPULSE_KEYSTORE_BASE64 }}
-          SIGNING_KEYSTORE_PASSWORD: \${{ secrets.BATTERYPULSE_STORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: \${{ secrets.BATTERYPULSE_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: \${{ secrets.BATTERYPULSE_KEY_PASSWORD }}
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.BATTERYPULSE_KEYSTORE_BASE64 }}
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.BATTERYPULSE_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.BATTERYPULSE_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.BATTERYPULSE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          : "\${SIGNING_KEYSTORE_BASE64:?Configure BATTERYPULSE_KEYSTORE_BASE64 in repository Actions secrets}"
-          : "\${SIGNING_KEYSTORE_PASSWORD:?Configure BATTERYPULSE_STORE_PASSWORD in repository Actions secrets}"
-          : "\${SIGNING_KEY_ALIAS:?Configure BATTERYPULSE_KEY_ALIAS in repository Actions secrets}"
-          : "\${SIGNING_KEY_PASSWORD:?Configure BATTERYPULSE_KEY_PASSWORD in repository Actions secrets}"
+          : "${SIGNING_KEYSTORE_BASE64:?Configure BATTERYPULSE_KEYSTORE_BASE64 in repository Actions secrets}"
+          : "${SIGNING_KEYSTORE_PASSWORD:?Configure BATTERYPULSE_STORE_PASSWORD in repository Actions secrets}"
+          : "${SIGNING_KEY_ALIAS:?Configure BATTERYPULSE_KEY_ALIAS in repository Actions secrets}"
+          : "${SIGNING_KEY_PASSWORD:?Configure BATTERYPULSE_KEY_PASSWORD in repository Actions secrets}"
 
           BUILD_TOOLS="$ANDROID_HOME/build-tools/37.0.0"
           SOURCE_APK="$RUNNER_TEMP/Quantune-release-unsigned.apk"
@@ -115,8 +115,8 @@ jobs:
 
       - name: Write polished GitHub release description
         env:
-          RELEASE_TAG: \${{ inputs.release_tag }}
-          RELEASE_NOTES: \${{ inputs.release_notes }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
         run: |
           {
             printf '# Quantune %s\n\n' "$RELEASE_TAG"
@@ -150,13 +150,13 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3.0.3
         with:
-          tag_name: \${{ inputs.release_tag }}
-          target_commitish: \${{ inputs.source_ref }}
-          name: Quantune \${{ inputs.release_tag }} — Android
+          tag_name: ${{ inputs.release_tag }}
+          target_commitish: ${{ inputs.source_ref }}
+          name: Quantune ${{ inputs.release_tag }} — Android
           body_path: release-description.md
           draft: false
-          prerelease: \${{ inputs.prerelease }}
-          make_latest: \${{ inputs.prerelease && 'false' || 'true' }}
+          prerelease: ${{ inputs.prerelease }}
+          make_latest: ${{ inputs.prerelease && 'false' || 'true' }}
           overwrite_files: true
           fail_on_unmatched_files: true
           files: |
