@@ -293,7 +293,7 @@ import com.dsann.music.applyDsmusicNightMode
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "D.S MUSIC",
+                    text = "QUANTUNE",
                     style = DsmusicTheme.typography.labelMedium,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 1.8.sp,
@@ -481,7 +481,7 @@ import com.dsann.music.applyDsmusicNightMode
                         color = colors.surfaceContainerHighest.copy(alpha = 0.96f)
                     ) {
                         Text(
-                            text = "D.S MUSIC",
+                            text = "QUANTUNE",
                             modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
                             style = DsmusicTheme.typography.labelSmall,
                             fontWeight = FontWeight.ExtraBold,
@@ -563,7 +563,7 @@ import com.dsann.music.applyDsmusicNightMode
             heroTag = "A FRESH WAY TO LISTEN"
         ) {
             Text(
-                text = "Welcome\nto D.S Music.",
+                text = "Welcome\nto Quantune.",
                 style = DsmusicTheme.typography.displayMedium,
                 fontWeight = FontWeight.Black,
                 fontSize = 36.sp,
@@ -1388,7 +1388,7 @@ import com.dsann.music.applyDsmusicNightMode
                     if (pagerState.currentPage == 0) {
                         Column {
                             Text(
-                                text = "D.S MUSIC",
+                                text = "QUANTUNE",
                                 style = DsmusicTheme.typography.labelMedium,
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 1.6.sp,

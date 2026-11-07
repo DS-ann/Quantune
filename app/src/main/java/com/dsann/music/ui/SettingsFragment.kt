@@ -1487,7 +1487,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 val gson = com.google.gson.Gson()
                 val parsed = com.google.gson.JsonParser().parse(jsonString)
                 if (!parsed.isJsonObject) {
-                    throw IllegalArgumentException("This is not a valid D.S Music backup file")
+                    throw IllegalArgumentException("This is not a valid Quantune backup file")
                 }
                 val backupObject = parsed.asJsonObject
                 val format = backupObject.get("format")?.takeIf { it.isJsonPrimitive }?.asString
@@ -2012,7 +2012,7 @@ fun SettingsScreenContent(
         composable(SettingsRoute.BackupRestore.route) {
             BackupRestoreScreen(
                 navController = navController,
-                onBackupClick = { exportBackupLauncher.launch("D.S-Music-backup.json") },
+                onBackupClick = { exportBackupLauncher.launch("Quantune-backup.json") },
                 onRestoreClick = { importBackupLauncher.launch(arrayOf("application/json")) },
                 includeListeningHistory = includeListeningHistoryInBackup,
                 onIncludeListeningHistoryChange = viewModel::setIncludeListeningHistoryInBackup
@@ -2231,7 +2231,7 @@ private fun SettingsDetailTopBar(title: String, onBack: () -> Unit) {
         DsmusicPageHeading(
             title = title,
             subtitle = "Settings",
-            kicker = "D.S MUSIC",
+            kicker = "QUANTUNE",
             modifier = Modifier.weight(1f)
         )
         Box(
@@ -2509,7 +2509,7 @@ private fun SettingsMainScreen(navController: androidx.navigation.NavController)
     ) {
         DsmusicPageHeading(
             title = "Settings",
-            subtitle = "Make D.S Music look and sound the way you like.",
+            subtitle = "Make Quantune look and sound the way you like.",
             kicker = "YOUR LISTENING SPACE",
             modifier = Modifier
                 .fillMaxWidth()
@@ -2660,7 +2660,7 @@ private fun SettingsMainScreen(navController: androidx.navigation.NavController)
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             SettingsDashboardTile(
-                title = "About D.S Music",
+                title = "About Quantune",
                 subtitle = "Version, updates and credits",
                 iconResId = R.drawable.ic_settings_info,
                 modifier = Modifier.weight(1f),
@@ -3172,7 +3172,7 @@ private fun AccountScreen(
                             )
                             if (ytCookies != null) {
                                 Text(
-                                    text = "Profile: D.S Music User",
+                                    text = "Profile: Quantune User",
                                     style = DsmusicTheme.typography.bodyMedium,
                                     color = DsmusicTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold
@@ -4853,7 +4853,7 @@ private fun WhatsNewScreen(navController: androidx.navigation.NavController) {
         Triple<List<com.dsann.music.update.GitHubReleaseClient.ReleaseInfo>, Boolean, String?>?
     >(initialValue = null, retryKey) {
         value = withContext(Dispatchers.IO) {
-            val client = com.dsann.music.update.GitHubReleaseClient("DS-ann", "D.S-Music2")
+            val client = com.dsann.music.update.GitHubReleaseClient("DS-ann", "Quantune")
             val loadedReleases = client.getAllReleases()
             val requestError = client.lastError
             Triple(
@@ -5110,7 +5110,7 @@ private fun AboutBrandCard() {
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_launcher_art),
-                        contentDescription = "D.S Music app icon",
+                        contentDescription = "Quantune app icon",
                         tint = Color.Unspecified,
                         modifier = Modifier.size(70.dp)
                     )
@@ -5827,7 +5827,7 @@ private fun CreditsCard(onOpenUrl: (String) -> Unit) {
                     )
                     Spacer(Modifier.height(3.dp))
                     Text(
-                        "D.S Music Developer",
+                        "Quantune Developer",
                         style = DsmusicTheme.typography.bodySmall,
                         color = DsmusicTheme.colorScheme.onSurfaceVariant
                     )
@@ -5841,7 +5841,7 @@ private fun CreditsCard(onOpenUrl: (String) -> Unit) {
             }
 
             DsmusicOutlinedButton(
-                onClick = { onOpenUrl("https://github.com/DS-ann/D.S-Music2") },
+                onClick = { onOpenUrl("https://github.com/DS-ann/Quantune") },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(14.dp)
             ) {
@@ -6018,7 +6018,7 @@ private fun FeedbackScreen(navController: androidx.navigation.NavController) {
                             modifier = Modifier.clickable {
                                 val title = URLEncoder.encode("[Bug] ", "UTF-8")
                                 val body = URLEncoder.encode("## Description\n\n\n## Device Information\n$debugInfo\n\n## Steps to Reproduce\n1.\n2.\n3.\n", "UTF-8")
-                                val url = "https://github.com/DS-ann/D.S-Music2/issues/new?title=$title&body=$body"
+                                val url = "https://github.com/DS-ann/Quantune/issues/new?title=$title&body=$body"
                                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                             }
                         )
@@ -6026,13 +6026,13 @@ private fun FeedbackScreen(navController: androidx.navigation.NavController) {
                     {
                         DsmusicListItem(
                             headlineContent = { Text("Request Feature", style = DsmusicTheme.typography.bodyLarge) },
-                            supportingContent = { Text("Suggest a new feature for D.S Music", style = DsmusicTheme.typography.bodyMedium) },
+                            supportingContent = { Text("Suggest a new feature for Quantune", style = DsmusicTheme.typography.bodyMedium) },
                             leadingContent = { Icon(Icons.Rounded.OpenInNew, null, tint = DsmusicTheme.colorScheme.primary) },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                             modifier = Modifier.clickable {
                                 val title = URLEncoder.encode("[Feature] ", "UTF-8")
                                 val body = URLEncoder.encode("## Feature Description\n\n\n## Why is this needed?\n\n", "UTF-8")
-                                val url = "https://github.com/DS-ann/D.S-Music2/issues/new?title=$title&body=$body"
+                                val url = "https://github.com/DS-ann/Quantune/issues/new?title=$title&body=$body"
                                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                             }
                         )
