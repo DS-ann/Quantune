@@ -1,23 +1,19 @@
-name: Build Quantune APK (ARM64)
+name: Quantune ARM64 APK (Manual)
 
 on:
-  push:
-    branches: [dsmusic]
-    paths:
-      - "app/**"
-      - "gradle/**"
-      - "gradlew"
-      - "build.gradle"
-      - "settings.gradle"
-      - "gradle.properties"
-      - ".github/workflows/dsmusic-build.yml"
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Branch, tag, or commit to build"
+        required: true
+        type: string
+        default: main
 
 permissions:
   contents: read
 
 concurrency:
-  group: dsmusic-build-${{ github.ref }}
+  group: quantune-arm64-manual-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -26,10 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Checkout exact triggering commit
+      - name: Checkout selected source
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.source_ref }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v6
@@ -47,23 +43,26 @@ jobs:
         with:
           packages: ""
 
-      - name: Install Android 17 SDK and Build Tools
-        run: sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Install Android SDK and native toolchain
+        run: |
+          sdkmanager --channel=3 \
+            "platforms;android-37.0" \
+            "build-tools;37.0.0" \
+            "cmake;3.22.1" \
+            "ndk;27.2.12479018"
 
-      # Release builds intentionally skip unit-test tasks; assembleRelease still compiles
-      # the production source, runs code generation, minification and resource shrinking.
+      # assembleRelease compiles production code, runs code generation,
+      # minification and resource shrinking without running test tasks.
       - name: Assemble ARM64 release APK
         run: |
           set -euo pipefail
-          # Release builds intentionally skip unit-test tasks; assembleRelease still compiles
-          # the production source, runs code generation, minification and resource shrinking.
-          gradle --build-cache --parallel assembleRelease
+          gradle --no-daemon --build-cache --parallel assembleRelease
           SOURCE_APK="app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk"
-          test -f "$SOURCE_APK"
-          mkdir -p app/build/outputs/apk/dsmusic-artifact
-          cp "$SOURCE_APK" "$RUNNER_TEMP/dsmusic-release-unsigned.apk"
+          test -s "$SOURCE_APK"
+          mkdir -p app/build/outputs/apk/quantune-artifact
+          cp "$SOURCE_APK" "$RUNNER_TEMP/quantune-release-unsigned.apk"
 
-      - name: Sign release APK with shared D.S-Apps key when configured
+      - name: Sign release APK with the shared D.S-Apps key when configured
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.BATTERYPULSE_KEYSTORE_BASE64 }}
           SIGNING_KEYSTORE_PASSWORD: ${{ secrets.BATTERYPULSE_STORE_PASSWORD }}
@@ -72,15 +71,15 @@ jobs:
         run: |
           set -euo pipefail
           BUILD_TOOLS="$ANDROID_HOME/build-tools/37.0.0"
-          SOURCE_APK="$RUNNER_TEMP/dsmusic-release-unsigned.apk"
-          OUTPUT_APK="app/build/outputs/apk/dsmusic-artifact/Quantune.apk"
+          SOURCE_APK="$RUNNER_TEMP/quantune-release-unsigned.apk"
+          OUTPUT_APK="app/build/outputs/apk/quantune-artifact/Quantune.apk"
 
           if [ -n "${SIGNING_KEYSTORE_BASE64:-}" ]; then
             : "${SIGNING_KEYSTORE_PASSWORD:?Missing store password secret}"
             : "${SIGNING_KEY_ALIAS:?Missing key alias secret}"
             : "${SIGNING_KEY_PASSWORD:?Missing key password secret}"
-            KEYSTORE="$RUNNER_TEMP/dsmusic-release-keystore.p12"
-            ALIGNED_APK="$RUNNER_TEMP/dsmusic-aligned.apk"
+            KEYSTORE="$RUNNER_TEMP/quantune-release-keystore.p12"
+            ALIGNED_APK="$RUNNER_TEMP/quantune-aligned.apk"
             printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
             chmod 600 "$KEYSTORE"
             keytool -list -storetype PKCS12 -keystore "$KEYSTORE" \
@@ -95,14 +94,14 @@ jobs:
             echo "Built and verified the signed Quantune APK."
           else
             cp "$SOURCE_APK" "$OUTPUT_APK"
-            echo "::warning::Signing secrets are unavailable; the uploaded release APK is unsigned."
+            echo "::warning::Signing secrets are unavailable; this artifact is unsigned."
           fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
           name: Quantune-ARM64
-          path: app/build/outputs/apk/dsmusic-artifact/Quantune.apk
+          path: app/build/outputs/apk/quantune-artifact/Quantune.apk
           archive: false
           if-no-files-found: error
           retention-days: 14

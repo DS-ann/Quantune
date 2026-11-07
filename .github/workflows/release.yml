@@ -1,0 +1,164 @@
+name: Quantune • Official Android Release
+run-name: Publish Quantune \${{ inputs.release_tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag (for example: v1.8.19)"
+        required: true
+        type: string
+      source_ref:
+        description: "Branch, tag, or commit to build and publish"
+        required: true
+        type: string
+        default: main
+      release_notes:
+        description: "Release highlights in Markdown. Leave blank to use the standard release summary."
+        required: false
+        type: string
+      prerelease:
+        description: "Publish this as a prerelease rather than the latest stable release"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quantune-release-\${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign and publish Quantune
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout selected Quantune source
+        uses: actions/checkout@v7
+        with:
+          repository: DS-ann/Quantune
+          ref: \${{ inputs.source_ref }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+
+      - name: Install Android SDK and native build tools
+        run: |
+          sdkmanager --channel=3 \
+            "platforms;android-37.0" \
+            "build-tools;37.0.0" \
+            "cmake;3.22.1" \
+            "ndk;27.2.12479018"
+
+      - name: Build optimized ARM64-v8a release APK
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --build-cache --parallel assembleRelease
+          SOURCE_APK="app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk"
+          test -s "$SOURCE_APK"
+          mkdir -p release-assets
+          cp "$SOURCE_APK" "$RUNNER_TEMP/Quantune-release-unsigned.apk"
+
+      - name: Sign and verify the release APK
+        env:
+          SIGNING_KEYSTORE_BASE64: \${{ secrets.BATTERYPULSE_KEYSTORE_BASE64 }}
+          SIGNING_KEYSTORE_PASSWORD: \${{ secrets.BATTERYPULSE_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: \${{ secrets.BATTERYPULSE_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: \${{ secrets.BATTERYPULSE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "\${SIGNING_KEYSTORE_BASE64:?Configure BATTERYPULSE_KEYSTORE_BASE64 in repository Actions secrets}"
+          : "\${SIGNING_KEYSTORE_PASSWORD:?Configure BATTERYPULSE_STORE_PASSWORD in repository Actions secrets}"
+          : "\${SIGNING_KEY_ALIAS:?Configure BATTERYPULSE_KEY_ALIAS in repository Actions secrets}"
+          : "\${SIGNING_KEY_PASSWORD:?Configure BATTERYPULSE_KEY_PASSWORD in repository Actions secrets}"
+
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/37.0.0"
+          SOURCE_APK="$RUNNER_TEMP/Quantune-release-unsigned.apk"
+          KEYSTORE="$RUNNER_TEMP/quantune-release-keystore.p12"
+          ALIGNED_APK="$RUNNER_TEMP/Quantune-release-aligned.apk"
+          OUTPUT_APK="release-assets/Quantune-Android-ARM64.apk"
+
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          keytool -list -storetype PKCS12 -keystore "$KEYSTORE" \
+            -storepass "$SIGNING_KEYSTORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" >/dev/null
+
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$SOURCE_APK" "$ALIGNED_APK"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$KEYSTORE" \
+            --ks-type PKCS12 \
+            --ks-key-alias "$SIGNING_KEY_ALIAS" \
+            --ks-pass env:SIGNING_KEYSTORE_PASSWORD \
+            --key-pass env:SIGNING_KEY_PASSWORD \
+            --out "$OUTPUT_APK" "$ALIGNED_APK"
+
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$OUTPUT_APK"
+          "$BUILD_TOOLS/zipalign" -c -p 4 "$OUTPUT_APK"
+          sha256sum "$OUTPUT_APK" > "$OUTPUT_APK.sha256"
+          rm -f "$KEYSTORE" "$ALIGNED_APK"
+
+      - name: Write polished GitHub release description
+        env:
+          RELEASE_TAG: \${{ inputs.release_tag }}
+          RELEASE_NOTES: \${{ inputs.release_notes }}
+        run: |
+          {
+            printf '# Quantune %s\n\n' "$RELEASE_TAG"
+            printf '> Your music. Your flow. Your Quantune.\n\n'
+            printf 'Quantune brings music discovery, playback, lyrics, playlists and offline listening tools together in one Android app.\n\n'
+            printf '## Highlights\n'
+            if [ -n "$RELEASE_NOTES" ]; then
+              printf '%s\n\n' "$RELEASE_NOTES"
+            else
+              printf '%s\n' \
+                '- Discover and play music online.' \
+                '- Follow synchronized and karaoke-style lyrics.' \
+                '- Organize playlists, favourites and listening history.' \
+                '- Save supported audio for offline listening.' \
+                '- Personalize the player and use home-screen widgets.'
+              printf '\n'
+            fi
+            printf '## Android package\n\n'
+            printf '| Detail | Value |\n|---|---|\n'
+            printf '| App | Quantune |\n'
+            printf '| Minimum Android | Android 6.0 (API 23) |\n'
+            printf '| APK architecture | ARM64-v8a |\n'
+            printf '| Package ID | com.dsann.music |\n'
+            printf '| Installer | Quantune-Android-ARM64.apk |\n\n'
+            printf '> **Compatibility note:** This release contains an ARM64-v8a APK. It is not a universal APK and requires a compatible 64-bit ARM Android device.\n\n'
+            printf '## Verification\n\n'
+            printf 'The APK is signed, aligned and verified during the release workflow. A SHA-256 checksum is attached for integrity verification.\n\n'
+            printf '[Source code](https://github.com/DS-ann/Quantune) · [Report an issue](https://github.com/DS-ann/Quantune/issues)\n'
+          } > release-description.md
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3.0.3
+        with:
+          tag_name: \${{ inputs.release_tag }}
+          target_commitish: \${{ inputs.source_ref }}
+          name: Quantune \${{ inputs.release_tag }} — Android
+          body_path: release-description.md
+          draft: false
+          prerelease: \${{ inputs.prerelease }}
+          make_latest: \${{ inputs.prerelease && 'false' || 'true' }}
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/Quantune-Android-ARM64.apk
+            release-assets/Quantune-Android-ARM64.apk.sha256

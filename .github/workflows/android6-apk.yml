@@ -1,29 +1,10 @@
-name: Build and upload Quantune Android 6+ APK
+name: Quantune Android 6+ APK (Manual)
 
 on:
-  workflow_call:
-    inputs:
-      source_ref:
-        description: Quantune branch, tag, or commit to build
-        required: false
-        type: string
-        default: main
-  push:
-    # dsmusic has its own APK workflow to prevent duplicate release builds.
-    branches: [ main, 'fix/download-metadata-cache-playback' ]
-    paths:
-      - 'app/**'
-      - 'gradle/**'
-      - 'gradlew'
-      - 'gradlew.bat'
-      - 'build.gradle'
-      - 'settings.gradle'
-      - 'gradle.properties'
-      - '.github/workflows/android6-apk.yml'
   workflow_dispatch:
     inputs:
       source_ref:
-        description: Quantune branch, tag, or commit to build
+        description: "Branch, tag, or commit to build"
         required: true
         type: string
         default: main
@@ -32,20 +13,20 @@ permissions:
   contents: read
 
 concurrency:
-  group: dsmusic-arm64-apk-${{ github.ref }}
+  group: quantune-android6-manual-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build, sign, compress, upload
+    name: Build, sign and package ARM64 APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Checkout source
+      - name: Checkout selected source
         uses: actions/checkout@v7
         with:
           repository: DS-ann/Quantune
-          ref: ${{ inputs.source_ref || github.ref_name }}
+          ref: ${{ inputs.source_ref }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v6
@@ -58,18 +39,23 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Set up Android SDK build tools
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: ''
 
-      - name: Install Android 17 SDK and Build Tools
-        run: sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0"
+      - name: Install Android SDK, Build Tools and native toolchain
+        run: |
+          sdkmanager --channel=3 \
+            "platforms;android-37.0" \
+            "build-tools;37.0.0" \
+            "cmake;3.22.1" \
+            "ndk;27.2.12479018"
 
       - name: Compile ARM64-v8a release APK
-        run: gradle --build-cache --parallel assembleRelease
+        run: gradle --no-daemon --build-cache --parallel assembleRelease
 
-      - name: Sign with shared D.S-Apps release key and highly compress APK
+      - name: Sign and compress with the shared D.S-Apps release key
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.BATTERYPULSE_KEYSTORE_BASE64 }}
           SIGNING_KEYSTORE_PASSWORD: ${{ secrets.BATTERYPULSE_STORE_PASSWORD }}
@@ -82,33 +68,37 @@ jobs:
           : "${SIGNING_KEYSTORE_PASSWORD:?Missing the release keystore password secret}"
           : "${SIGNING_KEY_ALIAS:?Missing the release key alias secret}"
           : "${SIGNING_KEY_PASSWORD:?Missing the release key password secret}"
-          KEYSTORE="$RUNNER_TEMP/dsmusic-release-keystore"
-          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
-          chmod 600 "$KEYSTORE"
-          keytool -list -storetype PKCS12 -keystore "$KEYSTORE" -storepass "$SIGNING_KEYSTORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" >/dev/null
-          echo "Shared D.S-Apps PKCS12 signing key validated."
 
           BUILD_DIR="app/build/outputs/apk/release"
           SOURCE_APK="$BUILD_DIR/app-arm64-v8a-release-unsigned.apk"
-          ALIGNED_APK="$RUNNER_TEMP/Quantune-arm64-v8a-aligned.apk"
+          KEYSTORE="$RUNNER_TEMP/quantune-release-keystore.p12"
+          ALIGNED_APK="$RUNNER_TEMP/Quantune-arm64-aligned.apk"
           OUTPUT_APK="$BUILD_DIR/Quantune.apk"
           OUTPUT_ZIP="$BUILD_DIR/Quantune.zip"
-          ZIPALIGN="$ANDROID_HOME/build-tools/37.0.0/zipalign"
-          APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/37.0.0"
 
-          "$ZIPALIGN" -f -p 4 "$SOURCE_APK" "$ALIGNED_APK"
-          "$APK_SIGNER" sign \
+          test -s "$SOURCE_APK"
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          keytool -list -storetype "$SIGNING_KEYSTORE_TYPE" -keystore "$KEYSTORE" \
+            -storepass "$SIGNING_KEYSTORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" >/dev/null
+
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$SOURCE_APK" "$ALIGNED_APK"
+          "$BUILD_TOOLS/apksigner" sign \
             --ks "$KEYSTORE" --ks-type "$SIGNING_KEYSTORE_TYPE" --ks-key-alias "$SIGNING_KEY_ALIAS" \
             --ks-pass env:SIGNING_KEYSTORE_PASSWORD \
             --key-pass env:SIGNING_KEY_PASSWORD \
             --out "$OUTPUT_APK" "$ALIGNED_APK"
-
+          "$BUILD_TOOLS/apksigner" verify --verbose "$OUTPUT_APK"
+          "$BUILD_TOOLS/zipalign" -c -p 4 "$OUTPUT_APK"
           zip -9 -j "$OUTPUT_ZIP" "$OUTPUT_APK"
 
-      - name: Upload compressed signed APK artifact
+          rm -f "$KEYSTORE" "$ALIGNED_APK"
+
+      - name: Upload signed APK package
         uses: actions/upload-artifact@v7
         with:
-          name: Quantune-Android
+          name: Quantune-Android-6-ARM64
           path: app/build/outputs/apk/release/Quantune.zip
           archive: false
           if-no-files-found: error
