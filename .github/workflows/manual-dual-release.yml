@@ -1,0 +1,216 @@
+name: Manual Android + Windows Release
+
+run-name: Publish D.S Music ${{ inputs.release_tag }} (Android + Windows)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to create or update (for example: v1.8.19)"
+        required: true
+        type: string
+      phone_ref:
+        description: "Android phone app branch, tag or commit"
+        required: true
+        default: master
+        type: string
+      windows_ref:
+        description: "Windows desktop branch, tag or commit"
+        required: true
+        default: windows-desktop
+        type: string
+      prerelease:
+        description: "Mark this release as a prerelease"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dsmusic-dual-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  build-android:
+    name: Build and sign Android phone APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout Android source
+        uses: actions/checkout@v7
+        with:
+          repository: DS-ann/D.S-Music2
+          ref: ${{ inputs.phone_ref }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: Install Android 17 SDK and Build Tools
+        shell: bash
+        run: sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0"
+
+      - name: Compile ARM64-v8a release APK
+        run: gradle --no-daemon --stacktrace assembleRelease
+
+      - name: Sign Android APK with shared D.S-Apps release key
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.BATTERYPULSE_KEYSTORE_BASE64 }}
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.BATTERYPULSE_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.BATTERYPULSE_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.BATTERYPULSE_KEY_PASSWORD }}
+          SIGNING_KEYSTORE_TYPE: PKCS12
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${SIGNING_KEYSTORE_BASE64:?Missing BATTERYPULSE_KEYSTORE_BASE64}"
+          : "${SIGNING_KEYSTORE_PASSWORD:?Missing BATTERYPULSE_STORE_PASSWORD}"
+          : "${SIGNING_KEY_ALIAS:?Missing BATTERYPULSE_KEY_ALIAS}"
+          : "${SIGNING_KEY_PASSWORD:?Missing BATTERYPULSE_KEY_PASSWORD}"
+
+          BUILD_DIR="app/build/outputs/apk/release"
+          SOURCE_APK="$BUILD_DIR/app-arm64-v8a-release-unsigned.apk"
+          test -s "$SOURCE_APK"
+
+          KEYSTORE="$RUNNER_TEMP/dsmusic-release-keystore.p12"
+          ALIGNED_APK="$RUNNER_TEMP/dsmusic-android-aligned.apk"
+          OUTPUT_APK="$RUNNER_TEMP/D.S-Music-Android.apk"
+          ZIPALIGN="$ANDROID_HOME/build-tools/37.0.0/zipalign"
+          APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          keytool -list -storetype "$SIGNING_KEYSTORE_TYPE" -keystore "$KEYSTORE" \
+            -storepass "$SIGNING_KEYSTORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" >/dev/null
+
+          "$ZIPALIGN" -f -p 4 "$SOURCE_APK" "$ALIGNED_APK"
+          "$APK_SIGNER" sign \
+            --ks "$KEYSTORE" \
+            --ks-type "$SIGNING_KEYSTORE_TYPE" \
+            --ks-key-alias "$SIGNING_KEY_ALIAS" \
+            --ks-pass env:SIGNING_KEYSTORE_PASSWORD \
+            --key-pass env:SIGNING_KEY_PASSWORD \
+            --out "$OUTPUT_APK" "$ALIGNED_APK"
+
+          mkdir -p release-assets/android
+          cp "$OUTPUT_APK" release-assets/android/D.S-Music-Android.apk
+          sha256sum release-assets/android/D.S-Music-Android.apk \
+            > release-assets/android/D.S-Music-Android.apk.sha256
+          "$APK_SIGNER" verify --verbose --print-certs release-assets/android/D.S-Music-Android.apk
+
+      - name: Upload Android release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: dsmusic-android-release
+          path: release-assets/android/*
+          if-no-files-found: error
+          retention-days: 7
+
+  build-windows:
+    name: Build Windows desktop installer
+    runs-on: windows-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout Windows desktop source
+        uses: actions/checkout@v7
+        with:
+          repository: DS-ann/D.S-Music2
+          ref: ${{ inputs.windows_ref }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Compile and package Windows installer
+        shell: pwsh
+        run: .\gradlew.bat --no-daemon --stacktrace :desktopApp:compileKotlin :desktopApp:packageExe
+
+      - name: Stage Windows installer and checksum
+        shell: pwsh
+        run: |
+          $source = Get-ChildItem "desktopApp/build/compose/binaries/main/exe" -Filter "*.exe" -File |
+            Sort-Object Length -Descending |
+            Select-Object -First 1
+          if ($null -eq $source) {
+            throw "Gradle did not create a Windows .exe installer."
+          }
+          New-Item -ItemType Directory -Force -Path "release-assets/windows" | Out-Null
+          $destination = "release-assets/windows/D.S-Music-Windows-Setup.exe"
+          Copy-Item $source.FullName $destination -Force
+          $hash = (Get-FileHash $destination -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  D.S-Music-Windows-Setup.exe" |
+            Set-Content "release-assets/windows/D.S-Music-Windows-Setup.exe.sha256" -Encoding ascii
+
+      - name: Upload Windows release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: dsmusic-windows-release
+          path: release-assets/windows/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    name: Publish one release with both apps
+    runs-on: ubuntu-latest
+    needs:
+      - build-android
+      - build-windows
+    timeout-minutes: 15
+    steps:
+      - name: Download Android release assets
+        uses: actions/download-artifact@v8
+        with:
+          name: dsmusic-android-release
+          path: release-assets/android
+
+      - name: Download Windows release assets
+        uses: actions/download-artifact@v8
+        with:
+          name: dsmusic-windows-release
+          path: release-assets/windows
+
+      - name: Verify both release packages are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release-assets/android/D.S-Music-Android.apk
+          test -s release-assets/windows/D.S-Music-Windows-Setup.exe
+          ls -lh release-assets/android release-assets/windows
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v3.0.3
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          target_commitish: ${{ inputs.windows_ref }}
+          name: D.S Music ${{ inputs.release_tag }} — Android + Windows
+          draft: false
+          prerelease: ${{ inputs.prerelease }}
+          make_latest: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/android/D.S-Music-Android.apk
+            release-assets/android/D.S-Music-Android.apk.sha256
+            release-assets/windows/D.S-Music-Windows-Setup.exe
+            release-assets/windows/D.S-Music-Windows-Setup.exe.sha256

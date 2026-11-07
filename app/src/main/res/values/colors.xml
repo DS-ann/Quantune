@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="dsmusic_splash_system_background">#FF292B32</color>
+
+    <!-- 🌈 Base seed (Fallback for pre-Android 12) -->
+    <!-- 💜 PURPLE VIBE (Light) -->
+    <color name="md_theme_primary">#7C9CFF</color>
+    <color name="md_theme_light_primary">#7C9CFF</color>
+    <color name="md_theme_light_onPrimary">#FFFFFF</color>
+    <color name="md_theme_light_primaryContainer">#DCE5FF</color>
+    <color name="md_theme_light_onPrimaryContainer">#17233A</color>
+
+    <color name="md_theme_light_secondary">#536783</color>
+    <color name="md_theme_light_onSecondary">#FFFFFF</color>
+    <color name="md_theme_light_secondaryContainer">#DCE5F2</color>
+    <color name="md_theme_light_onSecondaryContainer">#202D40</color>
+
+    <color name="md_theme_light_tertiary">#397E91</color>
+    <color name="md_theme_light_onTertiary">#FFFFFF</color>
+    <color name="md_theme_light_tertiaryContainer">#D6F4FA</color>
+    <color name="md_theme_light_onTertiaryContainer">#0B2228</color>
+
+    <color name="md_theme_light_background">#F3F6FA</color>
+    <color name="md_theme_light_surface">#F3F6FA</color>
+    <color name="md_theme_light_surfaceVariant">#E5EBF3</color>
+    <color name="md_theme_light_onSurface">#182131</color>
+    <color name="md_theme_light_onSurfaceVariant">#536176</color>
+
+
+    <!-- 💜 PURPLE VIBE (Dark) -->
+    <color name="md_theme_dark_primary">#7C9CFF</color>
+    <color name="md_theme_dark_onPrimary">#0B1220</color>
+    <color name="md_theme_dark_primaryContainer">#263652</color>
+    <color name="md_theme_dark_onPrimaryContainer">#DCE5FF</color>
+
+    <color name="md_theme_dark_secondary">#B8C6DE</color>
+    <color name="md_theme_dark_onSecondary">#172131</color>
+    <color name="md_theme_dark_secondaryContainer">#27364A</color>
+    <color name="md_theme_dark_onSecondaryContainer">#DCE5F2</color>
+
+    <color name="md_theme_dark_tertiary">#8CC9D8</color>
+    <color name="md_theme_dark_onTertiary">#0B2228</color>
+    <color name="md_theme_dark_tertiaryContainer">#23434C</color>
+    <color name="md_theme_dark_onTertiaryContainer">#D6F4FA</color>
+
+    <color name="md_theme_dark_background">#121620</color>
+    <color name="md_theme_dark_surface">#121620</color>
+    <color name="md_theme_dark_surfaceVariant">#536176</color>
+    <color name="md_theme_dark_onSurface">#E9EDF5</color>
+    <color name="md_theme_dark_onSurfaceVariant">#B7C3D5</color>
+    <color name="white">#FFFFFF</color>
+    <color name="white_20">#33FFFFFF</color>
+    <color name="md_theme_light_surfaceContainer">#F7F9FC</color>
+    <color name="md_theme_light_surfaceContainerHigh">#E5EBF3</color>
+    <color name="md_theme_light_surfaceContainerHighest">#DCE4EF</color>
+
+    <color name="md_theme_light_outline">#7B899B</color>
+    <color name="md_theme_light_outlineVariant">#B7C3D5</color>
+    <color name="md_theme_dark_surfaceContainer">#211F26</color>
+    <color name="md_theme_dark_surfaceContainerHigh">#222D3B</color>
+    <color name="md_theme_dark_surfaceContainerHighest">#2A3747</color>
+
+    <color name="md_theme_dark_outline">#65748A</color>
+    <color name="md_theme_dark_outlineVariant">#536176</color>
+    
+    <!-- Grouped List Header Colors -->
+</resources>

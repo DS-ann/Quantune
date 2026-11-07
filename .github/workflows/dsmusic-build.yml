@@ -1,0 +1,108 @@
+name: Build D.S Music APK (dsmusic)
+
+on:
+  push:
+    branches: [dsmusic]
+    paths:
+      - "app/**"
+      - "gradle/**"
+      - "gradlew"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle.properties"
+      - ".github/workflows/dsmusic-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dsmusic-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and upload ARM64 release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact triggering commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle with build cache
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+
+      - name: Install Android 17 SDK and Build Tools
+        run: sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+
+      # Release builds intentionally skip unit-test tasks; assembleRelease still compiles
+      # the production source, runs code generation, minification and resource shrinking.
+      - name: Assemble ARM64 release APK
+        run: |
+          set -euo pipefail
+          # Release builds intentionally skip unit-test tasks; assembleRelease still compiles
+          # the production source, runs code generation, minification and resource shrinking.
+          gradle --build-cache --parallel assembleRelease
+          SOURCE_APK="app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk"
+          test -f "$SOURCE_APK"
+          mkdir -p app/build/outputs/apk/dsmusic-artifact
+          cp "$SOURCE_APK" "$RUNNER_TEMP/dsmusic-release-unsigned.apk"
+
+      - name: Sign release APK with shared D.S-Apps key when configured
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.BATTERYPULSE_KEYSTORE_BASE64 }}
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.BATTERYPULSE_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.BATTERYPULSE_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.BATTERYPULSE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/37.0.0"
+          SOURCE_APK="$RUNNER_TEMP/dsmusic-release-unsigned.apk"
+          OUTPUT_APK="app/build/outputs/apk/dsmusic-artifact/dsmusic.apk"
+
+          if [ -n "${SIGNING_KEYSTORE_BASE64:-}" ]; then
+            : "${SIGNING_KEYSTORE_PASSWORD:?Missing store password secret}"
+            : "${SIGNING_KEY_ALIAS:?Missing key alias secret}"
+            : "${SIGNING_KEY_PASSWORD:?Missing key password secret}"
+            KEYSTORE="$RUNNER_TEMP/dsmusic-release-keystore.p12"
+            ALIGNED_APK="$RUNNER_TEMP/dsmusic-aligned.apk"
+            printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+            chmod 600 "$KEYSTORE"
+            keytool -list -storetype PKCS12 -keystore "$KEYSTORE" \
+              -storepass "$SIGNING_KEYSTORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" >/dev/null
+            "$BUILD_TOOLS/zipalign" -f -p 4 "$SOURCE_APK" "$ALIGNED_APK"
+            "$BUILD_TOOLS/apksigner" sign \
+              --ks "$KEYSTORE" --ks-type PKCS12 --ks-key-alias "$SIGNING_KEY_ALIAS" \
+              --ks-pass env:SIGNING_KEYSTORE_PASSWORD --key-pass env:SIGNING_KEY_PASSWORD \
+              --out "$OUTPUT_APK" "$ALIGNED_APK"
+            "$BUILD_TOOLS/apksigner" verify --verbose "$OUTPUT_APK"
+            rm -f "$KEYSTORE" "$ALIGNED_APK"
+            echo "Built and verified the signed D.S Music APK."
+          else
+            cp "$SOURCE_APK" "$OUTPUT_APK"
+            echo "::warning::Signing secrets are unavailable; the uploaded release APK is unsigned."
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: D.S-Music-dsmusic-ARM64
+          path: app/build/outputs/apk/dsmusic-artifact/dsmusic.apk
+          archive: false
+          if-no-files-found: error
+          retention-days: 14

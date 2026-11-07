@@ -1,0 +1,162 @@
+ 
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt)
+    id("com.github.ben-manes.versions") version "0.54.0"
+}
+
+android {
+    namespace 'com.dsann.music'
+    compileSdk 37
+    ndkVersion "27.2.12479018"
+
+    // Fix for "App not installed" errors when sharing debug APKs
+    project.ext.set("android.injected.testOnly", "false")
+
+    defaultConfig {
+        applicationId "com.dsann.music"
+        // Android 6.0 Marshmallow is API 23; keep APIs newer than 23 guarded at runtime.
+        minSdk 23
+        targetSdk 37
+        versionCode 26
+        versionName "1.8.18"
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+                cppFlags "-std=c++17"
+            }
+        }
+    }
+
+    // Produce only the ARM64-v8a APK; do not emit universal or other-ABI APKs.
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'arm64-v8a'
+            universalApk false
+        }
+    }
+
+    buildFeatures {
+        viewBinding true
+        buildConfig true
+        compose true
+        prefab true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file("src/main/cpp/CMakeLists.txt")
+            version "3.22.1"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+
+        debug {
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        // Backport Java APIs and URLDecoder/URLEncoder Charset overloads used by NewPipeExtractor on Android 6 (API 23).
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+
+configurations {
+    configureEach {
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+    }
+}
+
+dependencies {
+    // Supplies java.util.Optional on API 23; NewPipe Extractor calls it internally.
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.1.5'
+
+    implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
+    implementation libs.androidx.compose.foundation
+
+    implementation libs.kotlin.stdlib
+    implementation libs.glide
+    implementation libs.palette
+
+
+    implementation libs.material.v1140alpha08
+    implementation libs.core.splashscreen
+    implementation libs.core.ktx
+    implementation libs.appcompat.v170
+    implementation libs.constraintlayout.v220
+
+    implementation libs.lifecycle.viewmodel.ktx
+    implementation libs.lifecycle.livedata.ktx
+
+    implementation libs.viewpager2
+    implementation libs.swiperefreshlayout
+    implementation libs.navigation.fragment
+    implementation libs.navigation.ui
+    implementation libs.navigation.compose
+
+    implementation libs.preference
+    implementation libs.room.common.jvm
+    implementation libs.room.runtime
+    implementation libs.dynamicanimation
+
+    // Compose
+    implementation platform(libs.compose.bom)
+    implementation libs.compose.ui
+    implementation libs.compose.ui.graphics
+    implementation libs.compose.ui.tooling.preview
+    implementation libs.activity.compose
+    implementation libs.lifecycle.viewmodel.compose
+    implementation libs.coil.compose
+    implementation libs.material.icons.extended
+    implementation libs.foundation
+    implementation libs.compose.runtime.livedata
+
+
+    testImplementation libs.junit
+    androidTestImplementation libs.junit.v121
+    androidTestImplementation libs.espresso.core.v361
+
+    // Networking & JSON
+    implementation libs.retrofit
+    implementation libs.converter.gson
+    implementation libs.logging.interceptor
+
+    // Source: https://mvnrepository.com/artifact/net.jthink/jaudiotagger
+    implementation libs.jaudiotagger
+    // LAME is built for Android API 21+, preserving Android 6 / API 23 support.
+    implementation libs.lame
+
+    ksp libs.room.compiler
+
+    // Media3 / ExoPlayer
+    implementation libs.media3.exoplayer
+    implementation libs.media3.session
+    implementation libs.media3.common
+    implementation libs.media3.datasource.okhttp
+    implementation libs.media3.ui
+
+    // NewPipe Extractor — local YouTube stream extraction (no proxy dependency)
+    implementation libs.newpipeextractor
+
+    // Hilt
+    implementation libs.hilt.android
+    ksp libs.hilt.compiler
+    // Graphics Shapes
+    implementation 'androidx.graphics:graphics-shapes:1.0.1'
+}
