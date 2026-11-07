@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="440" viewBox="0 0 1440 440" role="img" aria-labelledby="title desc">
+  <title id="title">Quantune — Music in motion</title>
+  <desc id="desc">A midnight blue and violet audio-inspired banner with a custom soundwave emblem and the Quantune wordmark.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A0B1C"/>
+      <stop offset=".52" stop-color="#171438"/>
+      <stop offset="1" stop-color="#071A2B"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="82%" cy="48%" r="66%">
+      <stop offset="0" stop-color="#7C3AED" stop-opacity=".55"/>
+      <stop offset=".52" stop-color="#4F46E5" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#4F46E5" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="11%" cy="100%" r="56%">
+      <stop offset="0" stop-color="#06B6D4" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#06B6D4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="accent" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset=".48" stop-color="#818CF8"/>
+      <stop offset="1" stop-color="#C084FC"/>
+    </linearGradient>
+    <linearGradient id="text" x1="0" y1="0" x2="1" y2=".2">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#D9D8FF"/>
+    </linearGradient>
+    <pattern id="dots" width="34" height="34" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="1" fill="#C4B5FD" opacity=".19"/>
+    </pattern>
+    <filter id="softGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+  </defs>
+
+  <rect width="1440" height="440" rx="30" fill="url(#bg)"/>
+  <rect width="1440" height="440" rx="30" fill="url(#glowA)"/>
+  <rect width="1440" height="440" rx="30" fill="url(#glowB)"/>
+  <rect x="0" y="0" width="1440" height="440" rx="30" fill="url(#dots)" opacity=".48"/>
+
+  <path d="M0 346 C230 286 350 420 550 350 S900 255 1080 320 S1280 392 1440 300" fill="none" stroke="#22D3EE" stroke-opacity=".13" stroke-width="2"/>
+  <path d="M0 376 C235 320 385 447 600 374 S945 282 1120 346 S1310 407 1440 330" fill="none" stroke="#A78BFA" stroke-opacity=".13" stroke-width="2"/>
+  <path d="M0 405 C255 356 415 468 650 398 S980 322 1160 372 S1340 426 1440 362" fill="none" stroke="#818CF8" stroke-opacity=".11" stroke-width="2"/>
+
+  <g transform="translate(132 220)">
+    <circle r="91" fill="#7C3AED" opacity=".25" filter="url(#softGlow)"/>
+    <circle r="77" fill="#11132B" stroke="url(#accent)" stroke-width="3"/>
+    <circle r="64" fill="none" stroke="#A5B4FC" stroke-opacity=".22" stroke-width="1.5"/>
+    <path d="M-40 0 C-29 -34 -18 -34 -7 0 S15 34 26 0 S42 -25 48 -2" fill="none" stroke="url(#accent)" stroke-width="7" stroke-linecap="round"/>
+    <path d="M-47 20 C-34 11 -22 11 -9 20 S18 29 31 20 S45 14 50 18" fill="none" stroke="#67E8F9" stroke-opacity=".75" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="5" fill="#FFFFFF"/>
+  </g>
+
+  <g transform="translate(255 172)">
+    <text x="0" y="0" fill="url(#text)" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="82" font-weight="750" letter-spacing="-3">Quantune</text>
+    <rect x="4" y="28" width="132" height="4" rx="2" fill="url(#accent)"/>
+    <text x="3" y="91" fill="#D7D7F4" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="23" font-weight="500" letter-spacing="5">DISCOVER  ·  SYNC  ·  PLAY</text>
+    <text x="4" y="145" fill="#A7A9C9" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="19" font-weight="400">A music space shaped around the way you listen.</text>
+  </g>
+
+  <g transform="translate(1110 218)">
+    <circle r="153" fill="none" stroke="#A78BFA" stroke-opacity=".12" stroke-width="1.5"/>
+    <circle r="126" fill="none" stroke="#67E8F9" stroke-opacity=".16" stroke-width="1.5" stroke-dasharray="4 11"/>
+    <circle r="98" fill="#0D1530" fill-opacity=".45" stroke="#C4B5FD" stroke-opacity=".2"/>
+    <g fill="url(#accent)">
+      <rect x="-67" y="-18" width="12" height="36" rx="6"/>
+      <rect x="-45" y="-43" width="12" height="86" rx="6"/>
+      <rect x="-23" y="-61" width="12" height="122" rx="6"/>
+      <rect x="-1" y="-31" width="12" height="62" rx="6"/>
+      <rect x="21" y="-70" width="12" height="140" rx="6"/>
+      <rect x="43" y="-42" width="12" height="84" rx="6"/>
+      <rect x="65" y="-13" width="12" height="26" rx="6"/>
+    </g>
+    <circle cx="0" cy="0" r="8" fill="#F5F3FF"/>
+  </g>
+
+  <g fill="#C4B5FD" opacity=".65">
+    <circle cx="890" cy="86" r="2.5"/>
+    <circle cx="963" cy="122" r="2"/>
+    <circle cx="1300" cy="80" r="3"/>
+    <circle cx="1350" cy="293" r="2"/>
+    <circle cx="940" cy="340" r="2.5"/>
+    <circle cx="1055" cy="48" r="1.8"/>
+  </g>
+  <text x="1375" y="405" text-anchor="end" fill="#9094B8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" letter-spacing="2">ANDROID MUSIC EXPERIENCE</text>
+</svg>
