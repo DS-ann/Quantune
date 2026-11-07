@@ -28,5 +28,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "D.S Music"
+rootProject.name = "Quantune"
 include ':app'

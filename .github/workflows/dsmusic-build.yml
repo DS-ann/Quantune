@@ -1,4 +1,4 @@
-name: Build D.S Music APK (dsmusic)
+name: Build Quantune APK (ARM64)
 
 on:
   push:
@@ -73,7 +73,7 @@ jobs:
           set -euo pipefail
           BUILD_TOOLS="$ANDROID_HOME/build-tools/37.0.0"
           SOURCE_APK="$RUNNER_TEMP/dsmusic-release-unsigned.apk"
-          OUTPUT_APK="app/build/outputs/apk/dsmusic-artifact/dsmusic.apk"
+          OUTPUT_APK="app/build/outputs/apk/dsmusic-artifact/Quantune.apk"
 
           if [ -n "${SIGNING_KEYSTORE_BASE64:-}" ]; then
             : "${SIGNING_KEYSTORE_PASSWORD:?Missing store password secret}"
@@ -92,7 +92,7 @@ jobs:
               --out "$OUTPUT_APK" "$ALIGNED_APK"
             "$BUILD_TOOLS/apksigner" verify --verbose "$OUTPUT_APK"
             rm -f "$KEYSTORE" "$ALIGNED_APK"
-            echo "Built and verified the signed D.S Music APK."
+            echo "Built and verified the signed Quantune APK."
           else
             cp "$SOURCE_APK" "$OUTPUT_APK"
             echo "::warning::Signing secrets are unavailable; the uploaded release APK is unsigned."
@@ -101,8 +101,8 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: D.S-Music-dsmusic-ARM64
-          path: app/build/outputs/apk/dsmusic-artifact/dsmusic.apk
+          name: Quantune-ARM64
+          path: app/build/outputs/apk/dsmusic-artifact/Quantune.apk
           archive: false
           if-no-files-found: error
           retention-days: 14

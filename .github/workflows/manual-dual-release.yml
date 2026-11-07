@@ -1,6 +1,6 @@
-name: Manual Android + Windows Release
+name: Manual Quantune Android + Windows Release
 
-run-name: Publish D.S Music ${{ inputs.release_tag }} (Android + Windows)
+run-name: Publish Quantune ${{ inputs.release_tag }} (Android + Windows)
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ on:
       phone_ref:
         description: "Android phone app branch, tag or commit"
         required: true
-        default: master
+        default: main
         type: string
       windows_ref:
         description: "Windows desktop branch, tag or commit"
@@ -41,7 +41,7 @@ jobs:
       - name: Checkout Android source
         uses: actions/checkout@v7
         with:
-          repository: DS-ann/D.S-Music2
+          repository: DS-ann/Quantune
           ref: ${{ inputs.phone_ref }}
 
       - name: Set up JDK 17
@@ -88,7 +88,7 @@ jobs:
 
           KEYSTORE="$RUNNER_TEMP/dsmusic-release-keystore.p12"
           ALIGNED_APK="$RUNNER_TEMP/dsmusic-android-aligned.apk"
-          OUTPUT_APK="$RUNNER_TEMP/D.S-Music-Android.apk"
+          OUTPUT_APK="$RUNNER_TEMP/Quantune-Android.apk"
           ZIPALIGN="$ANDROID_HOME/build-tools/37.0.0/zipalign"
           APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
 
@@ -107,15 +107,15 @@ jobs:
             --out "$OUTPUT_APK" "$ALIGNED_APK"
 
           mkdir -p release-assets/android
-          cp "$OUTPUT_APK" release-assets/android/D.S-Music-Android.apk
-          sha256sum release-assets/android/D.S-Music-Android.apk \
-            > release-assets/android/D.S-Music-Android.apk.sha256
-          "$APK_SIGNER" verify --verbose --print-certs release-assets/android/D.S-Music-Android.apk
+          cp "$OUTPUT_APK" release-assets/android/Quantune-Android.apk
+          sha256sum release-assets/android/Quantune-Android.apk \
+            > release-assets/android/Quantune-Android.apk.sha256
+          "$APK_SIGNER" verify --verbose --print-certs release-assets/android/Quantune-Android.apk
 
       - name: Upload Android release assets
         uses: actions/upload-artifact@v7
         with:
-          name: dsmusic-android-release
+          name: quantune-android-release
           path: release-assets/android/*
           if-no-files-found: error
           retention-days: 7
@@ -156,16 +156,16 @@ jobs:
             throw "Gradle did not create a Windows .exe installer."
           }
           New-Item -ItemType Directory -Force -Path "release-assets/windows" | Out-Null
-          $destination = "release-assets/windows/D.S-Music-Windows-Setup.exe"
+          $destination = "release-assets/windows/Quantune-Windows-Setup.exe"
           Copy-Item $source.FullName $destination -Force
           $hash = (Get-FileHash $destination -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  D.S-Music-Windows-Setup.exe" |
-            Set-Content "release-assets/windows/D.S-Music-Windows-Setup.exe.sha256" -Encoding ascii
+          "$hash  Quantune-Windows-Setup.exe" |
+            Set-Content "release-assets/windows/Quantune-Windows-Setup.exe.sha256" -Encoding ascii
 
       - name: Upload Windows release assets
         uses: actions/upload-artifact@v7
         with:
-          name: dsmusic-windows-release
+          name: quantune-windows-release
           path: release-assets/windows/*
           if-no-files-found: error
           retention-days: 7
@@ -181,21 +181,21 @@ jobs:
       - name: Download Android release assets
         uses: actions/download-artifact@v8
         with:
-          name: dsmusic-android-release
+          name: quantune-android-release
           path: release-assets/android
 
       - name: Download Windows release assets
         uses: actions/download-artifact@v8
         with:
-          name: dsmusic-windows-release
+          name: quantune-windows-release
           path: release-assets/windows
 
       - name: Verify both release packages are present
         shell: bash
         run: |
           set -euo pipefail
-          test -s release-assets/android/D.S-Music-Android.apk
-          test -s release-assets/windows/D.S-Music-Windows-Setup.exe
+          test -s release-assets/android/Quantune-Android.apk
+          test -s release-assets/windows/Quantune-Windows-Setup.exe
           ls -lh release-assets/android release-assets/windows
 
       - name: Create or update GitHub Release
@@ -203,14 +203,14 @@ jobs:
         with:
           tag_name: ${{ inputs.release_tag }}
           target_commitish: ${{ inputs.windows_ref }}
-          name: D.S Music ${{ inputs.release_tag }} — Android + Windows
+          name: Quantune ${{ inputs.release_tag }} — Android + Windows
           draft: false
           prerelease: ${{ inputs.prerelease }}
           make_latest: true
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
-            release-assets/android/D.S-Music-Android.apk
-            release-assets/android/D.S-Music-Android.apk.sha256
-            release-assets/windows/D.S-Music-Windows-Setup.exe
-            release-assets/windows/D.S-Music-Windows-Setup.exe.sha256
+            release-assets/android/Quantune-Android.apk
+            release-assets/android/Quantune-Android.apk.sha256
+            release-assets/windows/Quantune-Windows-Setup.exe
+            release-assets/windows/Quantune-Windows-Setup.exe.sha256

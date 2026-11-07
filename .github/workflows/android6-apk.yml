@@ -1,16 +1,16 @@
-name: Build and upload D.S Music Android 6+ APK
+name: Build and upload Quantune Android 6+ APK
 
 on:
   workflow_call:
     inputs:
       source_ref:
-        description: D.S Music branch, tag, or commit to build
+        description: Quantune branch, tag, or commit to build
         required: false
         type: string
-        default: master
+        default: main
   push:
     # dsmusic has its own APK workflow to prevent duplicate release builds.
-    branches: [ master, 'fix/download-metadata-cache-playback' ]
+    branches: [ main, 'fix/download-metadata-cache-playback' ]
     paths:
       - 'app/**'
       - 'gradle/**'
@@ -23,10 +23,10 @@ on:
   workflow_dispatch:
     inputs:
       source_ref:
-        description: D.S Music branch, tag, or commit to build
+        description: Quantune branch, tag, or commit to build
         required: true
         type: string
-        default: master
+        default: main
 
 permissions:
   contents: read
@@ -44,7 +44,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v7
         with:
-          repository: DS-ann/D.S-Music2
+          repository: DS-ann/Quantune
           ref: ${{ inputs.source_ref || github.ref_name }}
 
       - name: Set up JDK 17
@@ -90,9 +90,9 @@ jobs:
 
           BUILD_DIR="app/build/outputs/apk/release"
           SOURCE_APK="$BUILD_DIR/app-arm64-v8a-release-unsigned.apk"
-          ALIGNED_APK="$RUNNER_TEMP/D.S-Music-arm64-v8a-aligned.apk"
-          OUTPUT_APK="$BUILD_DIR/dsmusic.apk"
-          OUTPUT_ZIP="$BUILD_DIR/dsmusic.zip"
+          ALIGNED_APK="$RUNNER_TEMP/Quantune-arm64-v8a-aligned.apk"
+          OUTPUT_APK="$BUILD_DIR/Quantune.apk"
+          OUTPUT_ZIP="$BUILD_DIR/Quantune.zip"
           ZIPALIGN="$ANDROID_HOME/build-tools/37.0.0/zipalign"
           APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
 
@@ -108,8 +108,8 @@ jobs:
       - name: Upload compressed signed APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: D.S-Music-Android
-          path: app/build/outputs/apk/release/dsmusic.zip
+          name: Quantune-Android
+          path: app/build/outputs/apk/release/Quantune.zip
           archive: false
           if-no-files-found: error
           retention-days: 14
