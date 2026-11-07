@@ -53,11 +53,11 @@ The project is designed to support a wide Android range, with **Android 6.0 (API
 
 The latest published release is available from the [GitHub Releases page](https://github.com/DS-ann/Quantune/releases/latest). Choose **one** APK for your device:
 
-| APK | Use this on | Download |
-|---|---|---|
-| **Universal ARM** | Most ARM Android phones and tablets. Includes both supported ARM architectures. | [Quantune-Universal.apk](https://github.com/DS-ann/Quantune/releases/download/18.7.0/Quantune-Universal.apk) |
-| **ARMv7a** | 32-bit ARM devices (`armeabi-v7a`). | [Quantune-armeabi-v7a.apk](https://github.com/DS-ann/Quantune/releases/download/18.7.0/Quantune-armeabi-v7a.apk) |
-| **ARM64** | 64-bit ARM devices (`arm64-v8a`). | [Quantune-arm64-v8a.apk](https://github.com/DS-ann/Quantune/releases/download/18.7.0/Quantune-arm64-v8a.apk) |
+| APK | Use this on | Download | Checksum |
+|---|---|---|---|
+| **Universal ARM** | Most ARM Android phones and tablets. Includes both supported ARM architectures. | [Quantune-Universal.apk](https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-Universal.apk) | [SHA-256](https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-Universal.apk.sha256) |
+| **ARMv7a** | 32-bit ARM devices (`armeabi-v7a`). | [Quantune-armeabi-v7a.apk](https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-armeabi-v7a.apk) | [SHA-256](https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-armeabi-v7a.apk.sha256) |
+| **ARM64** | 64-bit ARM devices (`arm64-v8a`). | [Quantune-arm64-v8a.apk](https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-arm64-v8a.apk) | [SHA-256](https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-arm64-v8a.apk.sha256) |
 
 Each APK has a matching **SHA-256 checksum** in the same release. Open the release page to get the APK and its checksum together.
 
