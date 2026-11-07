@@ -1285,7 +1285,7 @@ object SongDownloader {
             }
 
             val sourceComment = if (fromCache) {
-                "Exported from D.S Music cached audio (video ID: $videoId)"
+                "Exported from Quantune cached audio (video ID: $videoId)"
             } else {
                 "Downloaded from YouTube Music (video ID: $videoId)"
             }
@@ -1455,7 +1455,7 @@ object SongDownloader {
                 throw IOException("Could not clear the MP4 metadata staging file")
             }
             val sourceComment = if (fromCache) {
-                "Exported from D.S Music cached audio (video ID: $videoId)"
+                "Exported from Quantune cached audio (video ID: $videoId)"
             } else {
                 "Downloaded from YouTube Music (video ID: $videoId)"
             }
@@ -1580,7 +1580,7 @@ object SongDownloader {
                 throw IOException("Could not clear the Ogg Opus metadata staging file")
             }
             val sourceComment = if (fromCache) {
-                "Exported from D.S Music cached audio (video ID: $videoId)"
+                "Exported from Quantune cached audio (video ID: $videoId)"
             } else {
                 "Downloaded from YouTube Music (video ID: $videoId)"
             }
@@ -1640,7 +1640,7 @@ object SongDownloader {
             outputFile.copyTo(stagedFile, overwrite = true)
             convertWebmHeaderToMatroska(stagedFile)
             val sourceComment = if (fromCache) {
-                "Exported from D.S Music cached audio (video ID: $videoId)"
+                "Exported from Quantune cached audio (video ID: $videoId)"
             } else {
                 "Downloaded from YouTube Music (video ID: $videoId)"
             }
@@ -2147,7 +2147,7 @@ object SongDownloader {
             .setSmallIcon(com.dsann.music.R.drawable.ic_music_note)
             .setContentTitle("Downloading Track")
             .setContentText("$title ($progress%)")
-            .setSubText("D.S Music · Cancel anytime")
+            .setSubText("Quantune · Cancel anytime")
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)

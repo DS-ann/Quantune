@@ -77,9 +77,9 @@ public class AudioFileManager {
             Log.d(TAG, "Temp output file for processing: " + tempFile.getAbsolutePath());
             return tempFile;
         } else {
-            // Android 9 and below - Direct file access to Downloads/D.S Music
+            // Android 9 and below - Direct file access to Downloads/Quantune
             File downloadsDir = new File(Environment.getExternalStoragePublicDirectory(
-                    Environment.DIRECTORY_DOWNLOADS), "D.S Music");
+                    Environment.DIRECTORY_DOWNLOADS), "Quantune");
             if (!downloadsDir.exists()) downloadsDir.mkdirs();
 
             File outputFile = new File(downloadsDir, cleanName);
@@ -239,15 +239,15 @@ public class AudioFileManager {
         values.put(MediaStore.Audio.Media.MIME_TYPE, mimeType);
 
         // Android's MediaStore.Audio collection does not consistently recognize audio/webm.
-        // Legacy WebM files use Downloads; .opus is published as audio/ogg in Music/D.S Music.
+        // Legacy WebM files use Downloads; .opus is published as audio/ogg in Music/Quantune.
         Uri collectionUri;
         String relativePath;
         if (isGenericContainerAudio) {
             collectionUri = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
-            relativePath = Environment.DIRECTORY_DOWNLOADS + "/D.S Music/";
+            relativePath = Environment.DIRECTORY_DOWNLOADS + "/Quantune/";
         } else {
             collectionUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
-            relativePath = Environment.DIRECTORY_MUSIC + "/D.S Music/";
+            relativePath = Environment.DIRECTORY_MUSIC + "/Quantune/";
         }
         values.put(MediaStore.Audio.Media.RELATIVE_PATH, relativePath);
         values.put(MediaStore.Audio.Media.IS_PENDING, 1);

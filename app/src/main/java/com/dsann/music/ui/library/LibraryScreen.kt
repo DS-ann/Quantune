@@ -4146,12 +4146,15 @@ private fun isDsmusicDownloadedSong(song: SongItem): Boolean {
 private fun isDsmusicDownloadedLocation(relativePathValue: String?, rawPath: String?): Boolean {
     val relativePath = relativePathValue.orEmpty().trim('/').lowercase(java.util.Locale.ROOT)
     val appFolders = listOf(
-        "music/d.s music", "download/d.s music", "downloads/d.s music"
+        "music/quantune", "download/quantune", "downloads/quantune", "music/d.s music", "download/d.s music", "downloads/d.s music"
     )
     if (appFolders.any { relativePath == it || relativePath.startsWith("$it/") }) return true
 
     val path = rawPath.orEmpty().replace('\\', '/').lowercase(java.util.Locale.ROOT)
-    return path.contains("/music/d.s music/") ||
+    return path.contains("/music/quantune/") ||
+        path.contains("/download/quantune/") ||
+        path.contains("/downloads/quantune/") ||
+        path.contains("/music/d.s music/") ||
         path.contains("/download/d.s music/") ||
         path.contains("/downloads/d.s music/")
 }
