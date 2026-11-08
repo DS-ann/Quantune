@@ -532,27 +532,29 @@ class MainActivity : AppCompatActivity() {
 
                     val systemBottomInset = WindowInsets.navigationBars.asPaddingValues()
                         .calculateBottomPadding()
-                    val finalPadding = 0.dp
                     val miniPlayerHeight = if (
                         configuration.screenWidthDp > configuration.screenHeightDp
                     ) MiniPlayerHeight * 0.8f else MiniPlayerHeight
 
-                    // Reserve one shared, full-height overlay region for every page while
-                    // the collapsed mini-player is visible. The reserve mirrors the sheet's
-                    // bottom anchor: mini-player height + its gap + the dock/system inset.
-                    // This makes the end of every scrollable page reachable above the player,
-                    // including phones, nested destinations and both orientations.
                     val configuredNavHeight = when (navBarSize) {
                         "Compact" -> 56.dp
                         "Tall" -> 76.dp
                         else -> 68.dp
                     }
+                    // Keep the page viewport above the visible navigation dock at all times.
+                    // The custom Scaffold draws the dock as an overlay, so its height must be
+                    // reserved explicitly instead of relying on Scaffold's content padding.
                     val bottomDockInset = when {
                         useNavigationRail -> systemBottomInset
                         currentRoute in rootTabRoutes ->
                             (if (dynamicNavStyle) 64.dp else configuredNavHeight) + systemBottomInset
                         else -> 0.dp
                     }
+                    val finalPadding = bottomDockInset
+
+                    // The mini-player is a second overlay above the navigation dock. Reserve
+                    // only its own height and gap here; the navigation inset is already applied
+                    // to every page through finalPadding and must not be counted twice.
                     val miniPlayerBottomGap = if (useNavigationRail) 8.dp else 4.dp
                     val miniPlayerScrollReserve = if (
                         currentSong != null &&
@@ -560,7 +562,7 @@ class MainActivity : AppCompatActivity() {
                             currentRoute != null &&
                             currentRoute != "onboarding"
                     ) {
-                        miniPlayerHeight + miniPlayerBottomGap + bottomDockInset
+                        miniPlayerHeight + miniPlayerBottomGap
                     } else 0.dp
 
                     Box(
