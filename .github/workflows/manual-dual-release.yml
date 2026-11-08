@@ -1,14 +1,10 @@
 name: Manual Quantune Android + Windows Release
 
-run-name: Publish Quantune ${{ inputs.release_tag }} (Android + Windows)
+run-name: Publish Quantune release (Android + Windows)
 
 on:
   workflow_dispatch:
     inputs:
-      release_tag:
-        description: "Release tag to create or update (for example: v1.8.19)"
-        required: true
-        type: string
       phone_ref:
         description: "Android phone app branch, tag or commit"
         required: true
@@ -29,7 +25,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: dsmusic-dual-release-${{ inputs.release_tag }}
+  group: quantune-publish-release
   cancel-in-progress: false
 
 jobs:
@@ -37,12 +33,29 @@ jobs:
     name: Build and sign Android phone APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    outputs:
+      version_name: ${{ steps.release-version.outputs.version_name }}
+      release_tag: ${{ steps.release-version.outputs.release_tag }}
     steps:
       - name: Checkout Android source
         uses: actions/checkout@v7
         with:
           repository: DS-ann/Quantune
           ref: ${{ inputs.phone_ref }}
+
+      - name: Read app version for this release
+        id: release-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_NAME="$(sed -n 's/^VERSION_NAME=//p' version.properties | head -n 1)"
+          VERSION_CODE="$(sed -n 's/^VERSION_CODE=//p' version.properties | head -n 1)"
+          [[ "$VERSION_NAME" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$VERSION_CODE" =~ ^[1-9][0-9]*$ ]]
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "release_tag=v$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "Publishing Quantune $VERSION_NAME (versionCode $VERSION_CODE)"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v6
@@ -201,9 +214,9 @@ jobs:
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v3.0.3
         with:
-          tag_name: ${{ inputs.release_tag }}
-          target_commitish: ${{ inputs.windows_ref }}
-          name: Quantune ${{ inputs.release_tag }} — Android + Windows
+          tag_name: ${{ needs.build-android.outputs.release_tag }}
+          target_commitish: ${{ inputs.phone_ref }}
+          name: Quantune ${{ needs.build-android.outputs.release_tag }} — Android + Windows
           draft: false
           prerelease: ${{ inputs.prerelease }}
           make_latest: true
@@ -214,3 +227,31 @@ jobs:
             release-assets/android/Quantune-Android.apk.sha256
             release-assets/windows/Quantune-Windows-Setup.exe
             release-assets/windows/Quantune-Windows-Setup.exe.sha256
+
+      - name: Check out main for the next app version
+        uses: actions/checkout@v7
+        with:
+          repository: DS-ann/Quantune
+          ref: main
+          token: ${{ github.token }}
+          path: next-version
+
+      - name: Advance version after the release is published
+        working-directory: next-version
+        env:
+          RELEASED_VERSION: ${{ needs.build-android.outputs.version_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CURRENT_VERSION="$(sed -n 's/^VERSION_NAME=//p' version.properties | head -n 1)"
+          if [[ "$CURRENT_VERSION" != "$RELEASED_VERSION" ]]; then
+            echo "::warning::main is at $CURRENT_VERSION, not the released $RELEASED_VERSION; leaving main unchanged."
+            exit 0
+          fi
+          ./.github/scripts/advance-version.sh version.properties "$RELEASED_VERSION"
+          NEXT_VERSION="$(sed -n 's/^VERSION_NAME=//p' version.properties | head -n 1)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.properties
+          git commit -m "Prepare Quantune $NEXT_VERSION for the next release"
+          git push origin HEAD:main

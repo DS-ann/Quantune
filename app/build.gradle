@@ -8,6 +8,24 @@ plugins {
     id("com.github.ben-manes.versions") version "0.54.0"
 }
 
+def quantuneVersionProperties = new Properties()
+def quantuneVersionFile = rootProject.file("version.properties")
+if (!quantuneVersionFile.isFile()) {
+    throw new GradleException("Missing version.properties at the repository root.")
+}
+quantuneVersionFile.withInputStream { stream ->
+    quantuneVersionProperties.load(stream)
+}
+def quantuneVersionName = quantuneVersionProperties.getProperty("VERSION_NAME")?.trim()
+def quantuneVersionCodeText = quantuneVersionProperties.getProperty("VERSION_CODE")?.trim()
+if (!quantuneVersionName || !quantuneVersionCodeText?.isInteger()) {
+    throw new GradleException("version.properties must define a valid VERSION_NAME and integer VERSION_CODE.")
+}
+def quantuneVersionCode = quantuneVersionCodeText.toInteger()
+if (quantuneVersionCode <= 0) {
+    throw new GradleException("VERSION_CODE must be greater than zero.")
+}
+
 android {
     namespace 'com.dsann.music'
     compileSdk 37
@@ -21,8 +39,8 @@ android {
         // Android 6.0 Marshmallow is API 23; keep APIs newer than 23 guarded at runtime.
         minSdk 23
         targetSdk 37
-        versionCode 26
-        versionName "1.8.18"
+        versionCode quantuneVersionCode
+        versionName quantuneVersionName
         externalNativeBuild {
             cmake {
                 arguments "-DANDROID_STL=c++_shared"

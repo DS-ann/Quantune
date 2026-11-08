@@ -168,6 +168,10 @@ The ABI split configuration produces a Universal ARM APK, an ARMv7a APK, and an 
 
 The release workflow builds the variants, signs and verifies each APK, generates SHA-256 files, and attaches the six assets to a GitHub Release. Signing credentials are supplied through repository Actions secrets and are not part of the source tree.
 
+### Release versioning
+
+The app version is defined once in `version.properties`. The first Quantune release is **1.0.0**. After an official release is successfully published, the workflow automatically advances the version for the next build by **0.1.0** (for example, `1.0.0 → 1.1.0 → 1.2.0`) and increments Android's `versionCode`. Release tags are generated automatically as `v1.0.0`, `v1.1.0`, and so on; no manual tag-version edits are needed.
+
 ---
 
 ## Technology
