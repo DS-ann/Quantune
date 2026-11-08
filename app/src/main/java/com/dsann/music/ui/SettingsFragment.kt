@@ -3791,9 +3791,9 @@ SettingsGroupCard(listOf(
                     SettingsChoiceRow(
                         title = "Lyrics colour",
                         description = "Choose between colourful lyrics, app colours, or white lyrics.",
-                        selected = lyricsColorStyle,
-                        options = listOf("Home Studio Gradient", "UI Matching", "White"),
-                        onSelected = onLyricsColorStyleChange
+                        selected = if (lyricsColorStyle == "Home Studio Gradient") "Gradient" else lyricsColorStyle,
+                        options = listOf("Gradient", "UI Matching", "White"),
+                        onSelected = { onLyricsColorStyleChange(if (it == "Gradient") "Home Studio Gradient" else it) }
                     )
                 },
                 {
