@@ -1171,6 +1171,7 @@ fun ExploreScreen(
                                                                         Box(
                                                                             modifier = Modifier
                                                                                 .align(Alignment.TopEnd)
+                                                                                .padding(top = 26.dp)
                                                                                 .size(40.dp)
                                                                                 .clip(CircleShape)
                                                                                 .background(firstColor.copy(alpha = 0.16f)),
@@ -1248,6 +1249,7 @@ fun ExploreScreen(
                                                                         tint = DsmusicTheme.colorScheme.primary.copy(alpha = 0.68f),
                                                                         modifier = Modifier
                                                                             .align(Alignment.TopEnd)
+                                                                            .padding(top = 28.dp)
                                                                             .size(25.dp)
                                                                     )
                                                                     Column(

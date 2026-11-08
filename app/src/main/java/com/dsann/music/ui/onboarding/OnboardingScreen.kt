@@ -273,6 +273,7 @@ import com.dsann.music.applyDsmusicNightMode
         val horizontalPadding = if (screenWidth < 360.dp) 20.dp else if (screenWidth > 480.dp) 32.dp else 26.dp
         val verticalPadding = if (screenWidth < 360.dp) 12.dp else 16.dp
         val heroHeight = (screenWidth * 0.76f).coerceIn(224.dp, 304.dp)
+        val footerHeight = (configuration.screenHeightDp.dp * 0.18f).coerceIn(96.dp, 148.dp)
 
         Column(
             modifier = Modifier
@@ -329,6 +330,108 @@ import com.dsann.music.applyDsmusicNightMode
                 horizontalAlignment = Alignment.Start
             ) {
                 content()
+            }
+
+            OnboardingFeatureDock(
+                pageNumber = pageNumber,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(footerHeight)
+                    .padding(horizontal = horizontalPadding, vertical = 4.dp)
+            )
+        }
+    }
+
+    @Composable
+    private fun OnboardingFeatureDock(
+        pageNumber: Int,
+        modifier: Modifier = Modifier
+    ) {
+        val colors = DsmusicTheme.colorScheme
+        val features = listOf(
+            Icons.Rounded.Headphones to "STREAM",
+            Icons.Rounded.LibraryMusic to "LOCAL",
+            Icons.Rounded.GraphicEq to "DISCOVER"
+        )
+        val activeFeature = (pageNumber - 1).coerceAtLeast(0) % features.size
+        val waveformHeights = listOf(8.dp, 14.dp, 21.dp, 12.dp, 17.dp)
+
+        Column(
+            modifier = modifier,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "MADE FOR EVERY WAY YOU LISTEN",
+                    style = DsmusicTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.9.sp,
+                    color = colors.onSurfaceVariant,
+                    maxLines = 1
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    waveformHeights.forEachIndexed { index, barHeight ->
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(barHeight)
+                                .clip(CircleShape)
+                                .background(
+                                    when (index % 3) {
+                                        0 -> colors.primary
+                                        1 -> colors.secondary
+                                        else -> colors.tertiary
+                                    }.copy(alpha = 0.78f)
+                                )
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(9.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                features.forEachIndexed { index, feature ->
+                    val selected = index == activeFeature
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(15.dp),
+                        color = if (selected) colors.primaryContainer.copy(alpha = 0.86f)
+                            else colors.surfaceContainerHigh.copy(alpha = 0.76f)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 9.dp, horizontal = 4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = feature.first,
+                                contentDescription = null,
+                                tint = if (selected) colors.onPrimaryContainer else colors.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = feature.second,
+                                style = DsmusicTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp,
+                                letterSpacing = 0.7.sp,
+                                color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -1349,7 +1452,10 @@ import com.dsann.music.applyDsmusicNightMode
         val dockShape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
 
         Surface(
-            modifier = modifier.shadow(elevation = 14.dp, shape = dockShape, clip = true),
+            modifier = modifier
+                .fillMaxWidth()
+                .shadow(elevation = 14.dp, shape = dockShape, clip = true)
+                .border(1.dp, colors.outlineVariant.copy(alpha = 0.42f), dockShape),
             color = colors.surfaceContainer,
             shape = dockShape
         ) {
@@ -1357,7 +1463,7 @@ import com.dsann.music.applyDsmusicNightMode
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(horizontal = 22.dp, vertical = 14.dp)
+                    .padding(horizontal = 20.dp, vertical = 14.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1386,12 +1492,27 @@ import com.dsann.music.applyDsmusicNightMode
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (pagerState.currentPage == 0) {
+                        Surface(
+                            modifier = Modifier.size(46.dp),
+                            shape = CircleShape,
+                            color = colors.primaryContainer
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.MusicNote,
+                                    contentDescription = null,
+                                    tint = colors.onPrimaryContainer,
+                                    modifier = Modifier.size(21.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
                                 text = "QUANTUNE",
                                 style = DsmusicTheme.typography.labelMedium,
                                 fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 1.6.sp,
+                                letterSpacing = 1.3.sp,
                                 color = colors.onSurface
                             )
                             Spacer(modifier = Modifier.height(2.dp))
@@ -1399,7 +1520,7 @@ import com.dsann.music.applyDsmusicNightMode
                                 text = "WELCOME EXPERIENCE",
                                 style = DsmusicTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Medium,
-                                letterSpacing = 0.8.sp,
+                                letterSpacing = 0.7.sp,
                                 color = colors.onSurfaceVariant
                             )
                         }
@@ -1421,13 +1542,13 @@ import com.dsann.music.applyDsmusicNightMode
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
                                 text = "STEP ${(pagerState.currentPage + 1).toString().padStart(2, '0')}",
                                 style = DsmusicTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.2.sp,
+                                letterSpacing = 1.1.sp,
                                 color = colors.primary
                             )
                             Text(
@@ -1442,9 +1563,10 @@ import com.dsann.music.applyDsmusicNightMode
 
                     Surface(
                         modifier = Modifier
-                            .height(50.dp)
-                            .clip(RoundedCornerShape(17.dp))
-                            .clickable {
+                            .width(if (isLastPage) 166.dp else 150.dp)
+                            .height(52.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .clickable(enabled = isLastPage || isNextEnabled) {
                                 if (isLastPage) onFinishClicked()
                                 else if (isNextEnabled) onNextClicked()
                             },
@@ -1466,7 +1588,7 @@ import com.dsann.music.applyDsmusicNightMode
                                 fontWeight = FontWeight.Bold,
                                 color = if (isLastPage) colors.onPrimary else colors.onPrimaryContainer
                             )
-                            Spacer(modifier = Modifier.width(9.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Icon(
                                 imageVector = if (isLastPage) Icons.Rounded.Check else Icons.Rounded.ArrowForward,
                                 contentDescription = null,
