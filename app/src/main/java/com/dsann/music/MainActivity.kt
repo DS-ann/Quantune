@@ -248,6 +248,8 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val currentNavController = rememberNavController()
+                val rootBackStackEntry by currentNavController.currentBackStackEntryAsState()
+                val rootBackRoute = rootBackStackEntry?.destination?.route
                 val rootTabRoutes = remember { setOf("explore", "search", "library", "local_music", "settings") }
                 val rootTabOrder = remember { listOf("explore", "search", "library", "local_music", "settings") }
                 val rootTabIndices = remember { rootTabOrder.withIndex().associate { it.value to it.index } }
@@ -987,6 +989,15 @@ class MainActivity : AppCompatActivity() {
                     enabled = isPlayerBackActive
                 ) {
                     playerViewModel.requestPlayerCollapseFromBack()
+                }
+
+                // Back from the Explore root exits the Activity instead of walking
+                // through the previously visited bottom-navigation destinations.
+                // Player collapse remains higher priority while the player is expanded.
+                androidx.activity.compose.BackHandler(
+                    enabled = rootBackRoute == "explore" && !isPlayerBackActive
+                ) {
+                    this@MainActivity.finish()
                 }
 
                     if (startupOverlayAlpha > 0.001f) {
