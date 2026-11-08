@@ -1570,7 +1570,7 @@ import com.dsann.music.applyDsmusicNightMode
                                 if (isLastPage) onFinishClicked()
                                 else if (isNextEnabled) onNextClicked()
                             },
-                        shape = RoundedCornerShape(17.dp),
+                        shape = RoundedCornerShape(18.dp),
                         color = when {
                             isLastPage -> colors.primary
                             isNextEnabled -> colors.primaryContainer
@@ -1578,7 +1578,7 @@ import com.dsann.music.applyDsmusicNightMode
                         }
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 18.dp),
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
