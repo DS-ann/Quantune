@@ -332,6 +332,8 @@ fun BottomSheetScaffoldContent(
     val localPlaylists by viewModel.localPlaylistsFlow.collectAsStateWithLifecycle(emptyList())
 
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
+    var showLocalPlaylistPicker by remember { mutableStateOf(false) }
+    var showYouTubePlaylistPicker by remember { mutableStateOf(false) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(song, queueSongMode) {
@@ -348,31 +350,55 @@ fun BottomSheetScaffoldContent(
         }
     }
 
-    val onlineVideoId = song?.videoId?.takeIf { it.isNotBlank() }
+    val onlineVideoId = song?.videoId?.takeIf {
+        it.isNotBlank() && !it.startsWith("local-track-", ignoreCase = true)
+    }
     if (showAddToPlaylistDialog && onlineVideoId != null) {
-        YouTubeMusicPlaylistPickerDialog(
-            videoIds = listOf(onlineVideoId),
-            onPlaylistAdded = { playlistTitle ->
+        PlaylistDestinationPickerDialog(
+            showYouTubeMusicOption = true,
+            onQuantunePlaylistSelected = {
                 showAddToPlaylistDialog = false
-                onDismiss()
-                SnackbarController.showMessage("Added to YouTube Music playlist: $playlistTitle")
+                showLocalPlaylistPicker = true
+            },
+            onYouTubeMusicSelected = {
+                showAddToPlaylistDialog = false
+                showYouTubePlaylistPicker = true
             },
             onDismiss = { showAddToPlaylistDialog = false }
         )
-    } else if (showAddToPlaylistDialog) {
-        // Device-only tracks have no YouTube video ID; retain local playlist support for them.
+    }
+
+    if ((showAddToPlaylistDialog && onlineVideoId == null) || showLocalPlaylistPicker) {
         LocalPlaylistPickerDialog(
             playlists = localPlaylists,
             onCreateNew = {
                 showCreatePlaylistDialog = true
                 showAddToPlaylistDialog = false
+                showLocalPlaylistPicker = false
             },
             onPlaylistSelected = { playlist ->
-                if (song != null) viewModel.addSongToLocalPlaylist(playlist.id, song)
+                song?.let { viewModel.addSongToLocalPlaylist(playlist.id, it) }
                 showAddToPlaylistDialog = false
+                showLocalPlaylistPicker = false
                 onDismiss()
+                SnackbarController.showMessage("Added to app playlist: ${playlist.title}")
             },
-            onDismiss = { showAddToPlaylistDialog = false }
+            onDismiss = {
+                showAddToPlaylistDialog = false
+                showLocalPlaylistPicker = false
+            }
+        )
+    }
+
+    if (showYouTubePlaylistPicker && onlineVideoId != null) {
+        YouTubeMusicPlaylistPickerDialog(
+            videoIds = listOf(onlineVideoId),
+            onPlaylistAdded = { playlistTitle ->
+                showYouTubePlaylistPicker = false
+                onDismiss()
+                SnackbarController.showMessage("Added to YouTube Music playlist: $playlistTitle")
+            },
+            onDismiss = { showYouTubePlaylistPicker = false }
         )
     }
 
@@ -381,11 +407,13 @@ fun BottomSheetScaffoldContent(
             onConfirm = { name ->
                 viewModel.createLocalPlaylist(name)
                 showCreatePlaylistDialog = false
-                showAddToPlaylistDialog = true
+                if (onlineVideoId != null) showLocalPlaylistPicker = true
+                else showAddToPlaylistDialog = true
             },
             onDismiss = {
                 showCreatePlaylistDialog = false
-                showAddToPlaylistDialog = true
+                if (onlineVideoId != null) showLocalPlaylistPicker = true
+                else showAddToPlaylistDialog = true
             }
         )
     }
@@ -1072,6 +1100,69 @@ fun YouTubeMusicPlaylistPickerDialog(
             }
         )
     }
+}
+
+@Composable
+fun PlaylistDestinationPickerDialog(
+    showYouTubeMusicOption: Boolean,
+    onQuantunePlaylistSelected: () -> Unit,
+    onYouTubeMusicSelected: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Add to playlist", fontWeight = FontWeight.Bold, style = DsmusicTheme.typography.titleLarge)
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Choose where you want to save this track.",
+                    style = DsmusicTheme.typography.bodyMedium,
+                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                )
+                DsmusicSurface(
+                    onClick = onQuantunePlaylistSelected,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = DsmusicTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Rounded.PlaylistPlay, contentDescription = null, tint = DsmusicTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("App playlists", fontWeight = FontWeight.SemiBold, style = DsmusicTheme.typography.bodyLarge)
+                            Text("Save in your local library. No YouTube sign-in needed.", style = DsmusicTheme.typography.bodySmall, color = DsmusicTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                if (showYouTubeMusicOption) {
+                    DsmusicSurface(
+                        onClick = onYouTubeMusicSelected,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        color = DsmusicTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Rounded.PlaylistAdd, contentDescription = null, tint = DsmusicTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("YouTube Music playlists", fontWeight = FontWeight.SemiBold, style = DsmusicTheme.typography.bodyLarge)
+                                Text("Save to your online account. Sign-in required.", style = DsmusicTheme.typography.bodySmall, color = DsmusicTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { DsmusicTextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable

@@ -366,6 +366,17 @@ class PlayerSharedViewModel @Inject constructor(
         }
     }
 
+    fun addSongsToLocalPlaylist(playlistId: Long, songs: List<SongItem>) {
+        if (songs.isEmpty()) return
+        bgScope.launch(Dispatchers.IO) {
+            var position = playlistDao.getSongCountForPlaylistSync(playlistId)
+            songs.forEach { song ->
+                playlistDao.insertPlaylistSong(song.toPlaylistSongEntity(playlistId, position))
+                position += 1
+            }
+        }
+    }
+
     fun removeSongFromLocalPlaylist(playlistId: Long, songId: String) {
         bgScope.launch(Dispatchers.IO) {
             playlistDao.deletePlaylistSong(playlistId, songId)
