@@ -1544,7 +1544,7 @@ onNavigateToLibrary = {
             updateInstallPermissionPrompted = false
         } catch (e: Exception) {
             Log.e(TAG, "Could not open the Quantune update installer", e)
-            com.dsann.music.ui.SnackbarController.INSTANCE.showMessage(
+            com.dsann.music.ui.SnackbarController.showMessage(
                 "The downloaded update could not be opened. Check the Downloads notification and try again."
             )
         }
