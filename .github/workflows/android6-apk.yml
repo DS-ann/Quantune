@@ -17,7 +17,8 @@ permissions:
 
 concurrency:
   group: quantune-android6-build-${{ github.ref }}
-  cancel-in-progress: true
+  # Keep an active ABI build running; a newer push may replace only a pending run.
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -26,7 +27,12 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
+        # Declare the ABI dimension directly so GitHub always expands two jobs.
+        abi:
+          - armeabi-v7a
+          - arm64-v8a
         include:
           - abi: armeabi-v7a
             label: ARMv7a
