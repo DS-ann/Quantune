@@ -82,6 +82,7 @@ import com.dsann.music.ui.theme.IconButton
 import com.dsann.music.ui.theme.ListItem
 import com.dsann.music.ui.theme.ListItemDefaults
 import com.dsann.music.ui.theme.DsmusicTheme
+import com.dsann.music.ui.theme.findActivity
 import com.dsann.music.ui.theme.LocalPageTransitionDurationMillis
 import com.dsann.music.ui.theme.observeKey
 import com.dsann.music.ui.theme.OutlinedButton
@@ -209,7 +210,7 @@ fun ExploreScreen(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val context = LocalContext.current
-    val mainActivity = context as? MainActivity
+    val mainActivity = remember(context) { context.findActivity() as? MainActivity }
     val scope = rememberCoroutineScope()
 
     val accountVM: AccountViewModel = viewModel()
