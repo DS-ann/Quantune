@@ -1512,6 +1512,7 @@ class AudioPlaybackService : MediaSessionService() {
         if (activeService === this) activeService = null
     }
 
+    @OptIn(UnstableApi::class)
     private fun configurePlayerAudio(target: ExoPlayer) {
         val attrs = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -1520,6 +1521,23 @@ class AudioPlaybackService : MediaSessionService() {
         target.setAudioAttributes(attrs, audioFocusEnabled)
         target.setWakeMode(C.WAKE_MODE_NETWORK)
         target.skipSilenceEnabled = false
+
+        // Configure audio attributes before assigning the effect session. Media3 can
+        // recreate its AudioTrack/session when audio attributes change, so assigning
+        // the ID earlier would leave the visualizer attached to a stale session.
+        if (!playerAudioSessionIds.containsKey(target)) {
+            val sessionId = runCatching {
+                audioManager?.generateAudioSessionId() ?: 0
+            }.getOrDefault(0)
+            if (sessionId > 0) {
+                try {
+                    target.setAudioSessionId(sessionId)
+                    playerAudioSessionIds[target] = sessionId
+                } catch (error: Exception) {
+                    Log.w(TAG, "Could not assign a dedicated audio session for visualization", error)
+                }
+            }
+        }
     }
 
     private fun initializePlayer() {
@@ -1545,7 +1563,6 @@ class AudioPlaybackService : MediaSessionService() {
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
     }
 
-    @OptIn(UnstableApi::class)
     private fun buildExoPlayer(): ExoPlayer {
         val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(this)
             .setEnableDecoderFallback(true)
@@ -1561,19 +1578,6 @@ class AudioPlaybackService : MediaSessionService() {
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
 
-        // Set the session before prepare so Android's Visualizer can attach to this exact
-        // player output without changing or wrapping Media3's audio renderer/sink.
-        val sessionId = runCatching {
-            audioManager?.generateAudioSessionId() ?: 0
-        }.getOrDefault(0)
-        if (sessionId > 0) {
-            try {
-                builtPlayer.setAudioSessionId(sessionId)
-                playerAudioSessionIds[builtPlayer] = sessionId
-            } catch (error: Exception) {
-                Log.w(TAG, "Could not assign a dedicated audio session for visualization", error)
-            }
-        }
         return builtPlayer
     }
 
