@@ -34,7 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Share
-import androidx.compose.material.icons.rounded.WarningAmber
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -213,7 +213,7 @@ private fun CrashReportScreen(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if (isAnr) Icons.Rounded.WarningAmber else Icons.Rounded.BugReport,
+                imageVector = if (isAnr) Icons.Rounded.Warning else Icons.Rounded.BugReport,
                 contentDescription = null,
                 tint = warningColor,
                 modifier = Modifier.size(38.dp)
