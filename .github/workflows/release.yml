@@ -10,7 +10,7 @@ on:
         type: string
         default: main
       release_notes:
-        description: "Release highlights in Markdown. Leave blank to use the standard release summary."
+        description: "Optional Markdown release highlights. Leave blank to generate feature changes since the previous release tag."
         required: false
         type: string
       prerelease:
@@ -37,6 +37,7 @@ jobs:
         with:
           repository: DS-ann/Quantune
           ref: ${{ inputs.source_ref }}
+          fetch-depth: 0
 
       - name: Read app version for this release
         id: release-version
@@ -156,16 +157,38 @@ jobs:
             printf '# Quantune %s\n\n' "$RELEASE_TAG"
             printf '> Your music. Your flow. Your Quantune.\n\n'
             printf 'Quantune brings music discovery, playback, synchronized lyrics, playlists and offline listening tools together in one Android app.\n\n'
-            printf '## What is included\n'
+            printf '## Changes since the previous release\n'
             if [ -n "$RELEASE_NOTES" ]; then
+              # Explicit release highlights take precedence over automatic generation.
               printf '%s\n\n' "$RELEASE_NOTES"
             else
-              printf '%s\n' \
-                '- Discover and play music online.' \
-                '- Follow synchronized and karaoke-style lyrics.' \
-                '- Organize playlists, favourites and listening history.' \
-                '- Save supported audio for offline listening.' \
-                '- Personalize the player and use home-screen widgets.'
+              CURRENT_COMMIT="$(git rev-parse HEAD)"
+              PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${CURRENT_COMMIT}^" 2>/dev/null || true)"
+              FEATURE_COUNT=0
+
+              if [ -n "$PREVIOUS_TAG" ]; then
+                while IFS=$'\t' read -r COMMIT_SHA SUBJECT; do
+                  [ -n "$COMMIT_SHA" ] || continue
+
+                  # Ignore branding/version/build/CI housekeeping rather than feature work.
+                  if printf '%s' "$SUBJECT" | grep -Eiq '(app[[:space:]_-]*name|branding|rename.*(app|quantune|d\.s[[:space:]_-]*music)|change.*app.*name|update.*app.*name|gradle|build\.gradle|version[[:space:]_-]*(bump|change)|prepare.*release|release[[:space:]_-]*workflow|ci[[:space:]_-]*workflow)'; then
+                    continue
+                  fi
+
+                  # A release highlight must correspond to app source or resource changes.
+                  CHANGED_PATHS="$(git diff-tree --no-commit-id --name-only -r "$COMMIT_SHA")"
+                  if ! printf '%s\n' "$CHANGED_PATHS" | grep -q '^app/src/main/'; then
+                    continue
+                  fi
+
+                  printf -- '- %s\n' "$SUBJECT"
+                  FEATURE_COUNT=$((FEATURE_COUNT + 1))
+                done < <(git log --reverse --no-merges --format='%H%x09%s' "$PREVIOUS_TAG..$CURRENT_COMMIT")
+              fi
+
+              if [ "$FEATURE_COUNT" -eq 0 ]; then
+                printf '%s\n' '- No user-facing feature changes were detected for this release.'
+              fi
               printf '\n'
             fi
             printf '## Choose your APK\n\n'
