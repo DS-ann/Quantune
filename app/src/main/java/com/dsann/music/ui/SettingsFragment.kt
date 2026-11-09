@@ -737,6 +737,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         prefs.edit { putString("visualizer_color", safe) }
     }
 
+    private val _fullscreenVisualizerEnabled = MutableStateFlow(
+        prefs.getBoolean("fullscreen_visualizer_enabled", true)
+    )
+    val fullscreenVisualizerEnabled: StateFlow<Boolean> =
+        _fullscreenVisualizerEnabled.asStateFlow()
+
+    fun setFullscreenVisualizerEnabled(enabled: Boolean) {
+        _fullscreenVisualizerEnabled.value = enabled
+        prefs.edit { putBoolean("fullscreen_visualizer_enabled", enabled) }
+    }
+
     private val _lyricsTextSize = MutableStateFlow(
         prefs.getString("lyrics_text_size", "Standard") ?: "Standard"
     )
@@ -1356,6 +1367,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _scrubberThickness.value = 1.5f
         _scrubberThumbStyle.value = prefs.getString("scrubber_thumb_style", "Auto") ?: "Auto"
         _visualizerColor.value = prefs.getString("visualizer_color", "Accent") ?: "Accent"
+        _fullscreenVisualizerEnabled.value = prefs.getBoolean("fullscreen_visualizer_enabled", true)
         _lyricsTextSize.value = prefs.getString("lyrics_text_size", "Standard") ?: "Standard"
         _showSyncedLyricsInPlayer.value = prefs.getBoolean("show_synced_lyrics_in_player", true)
         _lyricsAlignment.value = prefs.getString("lyrics_alignment", "Original") ?: "Original"
@@ -1786,6 +1798,7 @@ fun SettingsScreenContent(
     val playerButtonStyle by viewModel.playerButtonStyle.collectAsStateWithLifecycle()
     val scrubberThumbStyle by viewModel.scrubberThumbStyle.collectAsStateWithLifecycle()
     val visualizerColor by viewModel.visualizerColor.collectAsStateWithLifecycle()
+    val fullscreenVisualizerEnabled by viewModel.fullscreenVisualizerEnabled.collectAsStateWithLifecycle()
     val lyricsTextSize by viewModel.lyricsTextSize.collectAsStateWithLifecycle()
     val showSyncedLyricsInPlayer by viewModel.showSyncedLyricsInPlayer.collectAsStateWithLifecycle()
     val lyricsAlignment by viewModel.lyricsAlignment.collectAsStateWithLifecycle()
@@ -2227,6 +2240,8 @@ fun SettingsScreenContent(
                 onDownloadBitrateChange = { viewModel.setDownloadBitrate(it) },
                 playerFrameRate = playerFrameRate,
                 onPlayerFrameRateChange = { viewModel.setPlayerFrameRate(it) },
+                fullscreenVisualizerEnabled = fullscreenVisualizerEnabled,
+                onFullscreenVisualizerToggle = { viewModel.setFullscreenVisualizerEnabled(it) },
                 pageTransitionSpeed = pageTransitionSpeed,
                 onPageTransitionSpeedChange = { viewModel.setPageTransitionSpeed(it) },
             )
@@ -4693,6 +4708,8 @@ private fun PlaybackScreen(
     onDownloadBitrateChange: (String) -> Unit,
     playerFrameRate: Int,
     onPlayerFrameRateChange: (Int) -> Unit,
+    fullscreenVisualizerEnabled: Boolean,
+    onFullscreenVisualizerToggle: (Boolean) -> Unit,
     pageTransitionSpeed: Float,
     onPageTransitionSpeedChange: (Float) -> Unit,
 ) {
@@ -4788,6 +4805,16 @@ private fun PlaybackScreen(
             })
 
             
+            }
+            SettingsAccordionSection("Full-screen visualizer") {
+                SettingsGroupCard(listOf({
+                    ToggleSettingRow(
+                        title = "Enable full-screen visualizer",
+                        description = "Show a real-time 16-bar playback visualizer in landscape. Audio analysis starts only while that screen is open.",
+                        checked = fullscreenVisualizerEnabled,
+                        onCheckedChange = onFullscreenVisualizerToggle
+                    )
+                }))
             }
             SettingsAccordionSection("Playback quality") {
             SettingsGroupCard(listOf(

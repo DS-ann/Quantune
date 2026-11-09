@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Translate
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -941,6 +942,7 @@ fun FullPlayerScreen(
     val scrubberThickness by customizeViewModel.scrubberThickness.collectAsStateWithLifecycle()
     val scrubberThumbStyle by customizeViewModel.scrubberThumbStyle.collectAsStateWithLifecycle()
     val visualizerColor by customizeViewModel.visualizerColor.collectAsStateWithLifecycle()
+    val fullscreenVisualizerEnabled by customizeViewModel.fullscreenVisualizerEnabled.collectAsStateWithLifecycle()
     val lyricsColorStyle by customizeViewModel.lyricsColorStyle.collectAsStateWithLifecycle()
     val showSyncedLyricsInPlayer by customizeViewModel.showSyncedLyricsInPlayer.collectAsStateWithLifecycle()
 
@@ -982,6 +984,7 @@ fun FullPlayerScreen(
         scrubberThickness = scrubberThickness,
         scrubberThumbStyle = scrubberThumbStyle,
         visualizerColor = visualizerColor,
+        fullscreenVisualizerEnabled = fullscreenVisualizerEnabled,
         showSyncedLyricsInPlayer = showSyncedLyricsInPlayer,
         onProviderSelected = { viewModel.selectLyricsProvider(it) },
         currentPositionProvider = currentPositionProvider,
@@ -1080,6 +1083,7 @@ fun FullPlayer(
     scrubberThickness: Float = 1.5f,
     scrubberThumbStyle: String = "Auto",
     visualizerColor: String = "Accent",
+    fullscreenVisualizerEnabled: Boolean = true,
     showSyncedLyricsInPlayer: Boolean = true,
     onProviderSelected: (String) -> Unit,
     onArtistClick: (String?, String) -> Unit = { _, _ -> },
@@ -1205,6 +1209,7 @@ fun FullPlayer(
     val isVideoMode by viewModel.isVideoMode.collectAsStateWithLifecycle()
     val videoPlaybackMetadata by viewModel.videoPlaybackMetadata.collectAsStateWithLifecycle()
     var showSongInfoDialog by remember { mutableStateOf(false) }
+    var showFullScreenVisualizer by remember { mutableStateOf(false) }
     var selectedQueueSongForMenu by remember { mutableStateOf<SongItem?>(null) }
     var lastLyricsFetchSongId by remember { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
@@ -1804,7 +1809,12 @@ fun FullPlayer(
                 val playerButtonsWithVideo = if (
                     showVideoSwitch && "video" !in orderedButtons
                 ) orderedButtons + "video" else orderedButtons
-                playerButtonsWithVideo.forEach { action ->
+                val playerButtonsForDisplay = if (
+                    fullscreenVisualizerEnabled && "visualizer" !in playerButtonsWithVideo
+                ) playerButtonsWithVideo + "visualizer"
+                else if (fullscreenVisualizerEnabled) playerButtonsWithVideo
+                else playerButtonsWithVideo.filterNot { it == "visualizer" }
+                playerButtonsForDisplay.forEach { action ->
                     when (action) {
                         "lyrics" -> PillChip(
                             style = playerButtonStyle,
@@ -1955,6 +1965,15 @@ fun FullPlayer(
                                 onCollapse()
                                 onNavigateToListenTogether()
                             },
+                            contentColor = contentColor,
+                            accentColor = dynamicAccentColor,
+                            isDark = isDark
+                        )
+                        "visualizer" -> PillChip(
+                            style = playerButtonStyle,
+                            icon = Icons.Rounded.GraphicEq,
+                            label = "Visualizer",
+                            onClick = { showFullScreenVisualizer = true },
                             contentColor = contentColor,
                             accentColor = dynamicAccentColor,
                             isDark = isDark
@@ -2524,6 +2543,21 @@ fun FullPlayer(
                     }
                 )
             }
+        }
+    }
+
+    if (showFullScreenVisualizer) {
+        val hostActivity = context as? Activity
+        if (hostActivity != null) {
+            FullscreenAudioVisualizerDialog(
+                activity = hostActivity,
+                audioService = audioService,
+                lyricsAccentColor = lyricsAccentColor,
+                lyricsTextColor = lyricsTextColor,
+                onDismissRequest = { showFullScreenVisualizer = false }
+            )
+        } else {
+            showFullScreenVisualizer = false
         }
     }
 }

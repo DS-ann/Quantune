@@ -979,6 +979,12 @@ class AudioPlaybackService : MediaSessionService() {
     private var isCrossfading = false
     private var crossfadeNextSongStarted = false
     private var nextPlayer: ExoPlayer? = null
+
+    // Each ExoPlayer owns a dedicated Android audio session. The playback visualizer
+    // attaches to the active session only when the user opens its screen.
+    private val playerAudioSessionIds = java.util.WeakHashMap<ExoPlayer, Int>()
+    private val idleVisualizerLevels = MutableStateFlow(FloatArray(16) { 0f })
+    @Volatile private var playbackVisualizerController: PlaybackVisualizerController? = null
     
     private var currentBaseVolume = 1.0f
 
@@ -1471,6 +1477,8 @@ class AudioPlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        playbackVisualizerController?.stop()
+        playbackVisualizerController = null
         handler.removeCallbacks(mediaRouteNotificationRefreshRunnable)
         systemOutputRouteMonitor?.stop()
         systemOutputRouteMonitor = null
@@ -1537,6 +1545,7 @@ class AudioPlaybackService : MediaSessionService() {
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
     }
 
+    @OptIn(UnstableApi::class)
     private fun buildExoPlayer(): ExoPlayer {
         val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(this)
             .setEnableDecoderFallback(true)
@@ -1547,10 +1556,25 @@ class AudioPlaybackService : MediaSessionService() {
 
         // Leave load control at Media3's tested defaults instead of forcing unusually long
         // buffers for local files and short tracks.
-        return ExoPlayer.Builder(this)
+        val builtPlayer = ExoPlayer.Builder(this)
             .setRenderersFactory(renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
+
+        // Set the session before prepare so Android's Visualizer can attach to this exact
+        // player output without changing or wrapping Media3's audio renderer/sink.
+        val sessionId = runCatching {
+            audioManager?.generateAudioSessionId() ?: 0
+        }.getOrDefault(0)
+        if (sessionId > 0) {
+            try {
+                builtPlayer.setAudioSessionId(sessionId)
+                playerAudioSessionIds[builtPlayer] = sessionId
+            } catch (error: Exception) {
+                Log.w(TAG, "Could not assign a dedicated audio session for visualization", error)
+            }
+        }
+        return builtPlayer
     }
 
     fun setViewModel(vm: PlayerSharedViewModel) {
@@ -4379,11 +4403,15 @@ class AudioPlaybackService : MediaSessionService() {
         val newPlayer = nextPlayer ?: return
 
         player = newPlayer
+
+        // Follow the new primary player's session only while the visualizer is open.
+        playbackVisualizerController?.switchSession(playerAudioSessionIds[newPlayer] ?: 0)
         
 
         // Stop old player and release it
         oldPlayer.stop()
         oldPlayer.removeListener(mainPlayerListener)
+        playerAudioSessionIds.remove(oldPlayer)
         oldPlayer.release()
 
         // Re-initialize a fresh nextPlayer for the future
@@ -4913,6 +4941,26 @@ class AudioPlaybackService : MediaSessionService() {
     }
 
     fun getPlayerInstance(): ExoPlayer = player
+
+    /** Starts playback-output FFT capture only for the full-screen visualizer. */
+    fun startPlaybackVisualizer(): Boolean {
+        if (!isPlayerInitialized) return false
+        val sessionId = playerAudioSessionIds[player] ?: return false
+        if (sessionId <= 0) return false
+        val controller = playbackVisualizerController ?: synchronized(this) {
+            playbackVisualizerController ?: PlaybackVisualizerController().also {
+                playbackVisualizerController = it
+            }
+        }
+        return controller.start(sessionId)
+    }
+
+    fun stopPlaybackVisualizer() {
+        playbackVisualizerController?.stop()
+    }
+
+    val playbackVisualizerLevels: StateFlow<FloatArray>
+        get() = playbackVisualizerController?.levels ?: idleVisualizerLevels
 
     inner class LocalBinder : Binder() {
         fun getService(): AudioPlaybackService = this@AudioPlaybackService
