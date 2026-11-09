@@ -2447,6 +2447,10 @@ private fun LocalPlaylistSongsList(
     songs: List<SongItem>,
     viewModel: PlayerSharedViewModel,
     onDismiss: () -> Unit,
+    isSelecting: Boolean = false,
+    selectedSongKeys: Set<String> = emptySet(),
+    onToggleSelection: (SongItem) -> Unit = {},
+    emptyMessage: String = "This playlist is empty",
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -2468,7 +2472,7 @@ private fun LocalPlaylistSongsList(
                     modifier = Modifier.fillMaxWidth().height(180.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("This playlist is empty", color = DsmusicTheme.colorScheme.onSurfaceVariant)
+                    Text(emptyMessage, color = DsmusicTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
@@ -2478,7 +2482,10 @@ private fun LocalPlaylistSongsList(
                     songs = songs,
                     song = song,
                     viewModel = viewModel,
-                    onDismiss = onDismiss
+                    onDismiss = onDismiss,
+                    isSelecting = isSelecting,
+                    isSelected = (song.videoId ?: song.id.toString()) in selectedSongKeys,
+                    onToggleSelection = { onToggleSelection(song) }
                 )
             }
         }
@@ -2491,7 +2498,10 @@ private fun LocalPlaylistSongRow(
     songs: List<SongItem>,
     song: SongItem,
     viewModel: PlayerSharedViewModel,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isSelecting: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelection: () -> Unit = {}
 ) {
     val currentSong by viewModel.currentSong.collectAsStateWithLifecycle()
     val isPlaying = currentSong?.id == song.id
@@ -2508,9 +2518,13 @@ private fun LocalPlaylistSongRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable {
-                    viewModel.setSongList(songs)
-                    viewModel.playSong(song)
-                    onDismiss()
+                    if (isSelecting) {
+                        onToggleSelection()
+                    } else {
+                        viewModel.setSongList(songs)
+                        viewModel.playSong(song)
+                        onDismiss()
+                    }
                 }
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -2564,23 +2578,53 @@ private fun LocalPlaylistSongRow(
                     color = DsmusicTheme.colorScheme.onSurfaceVariant
                 )
             }
-            DsmusicIconButton(
-                onClick = {
-                    viewModel.removeSongFromLocalPlaylist(
-                        playlist.id,
-                        song.videoId ?: song.id.toString()
+            if (isSelecting) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) DsmusicTheme.colorScheme.primary
+                            else Color.Transparent
+                        )
+                        .border(
+                            1.dp,
+                            if (isSelected) DsmusicTheme.colorScheme.primary
+                            else DsmusicTheme.colorScheme.outlineVariant,
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            Icons.Rounded.Check,
+                            contentDescription = "Selected",
+                            tint = DsmusicTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            } else {
+                DsmusicIconButton(
+                    onClick = {
+                        viewModel.removeSongFromLocalPlaylist(
+                            playlist.id,
+                            song.videoId ?: song.id.toString()
+                        )
+                    }
+                ) {
+                    Icon(
+                        Icons.Rounded.Close,
+                        contentDescription = "Remove song",
+                        tint = DsmusicTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            ) {
-                Icon(
-                    Icons.Rounded.Close,
-                    contentDescription = "Remove song",
-                    tint = DsmusicTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
 }
+
+
 
 @Composable
 private fun LocalPlaylistDetailsScreen(
@@ -2593,6 +2637,48 @@ private fun LocalPlaylistDetailsScreen(
     val scope = rememberCoroutineScope()
     val songsEntity by viewModel.getSongsForLocalPlaylist(playlist.id).collectAsStateWithLifecycle(emptyList())
     val songs = remember(songsEntity) { songsEntity.map { it.toSongItem() } }
+
+    var playlistOptionsExpanded by remember { mutableStateOf(false) }
+    var playlistSortMenuExpanded by remember { mutableStateOf(false) }
+    var playlistSortOrder by rememberSaveable(playlist.id) { mutableStateOf(SortOrder.A_Z) }
+    var playlistSortAscending by rememberSaveable(playlist.id) { mutableStateOf(true) }
+    var isPlaylistSearchVisible by rememberSaveable(playlist.id) { mutableStateOf(false) }
+    var playlistSearchQuery by rememberSaveable(playlist.id) { mutableStateOf("") }
+    var isSelectingPlaylistSongs by remember { mutableStateOf(false) }
+    var selectedPlaylistSongKeys by remember { mutableStateOf(setOf<String>()) }
+    var playlistSelectionMenuExpanded by remember { mutableStateOf(false) }
+
+    fun playlistSongKey(song: SongItem): String =
+        song.videoId?.takeIf { it.isNotBlank() } ?: song.id.toString()
+
+    val filteredPlaylistSongs by produceState(
+        initialValue = songs,
+        songs,
+        playlistSearchQuery,
+        playlistSortOrder,
+        playlistSortAscending
+    ) {
+        if (playlistSearchQuery.isNotBlank()) delay(120L)
+        val query = playlistSearchQuery.trim()
+        value = withContext(Dispatchers.Default) {
+            val matching = if (query.isEmpty()) songs else songs.filter {
+                it.title.contains(query, ignoreCase = true) ||
+                    it.artist.contains(query, ignoreCase = true)
+            }
+            val ascendingSorted = when (playlistSortOrder) {
+                SortOrder.A_Z -> matching.sortedBy { it.title.lowercase() }
+                SortOrder.DATE_ADDED -> matching.sortedWith(
+                    compareBy<SongItem> { downloadedSongAddedAtSeconds(it) }
+                        .thenBy { downloadedSongFileModifiedAtMs(it) }
+                        .thenBy { it.id }
+                )
+                SortOrder.ARTIST -> matching.sortedBy { it.artist.lowercase() }
+                SortOrder.DURATION -> matching.sortedBy { it.duration }
+            }
+            if (playlistSortAscending) ascendingSorted else ascendingSorted.asReversed()
+        }
+    }
+    val selectedPlaylistSongs = songs.filter { playlistSongKey(it) in selectedPlaylistSongKeys }
     // Only YouTube video IDs can be copied into a YouTube Music playlist. Local MediaStore
     // IDs and malformed/legacy rows are deliberately left in the device-only playlist.
     val uploadableVideoIds = remember(songsEntity) {
@@ -2671,6 +2757,220 @@ private fun LocalPlaylistDetailsScreen(
             }
         }
     }
+    val playlistOverflowMenu: @Composable () -> Unit = {
+        Box {
+            DsmusicIconButton(onClick = { playlistOptionsExpanded = true }) {
+                Icon(Icons.Rounded.MoreVert, contentDescription = "Playlist options")
+            }
+            DropdownMenu(
+                expanded = playlistOptionsExpanded,
+                onDismissRequest = { playlistOptionsExpanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Sort by") },
+                    onClick = {
+                        playlistOptionsExpanded = false
+                        playlistSortMenuExpanded = true
+                    },
+                    trailingIcon = {
+                        Icon(Icons.Rounded.ChevronRight, contentDescription = null)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Search") },
+                    onClick = {
+                        isPlaylistSearchVisible = !isPlaylistSearchVisible
+                        if (!isPlaylistSearchVisible) playlistSearchQuery = ""
+                        playlistOptionsExpanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Select") },
+                    onClick = {
+                        isSelectingPlaylistSongs = true
+                        selectedPlaylistSongKeys = emptySet()
+                        playlistOptionsExpanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            when {
+                                isUploading -> "Uploading…"
+                                alreadyUploaded -> "Uploaded"
+                                else -> "Upload"
+                            }
+                        )
+                    },
+                    onClick = {
+                        playlistOptionsExpanded = false
+                        uploadLocalPlaylist()
+                    },
+                    enabled = !isUploading && !alreadyUploaded
+                )
+            }
+            DropdownMenu(
+                expanded = playlistSortMenuExpanded,
+                onDismissRequest = { playlistSortMenuExpanded = false }
+            ) {
+                Text(
+                    "SORT BY",
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp),
+                    style = DsmusicTheme.typography.labelSmall,
+                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                )
+                SortOrder.entries.forEach { order ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                when (order) {
+                                    SortOrder.A_Z -> "A–Z"
+                                    SortOrder.DATE_ADDED -> "Date added"
+                                    SortOrder.ARTIST -> "Artist"
+                                    SortOrder.DURATION -> "Duration"
+                                }
+                            )
+                        },
+                        onClick = { playlistSortOrder = order },
+                        trailingIcon = {
+                            if (playlistSortOrder == order) {
+                                Icon(
+                                    Icons.Rounded.Check,
+                                    contentDescription = "Selected sort",
+                                    tint = DsmusicTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    )
+                }
+                com.dsann.music.ui.theme.HorizontalDivider()
+                Text(
+                    "ORDER",
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp),
+                    style = DsmusicTheme.typography.labelSmall,
+                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                )
+                DropdownMenuItem(
+                    text = { Text("Ascending") },
+                    onClick = { playlistSortAscending = true },
+                    trailingIcon = {
+                        if (playlistSortAscending) Icon(
+                            Icons.Rounded.Check,
+                            contentDescription = "Ascending selected",
+                            tint = DsmusicTheme.colorScheme.primary
+                        )
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Descending") },
+                    onClick = { playlistSortAscending = false },
+                    trailingIcon = {
+                        if (!playlistSortAscending) Icon(
+                            Icons.Rounded.Check,
+                            contentDescription = "Descending selected",
+                            tint = DsmusicTheme.colorScheme.primary
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    val playlistSearchBar: @Composable () -> Unit = {
+        if (isPlaylistSearchVisible) {
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clip(CircleShape)
+                    .background(DsmusicTheme.colorScheme.surfaceContainerLow)
+                    .border(1.dp, DsmusicTheme.colorScheme.outlineVariant.copy(alpha = 0.42f), CircleShape)
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Rounded.Search,
+                    contentDescription = "Search playlist",
+                    tint = DsmusicTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+                Box(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                    if (playlistSearchQuery.isEmpty()) {
+                        Text(
+                            "Search playlist songs…",
+                            style = DsmusicTheme.typography.bodyMedium,
+                            color = DsmusicTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    BasicTextField(
+                        value = playlistSearchQuery,
+                        onValueChange = { playlistSearchQuery = it },
+                        singleLine = true,
+                        textStyle = DsmusicTheme.typography.bodyMedium.copy(
+                            color = DsmusicTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                DsmusicIconButton(onClick = {
+                    playlistSearchQuery = ""
+                    isPlaylistSearchVisible = false
+                }) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Close search")
+                }
+            }
+        }
+    }
+
+    val clearPlaylistSelection = {
+        playlistSelectionMenuExpanded = false
+        selectedPlaylistSongKeys = emptySet()
+        isSelectingPlaylistSongs = false
+    }
+    val selectionControls: @Composable (Modifier) -> Unit = { controlModifier ->
+        CacheSelectionControls(
+            isSelecting = true,
+            selectedCount = selectedPlaylistSongKeys.size,
+            totalCount = filteredPlaylistSongs.size,
+            menuExpanded = playlistSelectionMenuExpanded,
+            onStartSelection = { isSelectingPlaylistSongs = true },
+            onSelectAll = {
+                selectedPlaylistSongKeys = filteredPlaylistSongs.map(::playlistSongKey).toSet()
+            },
+            onOpenMenu = { playlistSelectionMenuExpanded = true },
+            onDismissMenu = { playlistSelectionMenuExpanded = false },
+            onPlayNext = {
+                selectedPlaylistSongs.asReversed().forEach(viewModel::addToQueueNext)
+                com.dsann.music.ui.SnackbarController.showMessage(
+                    "Added " + selectedPlaylistSongs.size + " playlist songs to play next"
+                )
+                clearPlaylistSelection()
+            },
+            onAddToQueue = {
+                selectedPlaylistSongs.forEach(viewModel::addToQueue)
+                com.dsann.music.ui.SnackbarController.showMessage(
+                    "Added " + selectedPlaylistSongs.size + " playlist songs to queue"
+                )
+                clearPlaylistSelection()
+            },
+            onRemoveSelected = {
+                selectedPlaylistSongs.forEach { song ->
+                    viewModel.removeSongFromLocalPlaylist(
+                        playlist.id,
+                        song.videoId ?: song.id.toString()
+                    )
+                }
+                com.dsann.music.ui.SnackbarController.showMessage(
+                    "Removed " + selectedPlaylistSongs.size + " songs from this playlist"
+                )
+                clearPlaylistSelection()
+            },
+            onClearSelection = clearPlaylistSelection,
+            onDone = clearPlaylistSelection,
+            menuContentDescription = "Selected playlist actions",
+            modifier = controlModifier
+        )
+    }
+
     val artworkUrl = playlist.thumbnailUrl?.takeIf { it.isNotBlank() }
         ?: songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl
     val isLandscapeLayout =
@@ -2757,14 +3057,8 @@ private fun LocalPlaylistDetailsScreen(
                                     style = DsmusicTheme.typography.labelSmall,
                                     color = DsmusicTheme.colorScheme.primary
                                 )
-                            } else {
-                                DsmusicTextButton(
-                                    onClick = uploadLocalPlaylist,
-                                    enabled = !isUploading
-                                ) {
-                                    Text(if (isUploading) "Uploading…" else "Upload")
-                                }
                             }
+                            playlistOverflowMenu()
                             DsmusicIconButton(
                                 onClick = {
                                     viewModel.deleteLocalPlaylist(playlist.id)
@@ -2791,9 +3085,9 @@ private fun LocalPlaylistDetailsScreen(
                             ) {
                                 DsmusicButton(
                                     onClick = {
-                                        if (songs.isNotEmpty()) {
-                                            viewModel.setSongList(songs)
-                                            viewModel.playSong(songs.first())
+                                        if (filteredPlaylistSongs.isNotEmpty()) {
+                                            viewModel.setSongList(filteredPlaylistSongs)
+                                            viewModel.playSong(filteredPlaylistSongs.first())
                                             onDismiss()
                                         }
                                     },
@@ -2806,8 +3100,8 @@ private fun LocalPlaylistDetailsScreen(
                                 }
                                 DsmusicOutlinedButton(
                                     onClick = {
-                                        if (songs.isNotEmpty()) {
-                                            val shuffled = songs.shuffled()
+                                        if (filteredPlaylistSongs.isNotEmpty()) {
+                                            val shuffled = filteredPlaylistSongs.shuffled()
                                             viewModel.setSongList(shuffled)
                                             viewModel.playSong(shuffled.first())
                                             onDismiss()
@@ -2829,13 +3123,32 @@ private fun LocalPlaylistDetailsScreen(
                             .width(1.dp)
                             .background(DsmusicTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     )
-                    LocalPlaylistSongsList(
-                        playlist = playlist,
-                        songs = songs,
-                        viewModel = viewModel,
-                        onDismiss = onDismiss,
+                    Column(
                         modifier = Modifier.weight(0.58f).fillMaxHeight()
-                    )
+                    ) {
+                        playlistSearchBar()
+                        if (isSelectingPlaylistSongs) {
+                            selectionControls(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+                        }
+                        LocalPlaylistSongsList(
+                            playlist = playlist,
+                            songs = filteredPlaylistSongs,
+                            viewModel = viewModel,
+                            onDismiss = onDismiss,
+                            isSelecting = isSelectingPlaylistSongs,
+                            selectedSongKeys = selectedPlaylistSongKeys,
+                            onToggleSelection = { song ->
+                                val key = playlistSongKey(song)
+                                selectedPlaylistSongKeys = if (key in selectedPlaylistSongKeys) {
+                                    selectedPlaylistSongKeys - key
+                                } else {
+                                    selectedPlaylistSongKeys + key
+                                }
+                            },
+                            emptyMessage = if (songs.isEmpty()) "This playlist is empty" else "No matching songs",
+                            modifier = Modifier.weight(1f).fillMaxWidth()
+                        )
+                    }
                 }
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -2868,14 +3181,8 @@ private fun LocalPlaylistDetailsScreen(
                                 style = DsmusicTheme.typography.labelSmall,
                                 color = DsmusicTheme.colorScheme.primary
                             )
-                        } else {
-                            DsmusicTextButton(
-                                onClick = uploadLocalPlaylist,
-                                enabled = !isUploading
-                            ) {
-                                Text(if (isUploading) "Uploading…" else "Upload")
-                            }
                         }
+                        playlistOverflowMenu()
                         DsmusicIconButton(
                             onClick = {
                                 viewModel.deleteLocalPlaylist(playlist.id)
@@ -2888,6 +3195,10 @@ private fun LocalPlaylistDetailsScreen(
                                 tint = DsmusicTheme.colorScheme.error
                             )
                         }
+                    }
+                    playlistSearchBar()
+                    if (isSelectingPlaylistSongs) {
+                        selectionControls(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
                     }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -2904,15 +3215,15 @@ private fun LocalPlaylistDetailsScreen(
                                     .padding(horizontal = 24.dp, vertical = 12.dp),
                                 showTitle = false
                             ) {
-                                if (songs.isNotEmpty()) {
+                                if (filteredPlaylistSongs.isNotEmpty()) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
                                         DsmusicButton(
                                             onClick = {
-                                                viewModel.setSongList(songs)
-                                                viewModel.playSong(songs.first())
+                                                viewModel.setSongList(filteredPlaylistSongs)
+                                                viewModel.playSong(filteredPlaylistSongs.first())
                                                 onDismiss()
                                             },
                                             modifier = Modifier.weight(1f)
@@ -2923,7 +3234,7 @@ private fun LocalPlaylistDetailsScreen(
                                         }
                                         DsmusicOutlinedButton(
                                             onClick = {
-                                                val shuffled = songs.shuffled()
+                                                val shuffled = filteredPlaylistSongs.shuffled()
                                                 viewModel.setSongList(shuffled)
                                                 viewModel.playSong(shuffled.first())
                                                 onDismiss()
@@ -2947,23 +3258,33 @@ private fun LocalPlaylistDetailsScreen(
                                 color = DsmusicTheme.colorScheme.onSurface
                             )
                         }
-                        if (songs.isEmpty()) {
+                        if (filteredPlaylistSongs.isEmpty()) {
                             item(key = "playlist-empty") {
                                 Box(
                                     modifier = Modifier.fillMaxWidth().height(180.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("This playlist is empty", color = DsmusicTheme.colorScheme.onSurfaceVariant)
+                                    Text(if (songs.isEmpty()) "This playlist is empty" else "No matching songs", color = DsmusicTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         } else {
-                            itemsIndexed(items = songs, key = { index, song -> "playlist-song:" + song.id + ":" + index }) { _, song ->
+                            itemsIndexed(items = filteredPlaylistSongs, key = { index, song -> "playlist-song:" + song.id + ":" + index }) { _, song ->
                                 LocalPlaylistSongRow(
                                     playlist = playlist,
-                                    songs = songs,
+                                    songs = filteredPlaylistSongs,
                                     song = song,
                                     viewModel = viewModel,
-                                    onDismiss = onDismiss
+                                    onDismiss = onDismiss,
+                                    isSelecting = isSelectingPlaylistSongs,
+                                    isSelected = playlistSongKey(song) in selectedPlaylistSongKeys,
+                                    onToggleSelection = {
+                                        val key = playlistSongKey(song)
+                                        selectedPlaylistSongKeys = if (key in selectedPlaylistSongKeys) {
+                                            selectedPlaylistSongKeys - key
+                                        } else {
+                                            selectedPlaylistSongKeys + key
+                                        }
+                                    }
                                 )
                             }
                         }
@@ -2973,6 +3294,8 @@ private fun LocalPlaylistDetailsScreen(
         }
     }
 }
+
+
 
 @Composable
 private fun OnlinePlaylistCard(
@@ -4657,6 +4980,7 @@ private fun CacheSelectionControls(
     onRemoveSelected: () -> Unit,
     onClearSelection: () -> Unit,
     onDone: () -> Unit,
+    menuContentDescription: String = "Selected cache actions",
     modifier: Modifier = Modifier
 ) {
     if (!isSelecting) {
@@ -4683,7 +5007,7 @@ private fun CacheSelectionControls(
                 }
                 Box {
                     DsmusicIconButton(onClick = onOpenMenu) {
-                        Icon(Icons.Rounded.MoreVert, contentDescription = "Selected cache actions")
+                        Icon(Icons.Rounded.MoreVert, contentDescription = menuContentDescription)
                     }
                     DropdownMenu(
                         expanded = menuExpanded,
@@ -4700,6 +5024,8 @@ private fun CacheSelectionControls(
         }
     }
 }
+
+
 
 @OptIn(ExperimentalFoundationApi::class)
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
