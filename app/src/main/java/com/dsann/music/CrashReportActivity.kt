@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.content.res.Configuration
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
@@ -55,17 +56,23 @@ import com.dsann.music.ui.theme.Text
 
 class CrashReportActivity : AppCompatActivity() {
 
-    private var diagnosticReport: DiagnosticReport? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        val selectedTheme = getSharedPreferences("AppSettings", MODE_PRIVATE)
+            .getString("theme_mode", "system")
+        val isDarkTheme = when (selectedTheme) {
+            "dark" -> true
+            "light" -> false
+            else -> (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+        }
         WindowInsetsControllerCompat(window, window.decorView).apply {
-            isAppearanceLightStatusBars = false
-            isAppearanceLightNavigationBars = false
+            isAppearanceLightStatusBars = !isDarkTheme
+            isAppearanceLightNavigationBars = !isDarkTheme
         }
 
         val report = CrashDiagnostics.readPendingReport(this)
@@ -75,8 +82,6 @@ class CrashReportActivity : AppCompatActivity() {
                 timestamp = "Unknown time",
                 fullText = "The saved diagnostic report is missing or could not be read."
             )
-        diagnosticReport = report
-
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 returnToQuantune()
@@ -340,6 +345,11 @@ private fun CrashReportScreen(
             }
             Text(
                 text = "The report stays on this device. It is only sent when you choose Share.",
+                style = DsmusicTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant
+            )
+            Text(
+                text = "Captures uncaught app exceptions and main-thread stalls. Some native crashes and Android force-stops cannot be intercepted.",
                 style = DsmusicTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant
             )
