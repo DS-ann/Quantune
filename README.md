@@ -13,6 +13,7 @@
 <p align="center">
   <strong>Discover. Sync. Play.</strong><br>
   A music experience for discovery, shared listening, song recognition, synchronized lyrics and a player you can make your own.
+give a star if you like this project
 </p>
 
 <p align="center">
