@@ -896,7 +896,7 @@ import com.dsann.music.applyDsmusicNightMode
             "Explore" to Icons.Rounded.Explore,
             "Search" to Icons.Rounded.Search,
             "Library" to Icons.Rounded.LibraryMusic,
-            "Local" to Icons.Rounded.MusicNote,
+            "Local Music" to Icons.Rounded.MusicNote,
             "Settings" to Icons.Rounded.Settings
         )
         ImmersivePageLayout(
