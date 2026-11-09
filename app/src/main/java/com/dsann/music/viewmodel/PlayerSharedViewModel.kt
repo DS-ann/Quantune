@@ -1444,14 +1444,30 @@ class PlayerSharedViewModel @Inject constructor(
             Log.d(TAG, "Loading persisted playback state: ${lastSong.title} at pos $lastPos")
 
             withContext(Dispatchers.Main) {
-                if (lastQueue.isNotEmpty()) {
-                    _songList.value = ArrayList(lastQueue)
-                    _currentSongIndex.value = lastIndex
-                } else {
-                    _songList.value = listOf(lastSong)
-                    _currentSongIndex.value = 0
+                // The current song and queue index are persisted separately. Prefer the saved
+                // index only when it still points to this track; older snapshots can otherwise
+                // restore the row immediately before the song that was actually playing.
+                val restoredQueue = ArrayList(lastQueue)
+                val savedVideoId = lastSong.videoId?.takeIf { it.isNotBlank() }
+                val matchingIndices = restoredQueue.indices.filter { index ->
+                    val queuedSong = restoredQueue[index]
+                    val queuedVideoId = queuedSong.videoId?.takeIf { it.isNotBlank() }
+                    if (savedVideoId != null && queuedVideoId != null) {
+                        queuedVideoId == savedVideoId
+                    } else {
+                        queuedSong.id == lastSong.id
+                    }
                 }
+                val restoredIndex = matchingIndices.minByOrNull { kotlin.math.abs(it - lastIndex) }
+                    ?: run {
+                        // Keep the complete saved queue, but make sure the selected track is
+                        // present so the restored index and current song can never disagree.
+                        restoredQueue.add(lastSong)
+                        restoredQueue.lastIndex
+                    }
 
+                _songList.value = restoredQueue
+                _currentSongIndex.value = restoredIndex
                 _currentSong.value = lastSong
                 _duration.value = lastSong.duration.toInt()
                 _currentPosition.value = lastPos.toInt()
@@ -1461,6 +1477,8 @@ class PlayerSharedViewModel @Inject constructor(
                     lastSong.contentUri = "innertube://${lastSong.videoId}".toUri()
                 }
                 _songUri.value = lastSong.contentUri
+
+                Log.d(TAG, "Restored queue index $restoredIndex for ${lastSong.title}")
             }
         }
     }
@@ -2377,17 +2395,36 @@ class PlayerSharedViewModel @Inject constructor(
     }
 
     fun addToQueueNext(song: SongItem) {
-        val newList = ArrayList(_songList.value)
-        newList.removeAll { it.id == song.id }
-        
-        val currentIdx = _currentSongIndex.value
-        val insertIndex = (if (currentIdx < 0) -1 else currentIdx) + 1
-        newList.add(insertIndex.coerceAtMost(newList.size), song)
-        
+        val currentQueue = _songList.value
+        val activeSong = _currentSong.value
+        val activeIndex = _currentSongIndex.value.takeIf { index ->
+            index in currentQueue.indices &&
+                (activeSong == null || currentQueue[index].id == activeSong.id)
+        } ?: activeSong?.let { active ->
+            currentQueue.indexOfFirst { it.id == active.id }
+        } ?: -1
+
+        // Remove existing copies of the requested track before inserting it next. If the
+        // requested track is currently playing, retain that exact queue occurrence.
+        // Recalculate the active index while building the new list: removing a copy that
+        // appeared before the current item shifts its index and caused "next of next".
+        val newList = ArrayList<SongItem>(currentQueue.size + 1)
+        var newCurrentIndex = -1
+        currentQueue.forEachIndexed { index, queuedSong ->
+            if (queuedSong.id != song.id || index == activeIndex) {
+                if (index == activeIndex) newCurrentIndex = newList.size
+                newList.add(queuedSong)
+            }
+        }
+
+        val insertIndex = (newCurrentIndex + 1).coerceIn(0, newList.size)
+        newList.add(insertIndex, song)
+
         _songList.value = newList
-        _currentSongIndex.value = findSongIndexById(_currentSong.value?.id ?: -1)
+        _currentSongIndex.value = newCurrentIndex
         if (_repeatMode.value == REPEAT_ONCE) resetRepeatOnceCycleFromCurrent()
         audioService?.refreshNativeQueue()
+        savePlaybackState()
     }
 
     // ========== UTILS ==========
