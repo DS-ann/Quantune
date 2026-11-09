@@ -655,6 +655,11 @@ class MainActivity : AppCompatActivity() {
                                             viewModel = exploreViewModel,
                                             playerSharedViewModel = playerViewModel,
                                             bottomContentPadding = exploreBottomContentPadding,
+                                            onNavigateToSignIn = {
+                                                if (currentNavController.currentDestination?.route != "google_signin") {
+                                                    currentNavController.navigate("google_signin")
+                                                }
+                                            },
                                             onNavigateToListenTogether = {
                                                 showListenTogetherSubpage = true
                                             },

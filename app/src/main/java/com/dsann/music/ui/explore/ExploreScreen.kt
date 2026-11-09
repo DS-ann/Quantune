@@ -197,6 +197,7 @@ fun ExploreScreen(
     viewModel: ExploreViewModel,
     playerSharedViewModel: PlayerSharedViewModel,
     onNavigateToLibrary: () -> Unit = {},
+    onNavigateToSignIn: () -> Unit = {},
     onNavigateToListenTogether: () -> Unit = {},
     showListenTogetherSubpage: Boolean = false,
     onCloseListenTogetherSubpage: () -> Unit = {},
@@ -868,7 +869,8 @@ fun ExploreScreen(
                                                 )
                                             },
                                             onNavigateToSignIn = {
-                                                mainActivity?.navigateToGoogleSignIn()
+                                                isAccountVisible = false
+                                                onNavigateToSignIn()
                                             }
                                         )
                                     }
