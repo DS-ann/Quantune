@@ -157,38 +157,33 @@ jobs:
             printf '# Quantune %s\n\n' "$RELEASE_TAG"
             printf '> Your music. Your flow. Your Quantune.\n\n'
             printf 'Quantune brings music discovery, playback, synchronized lyrics, playlists and offline listening tools together in one Android app.\n\n'
-            printf '## Changes since the previous release\n'
+            printf '## ✨ What’s New\n\n'
             if [ -n "$RELEASE_NOTES" ]; then
-              # Explicit release highlights take precedence over automatic generation.
+              # Manually supplied highlights remain available as an override.
               printf '%s\n\n' "$RELEASE_NOTES"
             else
-              CURRENT_COMMIT="$(git rev-parse HEAD)"
-              PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${CURRENT_COMMIT}^" 2>/dev/null || true)"
-              FEATURE_COUNT=0
+              cat <<'NOTES'
+### 🎧 Listen Together
+Start or join a shared listening session and keep playback in sync with friends.
 
-              if [ -n "$PREVIOUS_TAG" ]; then
-                while IFS=$'\t' read -r COMMIT_SHA SUBJECT; do
-                  [ -n "$COMMIT_SHA" ] || continue
+### 🎙️ Song Recognition
+Identify music around you with the built-in Song Recognizer, available as its own destination in the app.
 
-                  # Ignore branding/version/build/CI housekeeping rather than feature work.
-                  if printf '%s' "$SUBJECT" | grep -Eiq '(app[[:space:]_-]*name|branding|rename.*(app|quantune|d\.s[[:space:]_-]*music)|change.*app.*name|update.*app.*name|gradle|build\.gradle|version[[:space:]_-]*(bump|change)|prepare.*release|release[[:space:]_-]*workflow|ci[[:space:]_-]*workflow)'; then
-                    continue
-                  fi
+### 🌍 AI Lyrics Translation
+Translate lyrics with configurable AI service and model settings, bringing translated meaning closer to the music.
 
-                  # A release highlight must correspond to app source or resource changes.
-                  CHANGED_PATHS="$(git diff-tree --no-commit-id --name-only -r "$COMMIT_SHA")"
-                  if ! printf '%s\n' "$CHANGED_PATHS" | grep -q '^app/src/main/'; then
-                    continue
-                  fi
+### 🎤 A Richer Lyrics Experience
+Enjoy improvements across synced and karaoke lyrics, including provider handling, word highlighting, timing, alignment and translation behaviour.
 
-                  printf -- '- %s\n' "$SUBJECT"
-                  FEATURE_COUNT=$((FEATURE_COUNT + 1))
-                done < <(git log --reverse --no-merges --format='%H%x09%s' "$PREVIOUS_TAG..$CURRENT_COMMIT")
-              fi
+### 🎛️ A More Refined Player
+A smoother, more consistent playback experience with improved artwork updates, cover animations, queue interactions and player presentation.
 
-              if [ "$FEATURE_COUNT" -eq 0 ]; then
-                printf '%s\n' '- No user-facing feature changes were detected for this release.'
-              fi
+### 📥 Better Offline Listening
+More complete handling for cached and downloaded tracks, local music, and audio-format choices.
+
+### 🧭 Smoother Navigation & Onboarding
+Clearer navigation previews, a more polished onboarding flow and refinements to moving between the app’s main sections.
+NOTES
               printf '\n'
             fi
             printf '## Choose your APK\n\n'
