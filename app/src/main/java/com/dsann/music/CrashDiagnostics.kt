@@ -126,11 +126,13 @@ internal object CrashDiagnostics {
 
     private fun startAnrWatchdog(application: Application) {
         val mainHandler = Handler(Looper.getMainLooper())
-        val lastMainResponse = java.util.concurrent.atomic.AtomicLong(SystemClock.elapsedRealtime())
+        // Handler.postDelayed is based on uptimeMillis. Use the same clock so deep sleep
+        // does not count toward the ANR timeout or create a false report on wake.
+        val lastMainResponse = java.util.concurrent.atomic.AtomicLong(SystemClock.uptimeMillis())
 
         val heartbeat = object : Runnable {
             override fun run() {
-                lastMainResponse.set(SystemClock.elapsedRealtime())
+                lastMainResponse.set(SystemClock.uptimeMillis())
                 mainHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
             }
         }
@@ -147,7 +149,7 @@ internal object CrashDiagnostics {
 
                 if (hasPendingReport(application)) continue
 
-                val now = SystemClock.elapsedRealtime()
+                val now = SystemClock.uptimeMillis()
                 val blockedForMs = now - lastMainResponse.get()
                 if (blockedForMs < ANR_TIMEOUT_MS) continue
                 if (!anrAlreadyRecorded.compareAndSet(false, true)) continue
