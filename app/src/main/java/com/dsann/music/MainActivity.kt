@@ -655,11 +655,6 @@ class MainActivity : AppCompatActivity() {
                                             viewModel = exploreViewModel,
                                             playerSharedViewModel = playerViewModel,
                                             bottomContentPadding = exploreBottomContentPadding,
-                                            onNavigateToSignIn = {
-                                                if (currentNavController.currentDestination?.route != "google_signin") {
-                                                    currentNavController.navigate("google_signin")
-                                                }
-                                            },
                                             onNavigateToListenTogether = {
                                                 showListenTogetherSubpage = true
                                             },
@@ -682,11 +677,6 @@ onNavigateToLibrary = {
                                             viewModel = searchViewModel,
                                             playerSharedViewModel = playerViewModel,
                                             bottomContentPadding = exploreBottomContentPadding,
-                                            onNavigateToSignIn = {
-                                                if (currentNavController.currentDestination?.route != "google_signin") {
-                                                    currentNavController.navigate("google_signin")
-                                                }
-                                            },
                                             isSearchDestination = true,
                                             showSongRecognizerSubpage = showSongRecognizerSubpage,
                                             onCloseSongRecognizerSubpage = { showSongRecognizerSubpage = false },

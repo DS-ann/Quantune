@@ -6,6 +6,10 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -31,7 +35,8 @@ fun GoogleSignInScreen(
     onNavigateUp: () -> Unit,
     modifier: Modifier = Modifier,
     isOnboarding: Boolean = false,
-    requireExplicitContinue: Boolean = false
+    requireExplicitContinue: Boolean = false,
+    isDialog: Boolean = false
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -56,7 +61,9 @@ fun GoogleSignInScreen(
         }
     }
 
+    val signInContent: @Composable () -> Unit = {
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = { Text("Sign In with Google", fontWeight = FontWeight.Bold) },
@@ -196,5 +203,25 @@ fun GoogleSignInScreen(
                 }
             }
         }
+    }
+    }
+
+    if (isDialog) {
+        Dialog(
+            onDismissRequest = onNavigateUp,
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.96f)
+                    .fillMaxHeight(0.90f)
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(DsmusicTheme.colorScheme.background)
+            ) {
+                signInContent()
+            }
+        }
+    } else {
+        signInContent()
     }
 }

@@ -197,7 +197,6 @@ fun ExploreScreen(
     viewModel: ExploreViewModel,
     playerSharedViewModel: PlayerSharedViewModel,
     onNavigateToLibrary: () -> Unit = {},
-    onNavigateToSignIn: () -> Unit = {},
     onNavigateToListenTogether: () -> Unit = {},
     showListenTogetherSubpage: Boolean = false,
     onCloseListenTogetherSubpage: () -> Unit = {},
@@ -491,6 +490,7 @@ fun ExploreScreen(
     }
 
     var isAccountVisible by rememberSaveable { mutableStateOf(false) }
+    var showGoogleSignInDialog by rememberSaveable { mutableStateOf(false) }
     var showExploreCustomizer by rememberSaveable { mutableStateOf(false) }
     var hiddenExploreSections by remember {
         mutableStateOf(prefs.getStringSet("hidden_home_sections", emptySet())?.toSet().orEmpty())
@@ -870,7 +870,7 @@ fun ExploreScreen(
                                             },
                                             onNavigateToSignIn = {
                                                 isAccountVisible = false
-                                                onNavigateToSignIn()
+                                                showGoogleSignInDialog = true
                                             }
                                         )
                                     }
@@ -2377,6 +2377,24 @@ fun ExploreScreen(
                     showCreateLocalPlaylistDialog = false
                     showLocalPlaylistPicker = true
                 }
+            )
+        }
+
+        if (showGoogleSignInDialog) {
+            GoogleSignInScreen(
+                accountViewModel = accountVM,
+                requireExplicitContinue = true,
+                isDialog = true,
+                onSignInSuccess = {
+                    mainActivity?.let { activity ->
+                        val cookies = com.dsann.music.data.innertube.AccountManager.getAuthCookie(activity)
+                        androidx.lifecycle.ViewModelProvider(activity)[
+                            com.dsann.music.ui.SettingsViewModel::class.java
+                        ].setYtCookies(cookies)
+                    }
+                    showGoogleSignInDialog = false
+                },
+                onNavigateUp = { showGoogleSignInDialog = false }
             )
         }
 
