@@ -17,8 +17,7 @@ permissions:
 
 concurrency:
   group: quantune-android6-build-${{ github.ref }}
-  # Keep an active ABI build running; a newer push may replace only a pending run.
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
