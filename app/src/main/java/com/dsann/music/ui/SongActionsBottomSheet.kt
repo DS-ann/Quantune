@@ -1109,6 +1109,7 @@ fun PlaylistDestinationPickerDialog(
     onYouTubeMusicSelected: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val localAppName = LocalContext.current.getString(R.string.app_name)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1134,7 +1135,7 @@ fun PlaylistDestinationPickerDialog(
                         Icon(Icons.Rounded.PlaylistPlay, contentDescription = null, tint = DsmusicTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("App playlists", fontWeight = FontWeight.SemiBold, style = DsmusicTheme.typography.bodyLarge)
+                            Text("$localAppName playlists", fontWeight = FontWeight.SemiBold, style = DsmusicTheme.typography.bodyLarge)
                             Text("Save in your local library. No YouTube sign-in needed.", style = DsmusicTheme.typography.bodySmall, color = DsmusicTheme.colorScheme.onSurfaceVariant)
                         }
                     }

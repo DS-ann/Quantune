@@ -1454,7 +1454,7 @@ itemsIndexed(
                     playerSharedViewModel = viewModel,
                     exploreViewModel = exploreViewModel,
                     onPlaylistAddClick = { selectedSong ->
-                        songToAddPlaylist = selectedSong
+                        songToAddPlaylist = selectedDownloadedSongForMenu ?: selectedSong
                         showAddToPlaylistDialog = true
                     },
                     onViewCreditsClick = { creditSong -> showCreditsForSong = creditSong },
