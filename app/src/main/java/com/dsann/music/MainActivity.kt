@@ -880,6 +880,7 @@ onNavigateToLibrary = {
                                     val accountViewModel: com.dsann.music.viewmodel.AccountViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                                     GoogleSignInScreen(
                                         accountViewModel = accountViewModel,
+                                        requireExplicitContinue = true,
                                         onSignInSuccess = {
                                             val returnRoute = currentNavController.previousBackStackEntry?.destination?.route
                                             if (returnRoute == "settings") {
@@ -889,15 +890,29 @@ onNavigateToLibrary = {
                                                         ViewModelProvider(this@MainActivity)[SettingsViewModel::class.java]
                                                             .setYtCookies(cookies)
                                                     }
-                                                currentNavController.popBackStack()
-                                            } else {
+                                            }
+                                            val returnedToPreviousTab = currentNavController.popBackStack()
+                                            if (!returnedToPreviousTab) {
                                                 currentNavController.navigate("explore") {
-                                                    popUpTo("explore") { inclusive = true }
+                                                    popUpTo(currentNavController.graph.findStartDestination().id) {
+                                                        inclusive = true
+                                                    }
+                                                    launchSingleTop = true
                                                 }
                                             }
+                                            showBottomNavWithAnimation()
                                         },
                                         onNavigateUp = {
-                                            currentNavController.navigateUp()
+                                            val returnedToPreviousTab = currentNavController.popBackStack()
+                                            if (!returnedToPreviousTab) {
+                                                currentNavController.navigate("explore") {
+                                                    popUpTo(currentNavController.graph.findStartDestination().id) {
+                                                        inclusive = true
+                                                    }
+                                                    launchSingleTop = true
+                                                }
+                                            }
+                                            showBottomNavWithAnimation()
                                         }
                                     )
                                 }
