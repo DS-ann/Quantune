@@ -163,27 +163,6 @@ jobs:
               printf '%s\n\n' "$RELEASE_NOTES"
             else
               printf '%s\n' \
-                '### 🎧 Listen Together' \
-                'Start or join a shared listening session and keep playback in sync with friends.' \
-                '' \
-                '### 🎙️ Song Recognition' \
-                'Identify music around you with the built-in Song Recognizer, available as its own destination in the app.' \
-                '' \
-                '### 🌍 AI Lyrics Translation' \
-                'Translate lyrics with configurable AI service and model settings, bringing translated meaning closer to the music.' \
-                '' \
-                '### 🎤 A Richer Lyrics Experience' \
-                'Enjoy improvements across synced and karaoke lyrics, including provider handling, word highlighting, timing, alignment and translation behaviour.' \
-                '' \
-                '### 🎛️ A More Refined Player' \
-                'A smoother, more consistent playback experience with improved artwork updates, cover animations, queue interactions and player presentation.' \
-                '' \
-                '### 📥 Better Offline Listening' \
-                'More complete handling for cached and downloaded tracks, local music, and audio-format choices.' \
-                '' \
-                '### 🧭 Smoother Navigation & Onboarding' \
-                'Clearer navigation previews, a more polished onboarding flow and refinements to moving between the app’s main sections.' \
-                '' \
                 '### 🐞 Bug Fixes' \
                 'Fixes for reported issues across the app, alongside general stability and reliability improvements.' \
                 '' \
