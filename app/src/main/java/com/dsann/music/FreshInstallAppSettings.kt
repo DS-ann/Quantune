@@ -53,7 +53,6 @@ internal object FreshInstallAppSettings {
         "ui_font_family" to "Serif",
         "theme_mode" to "system",
         "session_buttons" to "like,repeat",
-        "dynamic_nav_style" to false,
         "player_button_style" to "Pill",
         "player_animation_frame_rate" to 20,
         "player_background_style" to "Gradient",

@@ -369,15 +369,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         setNavLabelsMode(if (hide) "Never" else "Always")
     }
 
-    // ── Dynamic Nav Style ──────────────────────────────────────────────────
-    private val _dynamicNavStyle = MutableStateFlow(prefs.getBoolean("dynamic_nav_style", false))
-    val dynamicNavStyle: StateFlow<Boolean> = _dynamicNavStyle.asStateFlow()
-
-    fun setDynamicNavStyle(enabled: Boolean) {
-        _dynamicNavStyle.value = enabled
-        prefs.edit {putBoolean("dynamic_nav_style", enabled)}
-    }
-
     // ── Navigation dock customization ──────────────────────────────────────
     private val _navBarStyle = MutableStateFlow(
         prefs.getString("nav_bar_style", "Floating")?.takeIf {
@@ -858,7 +849,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         "lyrics_font_family", "lyrics_color_style", "show_synced_lyrics_in_player",
         "ui_density", "ui_font_family", "ui_font_scale", "tapered_song_dividers",
         "ui_font_weight", "ui_letter_spacing", "nav_label_mode", "hide_nav_labels",
-        "dynamic_nav_style", "nav_bar_style", "nav_bar_size"
+        "nav_bar_style", "nav_bar_size"
     )
 
     private fun readSavedAppearanceLooks(): List<String> = runCatching {
@@ -951,7 +942,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         setUiFontWeight(look.optString("ui_font_weight", _uiFontWeight.value))
         setUiLetterSpacing(look.optString("ui_letter_spacing", _uiLetterSpacing.value))
         setNavLabelsMode(look.optString("nav_label_mode", _navLabelsMode.value))
-        setDynamicNavStyle(look.optBoolean("dynamic_nav_style", _dynamicNavStyle.value))
         setNavBarStyle(look.optString("nav_bar_style", _navBarStyle.value))
         setNavBarSize(look.optString("nav_bar_size", _navBarSize.value))
     }
@@ -1290,7 +1280,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             "nav_label_mode",
             if (_hideNavLabels.value) "Never" else "Always"
         )?.takeIf { it in listOf("Always", "Selected", "Never") } ?: "Always"
-        _dynamicNavStyle.value = prefs.getBoolean("dynamic_nav_style", false)
         _navBarStyle.value = prefs.getString("nav_bar_style", "Floating")
             ?.takeIf { it in listOf("Floating", "Docked", "Minimal") } ?: "Floating"
         _navBarSize.value = prefs.getString("nav_bar_size", "Standard")
@@ -1792,7 +1781,6 @@ fun SettingsScreenContent(
     val uiLetterSpacing by viewModel.uiLetterSpacing.collectAsStateWithLifecycle()
     val autoplayEnabled by viewModel.autoplayEnabled.collectAsStateWithLifecycle()
     val navLabelsMode by viewModel.navLabelsMode.collectAsStateWithLifecycle()
-    val dynamicNavStyle by viewModel.dynamicNavStyle.collectAsStateWithLifecycle()
     val navBarStyle by viewModel.navBarStyle.collectAsStateWithLifecycle()
     val navBarSize by viewModel.navBarSize.collectAsStateWithLifecycle()
     val crossfadeEnabled by viewModel.crossfadeEnabled.collectAsStateWithLifecycle()
@@ -2097,8 +2085,6 @@ fun SettingsScreenContent(
                 onUiLetterSpacingChange = { viewModel.setUiLetterSpacing(it) },
                 navLabelsMode = navLabelsMode,
                 onNavLabelsModeChange = { viewModel.setNavLabelsMode(it) },
-                dynamicNavStyle = dynamicNavStyle,
-                onDynamicNavStyleChange = { viewModel.setDynamicNavStyle(it) },
                 navBarStyle = navBarStyle,
                 onNavBarStyleChange = { viewModel.setNavBarStyle(it) },
                 navBarSize = navBarSize,
@@ -3384,8 +3370,6 @@ private fun AppearanceScreen(
     onUiLetterSpacingChange: (String) -> Unit,
     navLabelsMode: String,
     onNavLabelsModeChange: (String) -> Unit,
-    dynamicNavStyle: Boolean,
-    onDynamicNavStyleChange: (Boolean) -> Unit,
     navBarStyle: String,
     onNavBarStyleChange: (String) -> Unit,
     navBarSize: String,
@@ -3925,7 +3909,6 @@ SettingsGroupCard(listOf(
                         onSelected = onNavBarSizeChange
                     )
                 }
-                add { DynamicNavStyleRow(dynamicNavStyle, onDynamicNavStyleChange) }
             })
             }
 
@@ -4448,33 +4431,6 @@ private fun DsmusicSwitch(
                 .background(thumbColor)
         )
     }
-}
-
-@Composable
-private fun DynamicNavStyleRow(checked: Boolean, onToggle: (Boolean) -> Unit) {
-    DsmusicListItem(
-        onClick = { onToggle(!checked) },
-        content = {
-            Column {
-                Text(
-                    text = "Compact navigation bar",
-                    style = DsmusicTheme.typography.bodyLarge
-                )
-                Text(
-                    text = "Use a shorter navigation bar with larger, bolder icons.",
-                    style = DsmusicTheme.typography.bodyMedium,
-                    color = DsmusicTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        trailingContent = {
-            DsmusicSwitch(
-                checked = checked,
-                onCheckedChange = onToggle
-            )
-        },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-    )
 }
 
 @Composable

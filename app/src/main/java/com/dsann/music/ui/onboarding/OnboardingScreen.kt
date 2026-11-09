@@ -41,6 +41,7 @@ package com.dsann.music.ui.onboarding
     import androidx.compose.foundation.layout.navigationBarsPadding
     import androidx.compose.foundation.layout.padding
     import androidx.compose.foundation.layout.size
+    import androidx.compose.foundation.layout.statusBarsPadding
     import androidx.compose.foundation.layout.width
     import androidx.compose.foundation.pager.HorizontalPager
     import androidx.compose.foundation.pager.PagerState
@@ -57,7 +58,7 @@ package com.dsann.music.ui.onboarding
     import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.GraphicEq
     import androidx.compose.material.icons.rounded.Headphones
-    import androidx.compose.material.icons.rounded.Home
+    import androidx.compose.material.icons.rounded.Explore
     import androidx.compose.material.icons.rounded.LibraryMusic
     import androidx.compose.material.icons.rounded.LightMode
     import androidx.compose.material.icons.rounded.Notifications
@@ -73,8 +74,6 @@ import androidx.compose.material.icons.rounded.GraphicEq
     import com.dsann.music.ui.theme.Icon
     import com.dsann.music.ui.theme.DsmusicTheme
 import com.dsann.music.ui.player.rememberAppAnimationFrameTimeNanos
-    import com.dsann.music.ui.theme.NavigationBar
-    import com.dsann.music.ui.theme.NavigationBarItem
     import com.dsann.music.ui.theme.Scaffold
     import com.dsann.music.ui.theme.Surface
     import com.dsann.music.ui.theme.Switch
@@ -133,7 +132,6 @@ import com.dsann.music.applyDsmusicNightMode
         
         var themeMode by rememberSaveable { mutableStateOf(prefs.getString("theme_mode", "system") ?: "system") }
         var hideNavLabels by rememberSaveable { mutableStateOf(prefs.getBoolean("hide_nav_labels", false)) }
-        var dynamicNavStyle by rememberSaveable { mutableStateOf(prefs.getBoolean("dynamic_nav_style", false)) }
     
         val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
         val notifPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.POST_NOTIFICATIONS else null
@@ -183,7 +181,6 @@ import com.dsann.music.applyDsmusicNightMode
                             putBoolean("has_seen_onboarding_1_8", true)
                                 .putString("theme_mode", themeMode)
                                 .putBoolean("hide_nav_labels", hideNavLabels)
-                                .putBoolean("dynamic_nav_style", dynamicNavStyle)
                         }
                         onComplete()
                     }
@@ -195,6 +192,7 @@ import com.dsann.music.applyDsmusicNightMode
                 userScrollEnabled = false,
                 modifier = Modifier
                     .fillMaxSize()
+                    .statusBarsPadding()
                     .padding(paddingValues)
             ) { page ->
                 val pageOffsetProvider = {
@@ -237,14 +235,9 @@ import com.dsann.music.applyDsmusicNightMode
                         6 -> NavigationStylePage(
                             pageOffsetProvider = pageOffsetProvider,
                             hideNavLabels = hideNavLabels,
-                            dynamicNavStyle = dynamicNavStyle,
                             onHideNavLabelsChanged = {
                                 hideNavLabels = it
                                 prefs.edit { putBoolean("hide_nav_labels", it) }
-                            },
-                            onDynamicNavStyleChanged = {
-                                dynamicNavStyle = it
-                                prefs.edit { putBoolean("dynamic_nav_style", it) }
                             }
                         )
                         7 -> FinishPage(
@@ -319,7 +312,7 @@ import com.dsann.music.applyDsmusicNightMode
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(heroHeight)
-                    .padding(horizontal = 18.dp, vertical = 10.dp)
+                    .padding(horizontal = horizontalPadding, vertical = 10.dp)
             )
 
             Column(
@@ -897,10 +890,15 @@ import com.dsann.music.applyDsmusicNightMode
     fun NavigationStylePage(
         pageOffsetProvider: () -> Float,
         hideNavLabels: Boolean,
-        dynamicNavStyle: Boolean,
-        onHideNavLabelsChanged: (Boolean) -> Unit,
-        onDynamicNavStyleChanged: (Boolean) -> Unit
+        onHideNavLabelsChanged: (Boolean) -> Unit
     ) {
+        val navigationItems = listOf(
+            "Explore" to Icons.Rounded.Explore,
+            "Search" to Icons.Rounded.Search,
+            "Library" to Icons.Rounded.LibraryMusic,
+            "Local" to Icons.Rounded.MusicNote,
+            "Settings" to Icons.Rounded.Settings
+        )
         ImmersivePageLayout(
             pageOffsetProvider = pageOffsetProvider,
             heroIcon = Icons.Rounded.Tune,
@@ -915,15 +913,15 @@ import com.dsann.music.applyDsmusicNightMode
                 lineHeight = 42.sp,
                 letterSpacing = (-0.5).sp,
                 color = DsmusicTheme.colorScheme.onBackground,
-                modifier = Modifier.graphicsLayer { 
+                modifier = Modifier.graphicsLayer {
                     val offset = pageOffsetProvider()
                     translationY = offset * -30f
                     alpha = 1f - kotlin.math.abs(offset * 1.5f)
                 }
             )
-    
-            Spacer(modifier = Modifier.height(48.dp))
-            
+
+            Spacer(modifier = Modifier.height(28.dp))
+
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -936,27 +934,55 @@ import com.dsann.music.applyDsmusicNightMode
                 shape = RoundedCornerShape(24.dp),
                 color = DsmusicTheme.colorScheme.surfaceContainer
             ) {
-                NavigationBar(
-                    modifier = Modifier.fillMaxWidth().height(if (dynamicNavStyle) 64.dp else 80.dp),
-                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                    tonalElevation = 0.dp,
-                    windowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(82.dp)
+                        .padding(horizontal = 6.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(0.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    listOf("Home" to Icons.Rounded.Home, "Search" to Icons.Rounded.Search, "Library" to Icons.Rounded.LibraryMusic).forEachIndexed { index, item ->
-                        val labelComposable: (@Composable () -> Unit)? = if (hideNavLabels) null else {
-                            @Composable { Text(item.first) }
+                    navigationItems.forEachIndexed { index, item ->
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (index == 0) DsmusicTheme.colorScheme.primaryContainer
+                                        else androidx.compose.ui.graphics.Color.Transparent
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = item.second,
+                                    contentDescription = item.first,
+                                    tint = if (index == 0) DsmusicTheme.colorScheme.onPrimaryContainer
+                                        else DsmusicTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+                            if (!hideNavLabels) {
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = item.first,
+                                    style = DsmusicTheme.typography.labelSmall,
+                                    fontWeight = if (index == 0) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 9.sp,
+                                    color = if (index == 0) DsmusicTheme.colorScheme.onSurface
+                                        else DsmusicTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
                         }
-                        NavigationBarItem(
-                            selected = index == 0,
-                            onClick = {},
-                            icon = { Icon(item.second, contentDescription = null) },
-                            label = labelComposable,
-                            alwaysShowLabel = !hideNavLabels
-                        )
                     }
                 }
             }
-    
+
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -994,50 +1020,10 @@ import com.dsann.music.applyDsmusicNightMode
                     Switch(checked = hideNavLabels, onCheckedChange = onHideNavLabelsChanged)
                 }
             }
-    
-            Spacer(modifier = Modifier.height(16.dp))
-    
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 72.dp)
-                    .graphicsLayer {
-                        val offset = pageOffsetProvider()
-                        translationY = offset * 100f
-                        alpha = 1f - kotlin.math.abs(offset * 1.5f)
-                    },
-                shape = RoundedCornerShape(24.dp),
-                color = DsmusicTheme.colorScheme.surfaceContainerHigh
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Dynamic Navbar",
-                            style = DsmusicTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = DsmusicTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Compact height with bold, elevated icons.",
-                            style = DsmusicTheme.typography.bodyMedium,
-                            color = DsmusicTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Switch(checked = dynamicNavStyle, onCheckedChange = onDynamicNavStyleChanged)
-                }
-            }
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
-    
+
     @Composable
     fun PermissionsPage(
         pageOffsetProvider: () -> Float,
@@ -1533,7 +1519,7 @@ import com.dsann.music.applyDsmusicNightMode
                             shape = CircleShape,
                             color = colors.surfaceContainerHigh
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Rounded.ArrowBack,
                                     contentDescription = "Previous step",

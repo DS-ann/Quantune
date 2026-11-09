@@ -235,7 +235,6 @@ class MainActivity : AppCompatActivity() {
                 val navigationSettings: SettingsViewModel =
                     androidx.lifecycle.viewmodel.compose.viewModel(viewModelStoreOwner = this@MainActivity)
                 val navLabelsMode by navigationSettings.navLabelsMode.collectAsStateWithLifecycle()
-                val dynamicNavStyle by navigationSettings.dynamicNavStyle.collectAsStateWithLifecycle()
                 val navBarStyle by navigationSettings.navBarStyle.collectAsStateWithLifecycle()
                 val navBarSize by navigationSettings.navBarSize.collectAsStateWithLifecycle()
                 val pageTransitionSpeed by navigationSettings.pageTransitionSpeed.collectAsStateWithLifecycle()
@@ -310,7 +309,7 @@ class MainActivity : AppCompatActivity() {
                             "Tall" -> 76.dp
                             else -> 68.dp
                         }
-                        val bottomNavHeight = if (dynamicNavStyle) 64.dp else configuredNavHeight
+                        val bottomNavHeight = configuredNavHeight
                         val bottomNavHeightPx = with(density) { bottomNavHeight.toPx() }
                         val totalSlideDistPx = bottomNavHeightPx + navigationBarsHeightPx
 
@@ -339,7 +338,7 @@ class MainActivity : AppCompatActivity() {
                             else -> 26.dp
                         }
                         val navIconSize by animateDpAsState(
-                            if (dynamicNavStyle) 30.dp else configuredIconSize,
+                            configuredIconSize,
                             animationSpec = if (isLegacyAndroid6) snap() else spring(stiffness = Spring.StiffnessMediumLow),
                             label = "navIconSize"
                         )
@@ -547,7 +546,7 @@ class MainActivity : AppCompatActivity() {
                     val bottomDockInset = when {
                         useNavigationRail -> systemBottomInset
                         currentRoute in rootTabRoutes ->
-                            (if (dynamicNavStyle) 64.dp else configuredNavHeight) + systemBottomInset
+                            configuredNavHeight + systemBottomInset
                         else -> 0.dp
                     }
                     val finalPadding = bottomDockInset
@@ -839,7 +838,7 @@ class MainActivity : AppCompatActivity() {
                                 else -> 26.dp
                             }
                             val railIconSize by animateDpAsState(
-                                if (dynamicNavStyle) 32.dp else configuredRailIconSize,
+                                configuredRailIconSize,
                                 animationSpec = if (isLegacyAndroid6) snap() else spring(stiffness = Spring.StiffnessMediumLow),
                                 label = "RailIconSize"
                             )
