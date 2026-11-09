@@ -93,6 +93,8 @@ class DsmusicApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // Capture fatal exceptions and main-thread ANRs before normal app startup continues.
+        CrashDiagnostics.install(this)
         // Seed the requested profile before any Settings or player ViewModel reads preferences.
         FreshInstallAppSettings.apply(this)
         // Defer stream extractor and cache maintenance initialization until after first draw.
