@@ -720,7 +720,7 @@ onNavigateToLibrary = {
                                             }
                                         )
                                                 "local_music" -> LocalMusicScreen(viewModel = playerViewModel)
-"settings" -> SettingsScreenContent(onNavigateToSignIn = { navigateToGoogleSignIn() })
+"settings" -> SettingsScreenContent()
                                             }
                                         }
                                     }

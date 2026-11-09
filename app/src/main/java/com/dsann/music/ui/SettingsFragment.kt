@@ -156,6 +156,9 @@ import com.dsann.music.model.PlayerGestureAction
 import com.dsann.music.model.PlayerGestureSettings
 import com.dsann.music.R
 import com.dsann.music.ui.player.SleepTimerBottomSheet
+import com.dsann.music.ui.explore.GoogleSignInScreen
+import com.dsann.music.data.innertube.AccountManager
+import com.dsann.music.viewmodel.AccountViewModel
 import com.dsann.music.viewmodel.PlayerSharedViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -272,11 +275,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setYtCookies(cookies: String?) {
         _ytCookies.value = cookies
         if (cookies != null) {
-            prefs.edit {putString("yt_cookies", cookies)}
-            com.dsann.music.data.innertube.InnerTubeClient.cookie = cookies
+            com.dsann.music.data.innertube.AccountManager.saveLoginState(
+                getApplication(),
+                cookies
+            )
+            com.dsann.music.data.innertube.YouTubeMusic.setCookie(cookies)
         } else {
-            prefs.edit {remove("yt_cookies")}
-            com.dsann.music.data.innertube.InnerTubeClient.cookie = null
+            // Use the shared logout path so app credentials, runtime auth and WebView
+            // cookies/storage are all cleared together.
+            com.dsann.music.data.innertube.AccountManager.logout(getApplication())
+            com.dsann.music.data.innertube.YouTubeMusic.setCookie(null)
         }
     }
 
@@ -1741,8 +1749,7 @@ private fun Context.findActivity(): Activity? {
 @Composable
 fun SettingsScreenContent(
     viewModel: SettingsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(LocalContext.current.findActivity() as androidx.activity.ComponentActivity),
-    playerSharedViewModel: PlayerSharedViewModel = androidx.lifecycle.viewmodel.compose.viewModel(LocalContext.current.findActivity() as androidx.activity.ComponentActivity),
-    onNavigateToSignIn: () -> Unit = {}
+    playerSharedViewModel: PlayerSharedViewModel = androidx.lifecycle.viewmodel.compose.viewModel(LocalContext.current.findActivity() as androidx.activity.ComponentActivity)
 ) {
     val darkMode by viewModel.darkMode.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -1825,6 +1832,12 @@ fun SettingsScreenContent(
     val includeListeningHistoryInBackup by viewModel.includeListeningHistoryInBackup.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
+    var showSettingsSignInDialog by remember { mutableStateOf(false) }
+    val signInAccountViewModel = remember(context) {
+        androidx.lifecycle.ViewModelProvider(
+            context.findActivity() as androidx.activity.ComponentActivity
+        )[AccountViewModel::class.java]
+    }
 
     val directoryPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -2052,8 +2065,21 @@ fun SettingsScreenContent(
                 onDataSaverChange = { viewModel.setDataSaver(it) },
                 pauseHistory = pauseHistory,
                 onPauseHistoryChange = { viewModel.setPauseHistory(it) },
-                onNavigateToSignIn = onNavigateToSignIn
+                onNavigateToSignIn = { showSettingsSignInDialog = true }
             )
+
+            if (showSettingsSignInDialog) {
+                GoogleSignInScreen(
+                    accountViewModel = signInAccountViewModel,
+                    requireExplicitContinue = true,
+                    isDialog = true,
+                    onSignInSuccess = {
+                        viewModel.setYtCookies(AccountManager.getAuthCookie(context))
+                        showSettingsSignInDialog = false
+                    },
+                    onNavigateUp = { showSettingsSignInDialog = false }
+                )
+            }
         }
         composable(SettingsRoute.Appearance.route) {
             AppearanceScreen(

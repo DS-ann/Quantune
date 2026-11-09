@@ -2,6 +2,9 @@ package com.dsann.music.data.innertube
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.webkit.CookieManager
+import android.webkit.WebStorage
+import android.webkit.WebViewDatabase
 import androidx.core.content.edit
 
 /**
@@ -49,10 +52,28 @@ object AccountManager {
     }
 
     fun logout(context: Context) {
-        // Remove cookie from persistent storage
+        // Remove the app's saved credentials and reset the in-memory InnerTube session.
         getPrefs(context).edit { remove(KEY_COOKIE_DATA) }
-        // Wipe InnerTube runtime
         InnerTubeClient.cookie = null
         InnerTubeClient.visitorData = null
+
+        // WebView keeps Google/YouTube authentication independently of app preferences.
+        // Remove cookies and origin storage so a later login starts with a signed-out
+        // browser session. These APIs are available on the app's Android 6+ baseline.
+        runCatching {
+            val cookieManager = CookieManager.getInstance()
+            cookieManager.removeAllCookies {
+                runCatching { cookieManager.flush() }
+            }
+        }
+        runCatching {
+            WebStorage.getInstance().deleteAllData()
+        }
+        runCatching {
+            WebViewDatabase.getInstance(context.applicationContext).apply {
+                clearHttpAuthUsernamePassword()
+                clearFormData()
+            }
+        }
     }
 }

@@ -1201,12 +1201,17 @@ itemsIndexed(
                                                                 selectedDownloadIds + item.id
                                                             }
                                                         } else {
-                                                            // Open the Explore-style action sheet for a downloaded track.
-                                                            // Seed the queue first so Play follows this playlist's sort order.
-                                                            viewModel.setSongList(
+                                                            // Keep the Downloads tab as a playable queue and start the
+                                                            // tapped track immediately. Long-press still opens its options.
+                                                            val downloadQueue =
                                                                 sortedAndGrouped.filterIsInstance<SongItem>()
-                                                            )
-                                                            selectedDownloadedSongForMenu = item
+                                                            val queueIndex = downloadQueue.indexOfFirst {
+                                                                it.id == item.id
+                                                            }
+                                                            if (queueIndex >= 0) {
+                                                                viewModel.setSongList(downloadQueue)
+                                                                viewModel.playSongAtIndex(queueIndex)
+                                                            }
                                                         }
                                                     },
                                                     onLongClick = {
