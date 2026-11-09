@@ -193,6 +193,17 @@ class MainActivity : AppCompatActivity() {
 
         super.onCreate(savedInstanceState)
 
+        // A previous process may have died before it could show its diagnostic report.
+        // Route to the recovery page before starting playback, navigation or network work.
+        if (
+            !intent.getBooleanExtra(CrashDiagnostics.EXTRA_SKIP_RECOVERY, false) &&
+            CrashDiagnostics.hasPendingReport(this)
+        ) {
+            startActivity(Intent(this, CrashReportActivity::class.java))
+            finish()
+            return
+        }
+
         setupSystemBars()
 
         // Keep the live ViewModel position during a configuration change. Only read the
