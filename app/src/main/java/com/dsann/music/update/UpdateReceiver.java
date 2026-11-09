@@ -7,11 +7,9 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
-import android.os.Build;
 import android.util.Log;
-import androidx.core.content.FileProvider;
-import java.io.File;
-import java.util.Objects;
+
+import com.dsann.music.MainActivity;
 
 public class UpdateReceiver extends BroadcastReceiver {
 
@@ -19,72 +17,74 @@ public class UpdateReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (!DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) {
+        if (intent == null || !DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) {
             return;
         }
 
-        long downloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
-
+        long downloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L);
         SharedPreferences prefs = context.getSharedPreferences("update_prefs", Context.MODE_PRIVATE);
-        long savedDownloadId = prefs.getLong("download_id", -1);
-
-        if (downloadId != savedDownloadId) {
-            return; // Not our download
+        if (downloadId < 0L || downloadId != prefs.getLong("download_id", -1L)) {
+            return;
         }
 
-        DownloadManager downloadManager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
-        DownloadManager.Query query = new DownloadManager.Query();
-        query.setFilterById(downloadId);
-
-        Cursor cursor = downloadManager.query(query);
-        if (cursor.moveToFirst()) {
-            int statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS);
-            int status = cursor.getInt(statusIndex);
-
-            if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                int uriIndex = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI);
-                String uriString = cursor.getString(uriIndex);
-
-                if (uriString != null) {
-                    File apkFile = new File(Objects.requireNonNull(Uri.parse(uriString).getPath()));
-                    installApk(context, apkFile);
-                }
-            }
+        DownloadManager downloadManager =
+                (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
+        if (downloadManager == null) {
+            Log.e(TAG, "Download Manager is unavailable while handling the completed update.");
+            return;
         }
-        cursor.close();
-    }
 
-    private void installApk(Context context, File apkFile) {
-        // Check install permission for Android 8+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (!context.getPackageManager().canRequestPackageInstalls()) {
-                Log.e(TAG, "Cannot request package installs permission");
-                // Need to request permission first, but can't do from BroadcastReceiver
+        Cursor cursor = null;
+        try {
+            DownloadManager.Query query = new DownloadManager.Query().setFilterById(downloadId);
+            cursor = downloadManager.query(query);
+            if (cursor == null || !cursor.moveToFirst()) {
+                Log.e(TAG, "Could not read the completed Quantune update download.");
                 return;
             }
-        }
 
-        try {
-            Uri apkUri;
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                apkUri = FileProvider.getUriForFile(
-                        context,
-                        context.getPackageName() + ".fileprovider",
-                        apkFile
-                );
-            } else {
-                apkUri = Uri.fromFile(apkFile);
+            int statusColumn = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS);
+            if (statusColumn < 0) {
+                Log.e(TAG, "Download Manager did not return a status column.");
+                return;
             }
 
-            Intent installIntent = new Intent(Intent.ACTION_VIEW);
-            installIntent.setDataAndType(apkUri, "application/vnd.android.package-archive");
-            installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); // ✅ CRITICAL FLAG
-            context.startActivity(installIntent);
+            int status = cursor.getInt(statusColumn);
+            if (status != DownloadManager.STATUS_SUCCESSFUL) {
+                int reasonColumn = cursor.getColumnIndex(DownloadManager.COLUMN_REASON);
+                int reason = reasonColumn >= 0 ? cursor.getInt(reasonColumn) : -1;
+                Log.e(TAG, "Quantune update download did not complete successfully. Status="
+                        + status + ", reason=" + reason);
+                prefs.edit().remove("download_id").apply();
+                return;
+            }
 
+            int uriColumn = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI);
+            String downloadedUri = uriColumn >= 0 ? cursor.getString(uriColumn) : null;
+            Uri apkUri = downloadedUri == null ? downloadManager.getUriForDownloadedFile(downloadId)
+                    : Uri.parse(downloadedUri);
+
+            if (apkUri == null || apkUri.toString().trim().isEmpty()) {
+                Log.e(TAG, "Quantune update completed without a readable APK URI.");
+                return;
+            }
+
+            // The activity handles Android 8+ unknown-app installation permission in the foreground.
+            prefs.edit()
+                    .putString("pending_update_uri", apkUri.toString())
+                    .remove("download_id")
+                    .apply();
+
+            Intent openApp = new Intent(context, MainActivity.class);
+            openApp.setAction("com.dsann.music.action.INSTALL_UPDATE");
+            openApp.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            context.startActivity(openApp);
         } catch (Exception e) {
-            Log.e(TAG, "Failed to install APK", e);
+            Log.e(TAG, "Failed to hand the downloaded Quantune APK to the installer flow.", e);
+        } finally {
+            if (cursor != null) cursor.close();
         }
     }
 }

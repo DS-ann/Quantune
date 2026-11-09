@@ -27,43 +27,40 @@ public class UpdateManager {
         this.client = new GitHubReleaseClient(GITHUB_OWNER, GITHUB_REPO);
     }
 
-    // -----------------------------------------------------
-    // CHECK FOR UPDATE
-    // -----------------------------------------------------
     public void checkForUpdate(View rootView, String currentVersion) {
         showSnackbarAnchored(rootView, "Checking for updates...", Snackbar.LENGTH_SHORT);
 
         new Thread(() -> {
-            final GitHubReleaseClient.ReleaseInfo release = client.getLatestRelease(); // ✅ FIXED (final variable)
+            final GitHubReleaseClient.ReleaseInfo release = client.getLatestRelease();
 
             if (release == null) {
-                runOnUi(() ->
-                        showSnackbarAnchored(rootView, "Failed to check for updates", Snackbar.LENGTH_LONG)
-                );
+                String detail = client.getLastError() == null
+                        ? "No compatible APK was found in the latest release."
+                        : client.getLastError().getMessage();
+                runOnUi(() -> showSnackbarAnchored(
+                        rootView,
+                        "Couldn't check for updates: " + detail,
+                        Snackbar.LENGTH_LONG
+                ));
                 return;
             }
 
             boolean isNewer = VersionUtils.isNewer(release.tagName, currentVersion);
-
             runOnUi(() -> {
                 if (isNewer) {
                     promptUpdate(rootView, release);
                 } else {
-                    showSnackbarAnchored(rootView, "You're on the latest version! 🎉", Snackbar.LENGTH_LONG);
+                    showSnackbarAnchored(rootView, "You're using the latest Quantune version.", Snackbar.LENGTH_LONG);
                 }
             });
         }).start();
     }
 
-    // -----------------------------------------------------
-    // UPDATE PROMPT
-    // -----------------------------------------------------
     private void promptUpdate(View rootView, GitHubReleaseClient.ReleaseInfo release) {
         String message = "New version " + release.tagName + " is available!\n\n";
-
         if (release.changelog != null && !release.changelog.isEmpty()) {
-            String changelog = release.changelog.length() > 400
-                    ? release.changelog.substring(0, 400) + "..."
+            String changelog = release.changelog.length() > 600
+                    ? release.changelog.substring(0, 600) + "..."
                     : release.changelog;
             message += changelog;
         }
@@ -72,36 +69,47 @@ public class UpdateManager {
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(
                 host != null ? host : rootView.getContext()
         )
-                .setTitle("Update Available")
+                .setTitle("Quantune update available")
                 .setMessage(message)
-                .setPositiveButton("Update", (dialog, which) -> {
-                    startDownload(rootView, release.apkUrl);
-                })
+                .setPositiveButton("Download", (dialog, which) -> downloadRelease(rootView, release))
                 .setNegativeButton("Later", null);
 
         runOnUi(builder::show);
     }
 
-    // -----------------------------------------------------
-    // START APK DOWNLOAD
-    // -----------------------------------------------------
-    private void startDownload(View rootView, String apkUrl) {
+    /**
+     * Download the APK from the release already shown to the user.
+     * This avoids making a second Releases API request after the user taps Update.
+     */
+    public void downloadRelease(View rootView, GitHubReleaseClient.ReleaseInfo release) {
+        if (release == null || release.apkUrl == null || release.apkUrl.trim().isEmpty()) {
+            showSnackbarAnchored(rootView, "This release has no downloadable Quantune APK.", Snackbar.LENGTH_LONG);
+            return;
+        }
+        startDownload(rootView, release.apkUrl, release.tagName);
+    }
+
+    private void startDownload(View rootView, String apkUrl, String releaseTag) {
         try {
+            Uri uri = Uri.parse(apkUrl);
+            if (!"https".equalsIgnoreCase(uri.getScheme())) {
+                throw new IllegalArgumentException("The release APK URL is not secure.");
+            }
 
             DownloadManager dm = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
             if (dm == null) {
-                runOnUi(() -> showSnackbarAnchored(rootView, "Download Manager not available", Snackbar.LENGTH_LONG));
+                showSnackbarAnchored(rootView, "Download Manager is not available on this device.", Snackbar.LENGTH_LONG);
                 return;
             }
 
-            Uri uri = Uri.parse(apkUrl);
+            String safeTag = releaseTag == null ? "latest" : releaseTag.replaceAll("[^A-Za-z0-9._-]", "_");
+            String filename = "Quantune-update-" + safeTag + "-" + System.currentTimeMillis() + ".apk";
+
             DownloadManager.Request request = new DownloadManager.Request(uri);
-
-            request.setTitle("Quantune Update");
-            request.setDescription("Downloading latest version...");
+            request.setTitle("Quantune " + safeTag + " update");
+            request.setDescription("Downloading the official GitHub release APK...");
+            request.setMimeType("application/vnd.android.package-archive");
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-
-            String filename = "Quantune-update.apk";
             request.setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, filename);
 
             long downloadId = dm.enqueue(request);
@@ -110,10 +118,11 @@ public class UpdateManager {
             prefs.edit()
                     .putLong("download_id", downloadId)
                     .putString("download_filename", filename)
+                    .putString("download_release_tag", safeTag)
                     .apply();
 
             runOnUi(() -> {
-                Snackbar sb = makeAnchoredSnackbar(rootView, "Downloading update...", Snackbar.LENGTH_LONG);
+                Snackbar sb = makeAnchoredSnackbar(rootView, "Downloading Quantune update " + safeTag + "...");
                 sb.setAction("View", v -> {
                     Intent intent = new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS);
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -121,37 +130,25 @@ public class UpdateManager {
                 });
                 sb.show();
             });
-
         } catch (Exception e) {
-            Log.e(TAG, "Download failed", e);
-            runOnUi(() ->
-                    showSnackbarAnchored(rootView, "Download failed. Try again.", Snackbar.LENGTH_LONG)
-            );
+            Log.e(TAG, "Quantune update download failed", e);
+            showSnackbarAnchored(rootView, "Update download failed. Please try again.", Snackbar.LENGTH_LONG);
         }
     }
 
-    // -----------------------------------------------------
-    // UI HELPERS
-    // -----------------------------------------------------
-    private void runOnUi(Runnable r) {
-        Activity a = getActivityIfPossible();
-        if (a != null) {
-            a.runOnUiThread(r);
-        } else {
-            new android.os.Handler(android.os.Looper.getMainLooper()).post(r);
-        }
+    private void runOnUi(Runnable runnable) {
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(runnable);
     }
 
-    private Snackbar makeAnchoredSnackbar(View rootView, String msg, int duration) {
-        return Snackbar.make(rootView, msg, duration);
+    private Snackbar makeAnchoredSnackbar(View rootView, String message) {
+        return Snackbar.make(rootView, message, Snackbar.LENGTH_LONG);
     }
 
-    private void showSnackbarAnchored(View rootView, String msg, int duration) {
-        runOnUi(() -> com.dsann.music.ui.SnackbarController.INSTANCE.showMessage(msg));
+    private void showSnackbarAnchored(View rootView, String message, int duration) {
+        runOnUi(() -> com.dsann.music.ui.SnackbarController.INSTANCE.showMessage(message));
     }
 
     private Activity getActivityIfPossible() {
-        if (context instanceof Activity) return (Activity) context;
         return null;
     }
 }

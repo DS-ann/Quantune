@@ -1235,6 +1235,9 @@ onNavigateToLibrary = {
             try {
                 val client = GitHubReleaseClient("DS-ann", "Quantune")
                 val release = client.latestRelease ?: return@launch
+                getSharedPreferences("update_prefs", MODE_PRIVATE).edit {
+                    putLong("last_update_check", System.currentTimeMillis())
+                }
 
                 val currentVersion = BuildConfig.VERSION_NAME
                 if (VersionUtils.isNewer(release.tagName, currentVersion)) {
@@ -1263,7 +1266,7 @@ onNavigateToLibrary = {
             .setCancelable(true)
             .setPositiveButton("Update Now") { _, _ ->
                 val rootView = findViewById<View>(android.R.id.content)
-                updateManager.checkForUpdate(rootView, BuildConfig.VERSION_NAME)
+                updateManager.downloadRelease(rootView, release)
             }
             .setNegativeButton("Later") { dialog, _ -> dialog.dismiss() }
             .setNeutralButton("Don't Show Again") { dialog, _ ->
@@ -1281,10 +1284,9 @@ onNavigateToLibrary = {
         val currentTime = System.currentTimeMillis()
         val oneDayMillis = 24 * 60 * 60 * 1000L
 
-        return if (currentTime - lastCheck > oneDayMillis) {
-            prefs.edit { putLong("last_update_check", currentTime) }
-            true
-        } else false
+        // Record the timestamp only after GitHub returned a valid release.
+        // A temporary network failure must not suppress the next launch's retry.
+        return currentTime - lastCheck > oneDayMillis
     }
 
     private fun disableUpdateCheck() {
@@ -1388,6 +1390,7 @@ onNavigateToLibrary = {
         // retained. Refresh the theme-dependent Settings controls from the new resources.
         ViewModelProvider(this)[SettingsViewModel::class.java].refreshSystemTheme()
         setupSystemBars()
+        handlePendingUpdateInstall()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -1472,6 +1475,79 @@ onNavigateToLibrary = {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntent(intent)
+        handlePendingUpdateInstall()
+    }
+
+    private var updateInstallPermissionPrompted = false
+
+    private fun handlePendingUpdateInstall() {
+        val prefs = getSharedPreferences("update_prefs", MODE_PRIVATE)
+        val uriString = prefs.getString("pending_update_uri", null) ?: return
+        val sourceUri = try {
+            Uri.parse(uriString)
+        } catch (e: Exception) {
+            Log.e(TAG, "Invalid downloaded update URI", e)
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            if (!updateInstallPermissionPrompted) {
+                updateInstallPermissionPrompted = true
+                AlertDialog.Builder(this)
+                    .setTitle("Allow Quantune updates")
+                    .setMessage("Android needs permission to install updates downloaded from GitHub Releases. Allow Quantune to install this update in the next screen.")
+                    .setPositiveButton("Open Settings") { _, _ ->
+                        try {
+                            val settingsIntent = Intent(
+                                android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                Uri.parse("package:$packageName")
+                            )
+                            startActivity(settingsIntent)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Could not open install permission settings", e)
+                        }
+                    }
+                    .setNegativeButton("Later", null)
+                    .show()
+            }
+            return
+        }
+
+        try {
+            val installerUri = if ("file".equals(sourceUri.scheme, ignoreCase = true)) {
+                val path = sourceUri.path ?: throw IllegalArgumentException("Downloaded APK path is empty.")
+                val apkFile = java.io.File(path)
+                if (!apkFile.isFile || apkFile.length() <= 0L) {
+                    throw IllegalStateException("Downloaded Quantune APK is missing or empty.")
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    androidx.core.content.FileProvider.getUriForFile(
+                        this,
+                        "$packageName.fileprovider",
+                        apkFile
+                    )
+                } else {
+                    Uri.fromFile(apkFile)
+                }
+            } else {
+                sourceUri
+            }
+
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(installerUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(installIntent)
+            prefs.edit().remove("pending_update_uri").apply()
+            updateInstallPermissionPrompted = false
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not open the Quantune update installer", e)
+            com.dsann.music.ui.SnackbarController.INSTANCE.showMessage(
+                "The downloaded update could not be opened. Check the Downloads notification and try again."
+            )
+        }
     }
 
     private fun handleIntent(intent: Intent?) {
