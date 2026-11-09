@@ -16,12 +16,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: quantune-android6-build-\${{ github.ref }}
+  group: quantune-android6-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build \${{ matrix.label }} APK
+    name: Build ${{ matrix.label }} APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: DS-ann/Quantune
-          ref: \${{ inputs.source_ref || github.sha }}
+          ref: ${{ inputs.source_ref || github.sha }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v6
@@ -64,35 +64,35 @@ jobs:
             "cmake;3.22.1" \
             "ndk;27.2.12479018"
 
-      - name: Compile \${{ matrix.label }} release APK
+      - name: Compile ${{ matrix.label }} release APK
         env:
-          TARGET_ABI: \${{ matrix.abi }}
+          TARGET_ABI: ${{ matrix.abi }}
         run: |
           set -euo pipefail
           gradle --no-daemon --build-cache --parallel \
             assembleRelease \
-            "-Pandroid.injected.build.abi=\${TARGET_ABI}"
+            "-Pandroid.injected.build.abi=${TARGET_ABI}"
 
-      - name: Sign and verify \${{ matrix.label }} APK
+      - name: Sign and verify ${{ matrix.label }} APK
         env:
-          TARGET_ABI: \${{ matrix.abi }}
-          SIGNING_KEYSTORE_BASE64: \${{ secrets.BATTERYPULSE_KEYSTORE_BASE64 }}
-          SIGNING_KEYSTORE_PASSWORD: \${{ secrets.BATTERYPULSE_STORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: \${{ secrets.BATTERYPULSE_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: \${{ secrets.BATTERYPULSE_KEY_PASSWORD }}
+          TARGET_ABI: ${{ matrix.abi }}
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.BATTERYPULSE_KEYSTORE_BASE64 }}
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.BATTERYPULSE_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.BATTERYPULSE_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.BATTERYPULSE_KEY_PASSWORD }}
           SIGNING_KEYSTORE_TYPE: PKCS12
         run: |
           set -euo pipefail
-          : "\${SIGNING_KEYSTORE_BASE64:?Missing the base64-encoded release keystore secret}"
-          : "\${SIGNING_KEYSTORE_PASSWORD:?Missing the release keystore password secret}"
-          : "\${SIGNING_KEY_ALIAS:?Missing the release key alias secret}"
-          : "\${SIGNING_KEY_PASSWORD:?Missing the release key password secret}"
+          : "${SIGNING_KEYSTORE_BASE64:?Missing the base64-encoded release keystore secret}"
+          : "${SIGNING_KEYSTORE_PASSWORD:?Missing the release keystore password secret}"
+          : "${SIGNING_KEY_ALIAS:?Missing the release key alias secret}"
+          : "${SIGNING_KEY_PASSWORD:?Missing the release key password secret}"
 
           BUILD_DIR="app/build/outputs/apk/release"
-          SOURCE_APK="$BUILD_DIR/app-\${TARGET_ABI}-release-unsigned.apk"
+          SOURCE_APK="$BUILD_DIR/app-${TARGET_ABI}-release-unsigned.apk"
           KEYSTORE="$RUNNER_TEMP/quantune-release-keystore.p12"
-          ALIGNED_APK="$RUNNER_TEMP/Quantune-\${TARGET_ABI}-aligned.apk"
-          OUTPUT_APK="$BUILD_DIR/Quantune-\${TARGET_ABI}.apk"
+          ALIGNED_APK="$RUNNER_TEMP/Quantune-${TARGET_ABI}-aligned.apk"
+          OUTPUT_APK="$BUILD_DIR/Quantune-${TARGET_ABI}.apk"
           BUILD_TOOLS="$ANDROID_HOME/build-tools/37.0.0"
 
           test -s "$SOURCE_APK"
@@ -119,11 +119,11 @@ jobs:
           rm -f "$KEYSTORE" "$ALIGNED_APK"
           test -s "$OUTPUT_APK"
 
-      - name: Upload \${{ matrix.label }} APK artifact
+      - name: Upload ${{ matrix.label }} APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Quantune-Android-6-\${{ matrix.abi }}
-          path: app/build/outputs/apk/release/Quantune-\${{ matrix.abi }}.apk
+          name: Quantune-Android-6-${{ matrix.abi }}
+          path: app/build/outputs/apk/release/Quantune-${{ matrix.abi }}.apk
           archive: false
           if-no-files-found: error
           retention-days: 14
