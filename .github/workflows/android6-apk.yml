@@ -69,9 +69,12 @@ jobs:
           TARGET_ABI: ${{ matrix.abi }}
         run: |
           set -euo pipefail
-          gradle --no-daemon --build-cache --parallel \
-            assembleRelease \
-            "-Pandroid.injected.build.abi=${TARGET_ABI}"
+          # Match the proven release build: generate the standard ABI-split APK set.
+          gradle --no-daemon --build-cache --parallel assembleRelease
+
+          BUILD_DIR="app/build/outputs/apk/release"
+          echo "Generated APK outputs:"
+          find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' -printf '%f (%s bytes)\n' | sort
 
       - name: Sign and verify ${{ matrix.label }} APK
         env:
@@ -95,7 +98,13 @@ jobs:
           OUTPUT_APK="$BUILD_DIR/Quantune-${TARGET_ABI}.apk"
           BUILD_TOOLS="$ANDROID_HOME/build-tools/37.0.0"
 
-          test -s "$SOURCE_APK"
+          if [[ ! -s "$SOURCE_APK" ]]; then
+            echo "::error::Expected split APK not found: $SOURCE_APK"
+            echo "Available APK outputs:"
+            find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' -printf '%f (%s bytes)\n' | sort || true
+            exit 1
+          fi
+
           printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
           chmod 600 "$KEYSTORE"
 
