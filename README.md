@@ -39,6 +39,14 @@
   <a href="https://github.com/DS-ann/Quantune/issues">Report an issue</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/DS-ann/Quantune">
+    <img src="https://img.shields.io/github/stars/DS-ann/Quantune?style=for-the-badge&logo=github&logoColor=white&label=STAR%20THIS%20PROJECT&color=F5B942" alt="Star Quantune on GitHub">
+  </a>
+  <br>
+  <sub>Like this project? Give it a ⭐ on GitHub — your support is appreciated!</sub>
+</p>
+
 ---
 
 ## Contents
