@@ -54,6 +54,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".CrashReportActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.Dsmusic" />
+
         <!-- Popup Player for External Audio Files -->
         <activity
             android:name=".ui.ExternalPlayerActivity"
