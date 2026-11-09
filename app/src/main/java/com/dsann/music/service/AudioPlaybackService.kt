@@ -1230,6 +1230,10 @@ class AudioPlaybackService : MediaSessionService() {
                         }
 
                         scheduleQueuePreload(300L)
+                        // Automatic transitions must checkpoint the newly selected track
+                        // and its queue index. Otherwise an app/process restart can restore
+                        // the song selected before this one, even though playback advanced.
+                        vm.savePlaybackStateImmediately()
                     }
                 }
             }
