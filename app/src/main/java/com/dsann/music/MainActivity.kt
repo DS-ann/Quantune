@@ -720,7 +720,7 @@ onNavigateToLibrary = {
                                             }
                                         )
                                                 "local_music" -> LocalMusicScreen(viewModel = playerViewModel)
-"settings" -> SettingsScreenContent()
+"settings" -> SettingsScreenContent(onNavigateToSignIn = { navigateToGoogleSignIn() })
                                             }
                                         }
                                     }
@@ -871,8 +871,19 @@ onNavigateToLibrary = {
                                     GoogleSignInScreen(
                                         accountViewModel = accountViewModel,
                                         onSignInSuccess = {
-                                            currentNavController.navigate("explore") {
-                                                popUpTo("explore") { inclusive = true }
+                                            val returnRoute = currentNavController.previousBackStackEntry?.destination?.route
+                                            if (returnRoute == "settings") {
+                                                com.dsann.music.data.innertube.AccountManager
+                                                    .getAuthCookie(this@MainActivity)
+                                                    ?.let { cookies ->
+                                                        ViewModelProvider(this@MainActivity)[SettingsViewModel::class.java]
+                                                            .setYtCookies(cookies)
+                                                    }
+                                                currentNavController.popBackStack()
+                                            } else {
+                                                currentNavController.navigate("explore") {
+                                                    popUpTo("explore") { inclusive = true }
+                                                }
                                             }
                                         },
                                         onNavigateUp = {

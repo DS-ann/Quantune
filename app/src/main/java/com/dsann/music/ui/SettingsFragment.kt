@@ -1741,7 +1741,8 @@ private fun Context.findActivity(): Activity? {
 @Composable
 fun SettingsScreenContent(
     viewModel: SettingsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(LocalContext.current.findActivity() as androidx.activity.ComponentActivity),
-    playerSharedViewModel: PlayerSharedViewModel = androidx.lifecycle.viewmodel.compose.viewModel(LocalContext.current.findActivity() as androidx.activity.ComponentActivity)
+    playerSharedViewModel: PlayerSharedViewModel = androidx.lifecycle.viewmodel.compose.viewModel(LocalContext.current.findActivity() as androidx.activity.ComponentActivity),
+    onNavigateToSignIn: () -> Unit = {}
 ) {
     val darkMode by viewModel.darkMode.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -2050,7 +2051,8 @@ fun SettingsScreenContent(
                 dataSaver = dataSaver,
                 onDataSaverChange = { viewModel.setDataSaver(it) },
                 pauseHistory = pauseHistory,
-                onPauseHistoryChange = { viewModel.setPauseHistory(it) }
+                onPauseHistoryChange = { viewModel.setPauseHistory(it) },
+                onNavigateToSignIn = onNavigateToSignIn
             )
         }
         composable(SettingsRoute.Appearance.route) {
@@ -3244,7 +3246,8 @@ private fun AccountScreen(
     dataSaver: Boolean,
     onDataSaverChange: (Boolean) -> Unit,
     pauseHistory: Boolean,
-    onPauseHistoryChange: (Boolean) -> Unit
+    onPauseHistoryChange: (Boolean) -> Unit,
+    onNavigateToSignIn: () -> Unit
 ) {
     Scaffold(
         topBar = { SettingsDetailTopBar("Account & playlists") { navController.popBackStack() } }
@@ -3260,18 +3263,6 @@ private fun AccountScreen(
             SettingsAccordionSection("YouTube Music Account") {
             SettingsGroupCard(listOf(
                 {
-                    var showLoginDialog by remember { mutableStateOf(false) }
-
-                    if (showLoginDialog) {
-                        YouTubeMusicLoginDialog(
-                            onDismissRequest = { showLoginDialog = false },
-                            onLoginSuccess = { cookies ->
-                                onYtCookiesChange(cookies)
-                                showLoginDialog = false
-                            }
-                        )
-                    }
-
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -3305,7 +3296,7 @@ private fun AccountScreen(
                                 if (ytCookies != null) {
                                     onYtCookiesChange(null)
                                 } else {
-                                    showLoginDialog = true
+                                    onNavigateToSignIn()
                                 }
                             },
                             shape = RoundedCornerShape(16.dp),

@@ -265,6 +265,31 @@ fun AccountSettingsSection(
                                         modifier = Modifier.size(21.dp)
                                     )
                                 }
+                            } else {
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .height(44.dp)
+                                        .clip(RoundedCornerShape(13.dp))
+                                        .background(DsmusicTheme.colorScheme.primaryContainer)
+                                        .clickable(onClick = onNavigateToSignIn)
+                                        .padding(horizontal = 12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Rounded.Login,
+                                        contentDescription = "Log in",
+                                        tint = DsmusicTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        "Log in",
+                                        style = DsmusicTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = DsmusicTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
                             }
                         }
                         Text(
