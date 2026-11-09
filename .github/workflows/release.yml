@@ -10,7 +10,7 @@ on:
         type: string
         default: main
       release_notes:
-        description: "Optional Markdown release highlights. Leave blank to generate feature changes since the previous release tag."
+        description: "Optional Markdown release highlights. Leave blank to use the curated Quantune feature highlights."
         required: false
         type: string
       prerelease:
@@ -162,28 +162,27 @@ jobs:
               # Manually supplied highlights remain available as an override.
               printf '%s\n\n' "$RELEASE_NOTES"
             else
-              cat <<'NOTES'
-### 🎧 Listen Together
-Start or join a shared listening session and keep playback in sync with friends.
-
-### 🎙️ Song Recognition
-Identify music around you with the built-in Song Recognizer, available as its own destination in the app.
-
-### 🌍 AI Lyrics Translation
-Translate lyrics with configurable AI service and model settings, bringing translated meaning closer to the music.
-
-### 🎤 A Richer Lyrics Experience
-Enjoy improvements across synced and karaoke lyrics, including provider handling, word highlighting, timing, alignment and translation behaviour.
-
-### 🎛️ A More Refined Player
-A smoother, more consistent playback experience with improved artwork updates, cover animations, queue interactions and player presentation.
-
-### 📥 Better Offline Listening
-More complete handling for cached and downloaded tracks, local music, and audio-format choices.
-
-### 🧭 Smoother Navigation & Onboarding
-Clearer navigation previews, a more polished onboarding flow and refinements to moving between the app’s main sections.
-NOTES
+              printf '%s\n' \
+                '### 🎧 Listen Together' \
+                'Start or join a shared listening session and keep playback in sync with friends.' \
+                '' \
+                '### 🎙️ Song Recognition' \
+                'Identify music around you with the built-in Song Recognizer, available as its own destination in the app.' \
+                '' \
+                '### 🌍 AI Lyrics Translation' \
+                'Translate lyrics with configurable AI service and model settings, bringing translated meaning closer to the music.' \
+                '' \
+                '### 🎤 A Richer Lyrics Experience' \
+                'Enjoy improvements across synced and karaoke lyrics, including provider handling, word highlighting, timing, alignment and translation behaviour.' \
+                '' \
+                '### 🎛️ A More Refined Player' \
+                'A smoother, more consistent playback experience with improved artwork updates, cover animations, queue interactions and player presentation.' \
+                '' \
+                '### 📥 Better Offline Listening' \
+                'More complete handling for cached and downloaded tracks, local music, and audio-format choices.' \
+                '' \
+                '### 🧭 Smoother Navigation & Onboarding' \
+                'Clearer navigation previews, a more polished onboarding flow and refinements to moving between the app’s main sections.'
               printf '\n'
             fi
             printf '## Choose your APK\n\n'
