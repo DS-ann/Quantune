@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Base Widget Provider for D.S Music.
+ * Base Widget Provider for Quantune.
  * Handles common playback control intents and updates all 3 widget sizes.
  */
 public class DsmusicWidgetProvider extends AppWidgetProvider {
@@ -203,7 +203,7 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
         }
     }
 
-    /** Returns whether any D.S Music widget is installed on the current launcher. */
+    /** Returns whether any Quantune widget is installed on the current launcher. */
     public static boolean hasAnyWidgets(Context context) {
         try {
             AppWidgetManager manager = AppWidgetManager.getInstance(context.getApplicationContext());
@@ -543,7 +543,7 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
             if (layoutId != R.layout.widget_small) {
                 views.setTextViewText(
                         R.id.widget_song_title,
-                        song != null && song.title != null ? song.title : "D.S Music"
+                        song != null && song.title != null ? song.title : "Quantune"
                 );
                 views.setTextViewText(
                         R.id.widget_artist_name,
@@ -660,7 +660,7 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
                 if (layoutId != R.layout.widget_small) {
                     fallback.setTextViewText(
                             R.id.widget_song_title,
-                            song != null && song.title != null ? song.title : "D.S Music"
+                            song != null && song.title != null ? song.title : "Quantune"
                     );
                     fallback.setTextViewText(
                             R.id.widget_artist_name,

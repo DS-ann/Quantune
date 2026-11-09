@@ -308,7 +308,7 @@ fun AccountSettingsSection(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    "Choose the name D.S Music uses to welcome you.",
+                                    "Choose the name Quantune uses to welcome you.",
                                     style = DsmusicTheme.typography.bodySmall,
                                     color = DsmusicTheme.colorScheme.onSurfaceVariant
                                 )

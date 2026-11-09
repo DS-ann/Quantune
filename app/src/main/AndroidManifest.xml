@@ -117,12 +117,12 @@
             </intent-filter>
         </receiver>
 
-        <!-- D.S Music App Widgets -->
+        <!-- Quantune App Widgets -->
 
         <receiver
             android:name=".ui.widget.WidgetSmallProvider"
             android:exported="true"
-            android:label="D.S Music Aura (2x2)">
+            android:label="Quantune Aura (2x2)">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -134,7 +134,7 @@
         <receiver
             android:name=".ui.widget.WidgetMediumProvider"
             android:exported="true"
-            android:label="D.S Music Bridge (4x2)">
+            android:label="Quantune Bridge (4x2)">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -146,7 +146,7 @@
         <receiver
             android:name=".ui.widget.WidgetLargeProvider"
             android:exported="true"
-            android:label="D.S Music Dashboard (4x4)">
+            android:label="Quantune Dashboard (4x4)">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>

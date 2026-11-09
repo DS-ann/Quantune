@@ -92,7 +92,7 @@ fun SongRecognizerScreen(
                     }
                     recognizedSong = match
                     resolvingPlayableMatch = true
-                    recognitionMessage = "Track identified. Finding it in D.S Music…"
+                    recognitionMessage = "Track identified. Finding it in Quantune…"
                     playableSong = try {
                         resolveRecognizedSongInDsmusic(match)
                     } catch (cancelled: CancellationException) {
@@ -101,9 +101,9 @@ fun SongRecognizerScreen(
                         null
                     }
                     recognitionMessage = if (playableSong != null) {
-                        "Track identified and matched in D.S Music."
+                        "Track identified and matched in Quantune."
                     } else {
-                        "Track identified, but no playable D.S Music match was found."
+                        "Track identified, but no playable Quantune match was found."
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -370,13 +370,13 @@ fun SongRecognizerScreen(
                     ) {
                         if (resolvingPlayableMatch) {
                             Text(
-                                "Finding a playable version in D.S Music…",
+                                "Finding a playable version in Quantune…",
                                 style = DsmusicTheme.typography.bodySmall,
                                 color = DsmusicTheme.colorScheme.onSurfaceVariant
                             )
                         } else if (resolvedAppSong != null) {
                             Text(
-                                "READY TO PLAY IN D.S MUSIC",
+                                "READY TO PLAY IN QUANTUNE",
                                 style = DsmusicTheme.typography.labelSmall,
                                 color = DsmusicTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold,
@@ -407,7 +407,7 @@ fun SongRecognizerScreen(
                             }
                         } else {
                             Text(
-                                "The track was identified, but no close playable match was found in D.S Music. External track links are still available.",
+                                "The track was identified, but no close playable match was found in Quantune. External track links are still available.",
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))

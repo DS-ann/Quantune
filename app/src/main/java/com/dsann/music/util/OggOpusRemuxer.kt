@@ -563,7 +563,7 @@ internal object OggOpusRemuxer {
             comments.add("METADATA_BLOCK_PICTURE=${Base64.encodeToString(buildFlacPictureBlock(it), Base64.NO_WRAP)}")
         }
 
-        val vendor = "D.S Music".toByteArray(utf8)
+        val vendor = "Quantune".toByteArray(utf8)
         val output = ByteArrayOutputStream()
         output.write("OpusTags".toByteArray(Charsets.US_ASCII))
         writeLittleEndian32(output, vendor.size)

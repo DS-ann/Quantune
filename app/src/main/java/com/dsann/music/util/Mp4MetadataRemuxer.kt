@@ -274,7 +274,7 @@ internal object Mp4MetadataRemuxer {
         writeUInt32(payload, 0L)
         payload.write("mdir".toByteArray(LATIN1))
         repeat(3) { writeUInt32(payload, 0L) }
-        payload.write("D.S Music".toByteArray(UTF8))
+        payload.write("Quantune".toByteArray(UTF8))
         payload.write(0)
         return makeBox("hdlr", payload.toByteArray())
     }

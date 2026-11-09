@@ -74,7 +74,7 @@ data class RemotePlaybackState(
 /**
  * Lightweight client for the Listen Together protobuf/WebSocket protocol used by Metrolist.
  * The protocol encoder/decoder below is an independent implementation of the published .proto
- * field layout; no Metrolist implementation classes are copied into D.S Music.
+ * field layout; no Metrolist implementation classes are copied into Quantune.
  *
  * The session is retained for the app process so playback can stay synchronized while users
  * navigate between screens. It does not hold a permanent wake lock on older Android devices.
@@ -239,7 +239,7 @@ class DsmusicListenTogetherClient {
         acquireMulticastLock(context)
         val pinSuffix = localRoomPin.orEmpty().takeLast(4)
         val service = NsdServiceInfo().apply {
-            serviceName = "D.S Music $pinSuffix"
+            serviceName = "Quantune $pinSuffix"
             serviceType = LOCAL_SERVICE_TYPE
             this.port = port
         }
@@ -285,7 +285,7 @@ class DsmusicListenTogetherClient {
         }
         acquireMulticastLock(context)
         _discoveredLocalRooms.value = emptyList()
-        _localDiscoveryStatus.value = "Searching this Wi-Fi or hotspot for D.S Music rooms…"
+        _localDiscoveryStatus.value = "Searching this Wi-Fi or hotspot for Quantune rooms…"
 
         val listener = object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(serviceType: String) {
@@ -702,7 +702,7 @@ class DsmusicListenTogetherClient {
         _message.value = "Connecting to Listen Together server…"
         val request = Request.Builder()
             .url(normalized)
-            .header("User-Agent", "D.S-Music")
+            .header("User-Agent", "Quantune")
             .build()
         try {
         socket = httpClient.newWebSocket(request, object : WebSocketListener() {

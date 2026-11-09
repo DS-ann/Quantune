@@ -203,7 +203,7 @@ object SongDownloader {
     }
 
     /**
-     * Resolve the original online video IDs for D.S Music downloaded MediaStore URIs.
+     * Resolve the original online video IDs for Quantune downloaded MediaStore URIs.
      * This is metadata only: callers continue to play the exact local URI.
      */
     fun getDownloadedVideoIdsByUri(context: Context): Map<String, String> {
@@ -224,7 +224,7 @@ object SongDownloader {
 
     /**
      * Resolve an app-downloaded audio file before trying Media3's online stream resolver.
-     * Video-ID mappings are preferred; title/artist filenames and the legacy D.S Music folder
+     * Video-ID mappings are preferred; title/artist filenames and the legacy Quantune folder
      * provide a migration path for downloads created before mappings were recorded.
      */
     fun findDownloadedUri(
@@ -457,7 +457,7 @@ object SongDownloader {
         val isAppOwned = rawUri in mappedUris || canonicalUri?.toString() == rawUri ||
             (sourceUri.scheme == "file" && isInsideDsmusicDownloads)
         if (!isAppOwned) {
-            Log.w(TAG, "Refusing to delete Opus source outside the D.S Music download store: $sourceUri")
+            Log.w(TAG, "Refusing to delete Opus source outside the Quantune download store: $sourceUri")
             return false
         }
 
@@ -498,7 +498,7 @@ object SongDownloader {
         // Android 10+ downloads are first staged in this app cache folder and then
         // copied into MediaStore. Clean up any legacy staging copy left by an older build.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val stagedCopy = File(File(context.cacheDir, "D.S-Music_output"), expectedName)
+            val stagedCopy = File(File(context.cacheDir, "Quantune_output"), expectedName)
             if (stagedCopy.exists() && !stagedCopy.delete()) {
                 Log.w(TAG, "Could not delete old Opus staging copy: ${stagedCopy.absolutePath}")
             }
@@ -1285,7 +1285,7 @@ object SongDownloader {
             }
 
             val sourceComment = if (fromCache) {
-                "Exported from D.S Music cached audio (video ID: $videoId)"
+                "Exported from Quantune cached audio (video ID: $videoId)"
             } else {
                 "Downloaded from YouTube Music (video ID: $videoId)"
             }
@@ -1455,7 +1455,7 @@ object SongDownloader {
                 throw IOException("Could not clear the MP4 metadata staging file")
             }
             val sourceComment = if (fromCache) {
-                "Exported from D.S Music cached audio (video ID: $videoId)"
+                "Exported from Quantune cached audio (video ID: $videoId)"
             } else {
                 "Downloaded from YouTube Music (video ID: $videoId)"
             }
@@ -1580,7 +1580,7 @@ object SongDownloader {
                 throw IOException("Could not clear the Ogg Opus metadata staging file")
             }
             val sourceComment = if (fromCache) {
-                "Exported from D.S Music cached audio (video ID: $videoId)"
+                "Exported from Quantune cached audio (video ID: $videoId)"
             } else {
                 "Downloaded from YouTube Music (video ID: $videoId)"
             }
@@ -1640,7 +1640,7 @@ object SongDownloader {
             outputFile.copyTo(stagedFile, overwrite = true)
             convertWebmHeaderToMatroska(stagedFile)
             val sourceComment = if (fromCache) {
-                "Exported from D.S Music cached audio (video ID: $videoId)"
+                "Exported from Quantune cached audio (video ID: $videoId)"
             } else {
                 "Downloaded from YouTube Music (video ID: $videoId)"
             }
@@ -2147,7 +2147,7 @@ object SongDownloader {
             .setSmallIcon(com.dsann.music.R.drawable.ic_music_note)
             .setContentTitle("Downloading Track")
             .setContentText("$title ($progress%)")
-            .setSubText("D.S Music · Cancel anytime")
+            .setSubText("Quantune · Cancel anytime")
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)

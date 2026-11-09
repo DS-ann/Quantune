@@ -1863,7 +1863,7 @@ fun FullPlayer(
                             onClick = {
                                 val shareIntent = Intent().apply {
                                     this.action = Intent.ACTION_SEND
-                                    putExtra(Intent.EXTRA_TEXT, "Listening on D.S Music. Check out: https://music.youtube.com/watch?v=${songForActions?.videoId.orEmpty()}")
+                                    putExtra(Intent.EXTRA_TEXT, "Listening on Quantune. Check out: https://music.youtube.com/watch?v=${songForActions?.videoId.orEmpty()}")
                                     type = "text/plain"
                                 }
                                 context.startActivity(Intent.createChooser(shareIntent, "Share Track"))
@@ -2418,7 +2418,7 @@ fun FullPlayer(
                 }
                 val sourceText = when {
                     song.isDownloadedOffline -> "Downloaded audio file (offline)"
-                    song.isCachedTrack && !songFileMetadata.isRemote -> "D.S Music cache (cached audio stream)"
+                    song.isCachedTrack && !songFileMetadata.isRemote -> "Quantune cache (cached audio stream)"
                     !song.videoId.isNullOrBlank() && songFileMetadata.isRemote -> "YouTube Music stream"
                     songFileMetadata.isRemote -> "Remote audio stream"
                     else -> "Device audio file"

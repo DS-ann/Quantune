@@ -1152,7 +1152,7 @@ onNavigateToLibrary = {
                         ) {
                             Image(
                                 painter = painterResource(id = R.drawable.ic_launcher_art),
-                                contentDescription = "D.S Music",
+                                contentDescription = "Quantune",
                                 modifier = Modifier.size(280.dp)
                             )
                         }
@@ -1233,7 +1233,7 @@ onNavigateToLibrary = {
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val client = GitHubReleaseClient("DS-ann", "D.S-Music2")
+                val client = GitHubReleaseClient("DS-ann", "Quantune")
                 val release = client.latestRelease ?: return@launch
 
                 val currentVersion = BuildConfig.VERSION_NAME

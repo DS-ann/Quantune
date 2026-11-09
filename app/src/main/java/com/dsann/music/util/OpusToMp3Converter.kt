@@ -28,7 +28,7 @@ data class Mp3ConversionResult(
 /**
  * Offline Ogg Opus -> MP3 converter.
  * MediaCodec decodes Opus on-device; LAME encodes the PCM locally. The MP3 is tagged and
- * verified before it is copied into the D.S Music library.
+ * verified before it is copied into the Quantune library.
  */
 internal object OpusToMp3Converter {
     private const val TAG = "OpusToMp3"
@@ -83,7 +83,7 @@ internal object OpusToMp3Converter {
             val baseName = "${SongDownloader.cleanTitle(title)} - ${SongDownloader.cleanArtist(artist)}"
                 .replace(Regex("[^a-zA-Z0-9._\\s()\\[\\]-]"), "_")
                 .trim()
-                .ifBlank { "D.S Music export" }
+                .ifBlank { "Quantune export" }
             val outputName = "$baseName.mp3"
             if (SongDownloader.findDownloadedExportUri(appContext, outputName) != null) {
                 return if (SongDownloader.deleteDownloadedOpusSource(appContext, song, sourceUri)) {
@@ -108,7 +108,7 @@ internal object OpusToMp3Converter {
                 title = title,
                 artist = artist,
                 album = album,
-                comment = "Converted from D.S Music Opus",
+                comment = "Converted from Quantune Opus",
                 artworkBytes = coverBytes
             )
             currentCoroutineContext().ensureActive()

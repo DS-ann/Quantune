@@ -208,7 +208,7 @@ fun DsmusicButton(
     content: @Composable RowScope.() -> Unit
 ) {
     val scheme = DsmusicTheme.colorScheme
-    // Resolve enabled and disabled colours from the D.S Music scheme.
+    // Resolve enabled and disabled colours from the Quantune scheme.
     val backgroundColor = if (enabled) colors?.containerColor ?: scheme.primary
         else colors?.disabledContainerColor ?: scheme.surfaceVariant
     val foregroundColor = if (enabled) colors?.contentColor ?: scheme.onPrimary
@@ -397,7 +397,7 @@ fun DsmusicPageHeading(
     title: String,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
-    kicker: String = "D.S MUSIC"
+    kicker: String = "QUANTUNE"
 ) {
     val titleSize = when {
         title.length >= 19 -> 22.sp

@@ -95,7 +95,8 @@ import android.media.AudioAttributes as LegacyAudioAttributes
 private fun usableCacheTrackTitle(value: String?): String? {
     val candidate = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     return candidate.takeUnless {
-        it.equals("D.S Music", ignoreCase = true) ||
+        it.equals("Quantune", ignoreCase = true) ||
+            it.equals("D.S Music", ignoreCase = true) ||
             it.equals("Unknown Title", ignoreCase = true) ||
             it.equals("<unknown>", ignoreCase = true) ||
             it.equals("Unknown", ignoreCase = true) ||
@@ -106,7 +107,8 @@ private fun usableCacheTrackTitle(value: String?): String? {
 private fun usableCacheTrackArtist(value: String?): String? {
     val candidate = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     return candidate.takeUnless {
-        it.equals("D.S Music", ignoreCase = true) ||
+        it.equals("Quantune", ignoreCase = true) ||
+            it.equals("D.S Music", ignoreCase = true) ||
             it.equals("Unknown Artist", ignoreCase = true) ||
             it.equals("<unknown>", ignoreCase = true) ||
             it.equals("Unknown", ignoreCase = true) ||
@@ -916,7 +918,7 @@ class AudioPlaybackService : MediaSessionService() {
     private var cacheAssetsSongId: Long? = null
     @Volatile private var activeVideoCacheVideoId: String? = null
     @Volatile private var activeVideoCacheUris: Set<String> = emptySet()
-    private var currentSongName = "D.S Music"
+    private var currentSongName = "Quantune"
     private var currentAlbumArt: Bitmap? = null
     private var currentAlbumArtSongId: String? = null
     @Volatile private var artworkRequestGeneration: Long = 0L
@@ -4024,7 +4026,7 @@ class AudioPlaybackService : MediaSessionService() {
                 ?: return@let null
             com.dsann.music.model.SongItem(
                 id,
-                mediaItem.mediaMetadata.title?.toString()?.ifBlank { "D.S Music" } ?: "D.S Music",
+                mediaItem.mediaMetadata.title?.toString()?.ifBlank { "Quantune" } ?: "Quantune",
                 mediaItem.mediaMetadata.artist?.toString()?.ifBlank { "Unknown Artist" } ?: "Unknown Artist",
                 -1L,
                 uri?.toString(),
@@ -4939,7 +4941,7 @@ class AudioPlaybackService : MediaSessionService() {
             }
             notificationBuilder.setContentTitle(notificationTitle)
             notificationBuilder.setContentText(notificationArtist)
-            notificationBuilder.setSubText("D.S Music")
+            notificationBuilder.setSubText("Quantune")
             notificationBuilder.setChannelId("audio_playback_channel")
             notificationBuilder.setOngoing(isPlaying)
             notificationBuilder.setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
