@@ -97,7 +97,7 @@ public class UpdateManager {
             Uri uri = Uri.parse(apkUrl);
             DownloadManager.Request request = new DownloadManager.Request(uri);
 
-            request.setTitle("Quantune Update");
+            request.setTitle("D.S Music Update");
             request.setDescription("Downloading latest version...");
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
 

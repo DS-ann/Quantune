@@ -10,10 +10,6 @@ import org.akanework.gramophone.logic.utils.SemanticLyrics
  */
 object LrcParser {
     private const val TAG = "LrcParser"
-    
-    // Minimum gap (ms) between two lyric lines to insert an interlude marker
-    private const val INTERLUDE_THRESHOLD_MS = 5000L
-
     @JvmStatic
     fun parse(lrcContent: String?): List<LyricLine> {
         if (lrcContent.isNullOrEmpty()) {
@@ -123,8 +119,8 @@ object LrcParser {
 
         val normalizedLines = parsedLines.map { normalizeLineSpacing(it) }
 
-        // Insert interlude markers for instrumental gaps
-        return insertInterludes(normalizedLines)
+        // Keep the parsed source timestamps; do not synthesize instrumental rows.
+        return normalizedLines
     }
 
     /**
@@ -188,41 +184,6 @@ object LrcParser {
             sb.append(trailing)
         }
         return line.copy(content = sb.toString().trimEnd(), words = newWords)
-    }
-
-    private fun insertInterludes(sorted: List<LyricLine>): List<LyricLine> {
-        if (sorted.size < 2) return sorted
-
-        val result = mutableListOf<LyricLine>()
-
-        for (i in sorted.indices) {
-            val current = sorted[i]
-
-            // Skip empty lines (they're essentially interludes already in LRC)
-            if (current.content.isEmpty() && i > 0) {
-                val nextTime = if (i + 1 < sorted.size) sorted[i + 1].startTimeMs else current.startTimeMs
-                val prevTime = sorted[i - 1].startTimeMs
-                if (nextTime - prevTime > INTERLUDE_THRESHOLD_MS) {
-                    result.add(LyricLine(current.startTimeMs, "♪", true))
-                    continue
-                }
-                continue
-            }
-
-            result.add(current)
-
-            // Check gap to next line
-            if (i + 1 < sorted.size) {
-                val gap = sorted[i + 1].startTimeMs - current.startTimeMs
-                if (gap > INTERLUDE_THRESHOLD_MS && sorted[i + 1].content.isNotEmpty()) {
-                    val padding = (gap / 3).coerceAtMost(3500)
-                    val interludeTime = current.startTimeMs + padding
-                    result.add(LyricLine(interludeTime, "♪", true))
-                }
-            }
-        }
-
-        return result
     }
 
     private fun extractTtmlContent(text: String): String? {

@@ -5,52 +5,43 @@ import com.dsann.music.data.lyrics.LyricsResult
 import com.dsann.music.data.lyrics.PaxsenixApi
 import com.dsann.music.data.lyrics.TrackMetadata
 import com.dsann.music.data.lyrics.providers.LyricsProvider
+import com.google.gson.JsonParser
 
 class PaxsenixYoutubeProvider(private val api: PaxsenixApi) : LyricsProvider {
-    companion object {
-        private const val TAG = "PaxsenixYoutube"
-    }
-
+    companion object { private const val TAG = "PaxsenixYoutube" }
     override fun getName(): String = "YouTube (Paxsenix)"
-
     override fun getPriority(): Int = 3
 
     override fun search(track: TrackMetadata): LyricsResult? {
-        try {
-            val query = "${track.cleanedTitle} ${track.cleanedArtist}"
-            val searchResponse = api.searchYouTube(query).execute()
-            
-            if (searchResponse.isSuccessful && searchResponse.body() != null) {
-                val searchBody = searchResponse.body()!!
-                if (searchBody.isJsonArray && searchBody.asJsonArray.size() > 0) {
-                    val firstResult = searchBody.asJsonArray.get(0).asJsonObject
-                    val trackId = if (firstResult.has("id")) firstResult.get("id").asString else if (firstResult.has("videoId")) firstResult.get("videoId").asString else null
-                    
-                    if (trackId != null) {
-                        val lyricsResponse = api.getYouTubeLyrics(trackId).execute()
-                        if (lyricsResponse.isSuccessful && lyricsResponse.body() != null) {
-                            val lyricsStr = lyricsResponse.body()!!.string()
-                            if (lyricsStr.isNotBlank() && !lyricsStr.contains("isError\":true")) {
-                                val result = LyricsResult(
-                                    providerName = getName(),
-                                    matchedTitle = track.cleanedTitle,
-                                    matchedArtist = track.cleanedArtist
-                                )
-                                
-                                if (lyricsStr.contains("[00:")) {
-                                    result.setSyncedLyrics(lyricsStr)
-                                } else {
-                                    result.setPlainLyrics(lyricsStr)
-                                }
-                                return result
-                            }
-                        }
-                    }
-                }
+        return try {
+            val searchResponse = api.searchYouTube("${track.cleanedTitle} ${track.cleanedArtist}").execute()
+            if (!searchResponse.isSuccessful || searchResponse.body() == null) {
+                Log.w(TAG, "Search HTTP ${searchResponse.code()}")
+                return null
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Search failed: ${e.message}")
+            val match = PaxsenixProviderUtils.firstSearchResult(searchResponse.body()!!) ?: return null
+            val id = PaxsenixProviderUtils.string(match, "videoId", "id", "trackId") ?: return null
+            val lyricsResponse = api.getYouTubeLyrics(id).execute()
+            if (!lyricsResponse.isSuccessful || lyricsResponse.body() == null) {
+                Log.w(TAG, "Lyrics HTTP ${lyricsResponse.code()}")
+                return null
+            }
+            val raw = lyricsResponse.body()!!.string()
+            val decoded = try {
+                PaxsenixProviderUtils.extractLyrics(JsonParser.parseString(raw))
+            } catch (_: Exception) { null } ?: raw.trim().takeIf { it.isNotEmpty() && !it.startsWith("{") } ?: return null
+            val result = LyricsResult(
+                providerName = getName(),
+                matchedTitle = PaxsenixProviderUtils.string(match, "title", "name") ?: track.cleanedTitle,
+                matchedArtist = PaxsenixProviderUtils.string(match, "artist", "artistName") ?: track.cleanedArtist
+            )
+            if (decoded.contains("[00:") || decoded.contains("[0:")) result.setSyncedLyrics(decoded)
+            else result.setPlainLyrics(decoded)
+            if (PaxsenixProviderUtils.isWordByWord(decoded)) result.setWordByWord(true)
+            result.takeIf { it.hasLyrics() }
+        } catch (error: Exception) {
+            Log.w(TAG, "YouTube lookup failed: ${error.message}")
+            null
         }
-        return null
     }
 }

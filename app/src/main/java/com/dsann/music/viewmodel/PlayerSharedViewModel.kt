@@ -549,6 +549,9 @@ class PlayerSharedViewModel @Inject constructor(
 
     private var autoplayFetchJob: Job? = null
     private var autoplayQueueGeneration = 0L
+    @Volatile private var listenTogetherQueueAuthoritative = false
+    private var listenTogetherPreviousShuffle: Boolean? = null
+    private var listenTogetherPreviousRepeatMode: Int? = null
     private var autoplayFetchGeneration = -1L
     private val autoplayFetchedVideoIds = mutableSetOf<String>()
     private var pendingRapidSkipLoadJob: Job? = null
@@ -565,7 +568,7 @@ class PlayerSharedViewModel @Inject constructor(
      * count as available; repeat modes do not need automatic queue extension.
      */
     fun maybeRefillAutoplayQueue() {
-        if (!isAutoplayEnabled() || _repeatMode.value != REPEAT_OFF) return
+        if (listenTogetherQueueAuthoritative || !isAutoplayEnabled() || _repeatMode.value != REPEAT_OFF) return
         val songs = _songList.value
         val currentSong = _currentSong.value ?: return
         val currentIndex = songs.indexOfFirst { it.id == currentSong.id }
@@ -1634,7 +1637,9 @@ class PlayerSharedViewModel @Inject constructor(
     }
 
     fun setRepeatMode(mode: Int) {
-        val normalizedMode = when (mode) {
+        val normalizedMode = if (listenTogetherQueueAuthoritative) {
+            REPEAT_OFF
+        } else when (mode) {
             REPEAT_OFF, REPEAT_ONCE, REPEAT_INFINITY -> mode
             else -> REPEAT_OFF
         }
@@ -1765,6 +1770,61 @@ class PlayerSharedViewModel @Inject constructor(
     }
 
     // ========== LIBRARY MANAGEMENT ==========
+
+    fun setListenTogetherQueueAuthoritative(enabled: Boolean) {
+        if (listenTogetherQueueAuthoritative == enabled) return
+        listenTogetherQueueAuthoritative = enabled
+        if (enabled) {
+            listenTogetherPreviousShuffle = _isShuffleEnabled.value
+            listenTogetherPreviousRepeatMode = _repeatMode.value
+
+            // A guest must consume the host's exact queue order, not a local shuffle
+            // permutation or repeat cycle. Restore the guest's prior choices on exit.
+            setShuffleEnabled(false)
+            setRepeatMode(REPEAT_OFF)
+
+            autoplayQueueGeneration += 1L
+            autoplayFetchJob?.cancel()
+            autoplayFetchJob = null
+            autoplayFetchGeneration = -1L
+        } else {
+            val restoreShuffle = listenTogetherPreviousShuffle
+            val restoreRepeatMode = listenTogetherPreviousRepeatMode
+            listenTogetherPreviousShuffle = null
+            listenTogetherPreviousRepeatMode = null
+
+            if (restoreShuffle != null) setShuffleEnabled(restoreShuffle)
+            if (restoreRepeatMode != null) setRepeatMode(restoreRepeatMode)
+        }
+    }
+
+    /**
+     * Apply the host's ordered upcoming tracks while retaining the guest's current item.
+     * Duplicate tracks are preserved because queue identity is per occurrence, not per song.
+     */
+    fun applyListenTogetherUpcomingQueue(upcomingSongs: List<SongItem>) {
+        val current = _currentSong.value ?: return
+        val nextQueue = listOf(current) + upcomingSongs
+        val currentQueue = _songList.value
+        val unchanged = currentQueue.size == nextQueue.size &&
+            currentQueue.indices.all { index ->
+                currentQueue[index].videoId == nextQueue[index].videoId &&
+                    currentQueue[index].title == nextQueue[index].title &&
+                    currentQueue[index].artist == nextQueue[index].artist
+            } &&
+            _currentSongIndex.value == 0
+        if (unchanged) return
+
+        autoplayQueueGeneration += 1L
+        autoplayFetchJob?.cancel()
+        autoplayFetchJob = null
+        autoplayFetchGeneration = -1L
+        _songList.value = nextQueue
+        _currentSongIndex.value = 0
+        if (_repeatMode.value == REPEAT_ONCE) resetRepeatOnceCycleFromCurrent(0)
+        audioService?.refreshNativeQueue()
+        savePlaybackState()
+    }
 
     fun setSongList(songs: List<SongItem>) {
         // A replacement queue is a new Autoplay session. Do not carry the previous
@@ -2322,6 +2382,7 @@ class PlayerSharedViewModel @Inject constructor(
     // ========== UTILS ==========
 
     fun setShuffleEnabled(enabled: Boolean) {
+        if (listenTogetherQueueAuthoritative && enabled) return
         if (_isShuffleEnabled.value != enabled) {
             _isShuffleEnabled.value = enabled
             if (_repeatMode.value == REPEAT_ONCE) {

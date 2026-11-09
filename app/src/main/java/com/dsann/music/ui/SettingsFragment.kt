@@ -552,19 +552,29 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         prefs.edit { putFloat("player_artwork_scale", safe) }
     }
 
-    private val availablePlayerButtons = listOf("lyrics", "video", "queue", "share", "download", "like", "dislike", "sleep", "shuffle", "repeat")
-    private val defaultPlayerButtons = listOf("lyrics", "video", "queue", "share", "download")
+    private val availablePlayerButtons = listOf(
+        "lyrics", "video", "queue", "share", "download", "like", "dislike",
+        "sleep", "shuffle", "listen_together", "repeat"
+    )
+    private val defaultPlayerButtons = listOf(
+        "lyrics", "video", "queue", "share", "download", "listen_together", "repeat"
+    )
     private fun readPlayerButtons(): List<String> {
         val stored = prefs.getString("player_buttons", null)
         val parsed = stored?.split(",")?.map { it.trim().lowercase() }
             ?.filter { it in availablePlayerButtons }?.distinct().orEmpty()
-        return (parsed + defaultPlayerButtons.filter { it !in parsed }).take(6)
+        val merged = (parsed + defaultPlayerButtons.filter { it !in parsed }).toMutableList()
+        if ("listen_together" !in parsed) {
+            val repeatIndex = merged.indexOf("repeat").takeIf { it >= 0 } ?: merged.size
+            merged.add(repeatIndex, "listen_together")
+        }
+        return merged.take(7)
             .let { safe -> if (safe.size >= 3) safe else defaultPlayerButtons }
     }
     private val _playerButtons = MutableStateFlow(readPlayerButtons())
     val playerButtons: StateFlow<List<String>> = _playerButtons.asStateFlow()
     fun setPlayerButtons(buttons: List<String>) {
-        val safe = buttons.filter { it in availablePlayerButtons }.distinct().take(6)
+        val safe = buttons.filter { it in availablePlayerButtons }.distinct().take(7)
         if (safe.size < 3) return
         _playerButtons.value = safe
         prefs.edit { putString("player_buttons", safe.joinToString(",")) }
@@ -1476,7 +1486,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 val gson = com.google.gson.Gson()
                 val parsed = com.google.gson.JsonParser().parse(jsonString)
                 if (!parsed.isJsonObject) {
-                    throw IllegalArgumentException("This is not a valid Quantune backup file")
+                    throw IllegalArgumentException("This is not a valid D.S Music backup file")
                 }
                 val backupObject = parsed.asJsonObject
                 val format = backupObject.get("format")?.takeIf { it.isJsonPrimitive }?.asString
@@ -1900,12 +1910,14 @@ fun SettingsScreenContent(
     // Android theme/configuration change), restore the last open Settings page.
     LaunchedEffect(navController) {
         val savedRoute = viewModel.currentSettingsRoute.value
+        val routeToRestore = savedRoute.takeUnless { it == "song_recognizer" }
+            ?: SettingsRoute.Main.route
         val activeRoute = navController.currentDestination?.route
         if (
             (activeRoute == null || activeRoute == SettingsRoute.Main.route) &&
-            savedRoute != SettingsRoute.Main.route
+            routeToRestore != SettingsRoute.Main.route
         ) {
-            navController.navigate(savedRoute) {
+            navController.navigate(routeToRestore) {
                 launchSingleTop = true
             }
         }
@@ -1930,7 +1942,13 @@ fun SettingsScreenContent(
                     durationMillis = pageTransitionDurationMillis,
                     easing = androidx.compose.animation.core.FastOutSlowInEasing
                 )
-            ) { it }
+            ) { it } + androidx.compose.animation.fadeIn(
+                initialAlpha = 0.5f,
+                animationSpec = androidx.compose.animation.core.tween(
+                    durationMillis = pageTransitionDurationMillis,
+                    easing = androidx.compose.animation.core.FastOutSlowInEasing
+                )
+            )
         },
         exitTransition = {
             androidx.compose.animation.slideOutHorizontally(
@@ -1938,7 +1956,13 @@ fun SettingsScreenContent(
                     durationMillis = pageTransitionDurationMillis,
                     easing = androidx.compose.animation.core.FastOutSlowInEasing
                 )
-            ) { -it }
+            ) { -it } + androidx.compose.animation.fadeOut(
+                targetAlpha = 0.5f,
+                animationSpec = androidx.compose.animation.core.tween(
+                    durationMillis = pageTransitionDurationMillis,
+                    easing = androidx.compose.animation.core.FastOutSlowInEasing
+                )
+            )
         },
         popEnterTransition = {
             androidx.compose.animation.slideInHorizontally(
@@ -1946,7 +1970,13 @@ fun SettingsScreenContent(
                     durationMillis = pageTransitionDurationMillis,
                     easing = androidx.compose.animation.core.FastOutSlowInEasing
                 )
-            ) { -it }
+            ) { -it } + androidx.compose.animation.fadeIn(
+                initialAlpha = 0.5f,
+                animationSpec = androidx.compose.animation.core.tween(
+                    durationMillis = pageTransitionDurationMillis,
+                    easing = androidx.compose.animation.core.FastOutSlowInEasing
+                )
+            )
         },
         popExitTransition = {
             androidx.compose.animation.slideOutHorizontally(
@@ -1954,7 +1984,13 @@ fun SettingsScreenContent(
                     durationMillis = pageTransitionDurationMillis,
                     easing = androidx.compose.animation.core.FastOutSlowInEasing
                 )
-            ) { it }
+            ) { it } + androidx.compose.animation.fadeOut(
+                targetAlpha = 0.5f,
+                animationSpec = androidx.compose.animation.core.tween(
+                    durationMillis = pageTransitionDurationMillis,
+                    easing = androidx.compose.animation.core.FastOutSlowInEasing
+                )
+            )
         }
     ) {
         composable(SettingsRoute.Main.route) {
@@ -2000,7 +2036,7 @@ fun SettingsScreenContent(
         composable(SettingsRoute.BackupRestore.route) {
             BackupRestoreScreen(
                 navController = navController,
-                onBackupClick = { exportBackupLauncher.launch("Quantune-backup.json") },
+                onBackupClick = { exportBackupLauncher.launch("D.S-Music-backup.json") },
                 onRestoreClick = { importBackupLauncher.launch(arrayOf("application/json")) },
                 includeListeningHistory = includeListeningHistoryInBackup,
                 onIncludeListeningHistoryChange = viewModel::setIncludeListeningHistoryInBackup
@@ -2217,7 +2253,7 @@ private fun SettingsDetailTopBar(title: String, onBack: () -> Unit) {
         DsmusicPageHeading(
             title = title,
             subtitle = "Settings",
-            kicker = "QUANTUNE",
+            kicker = "D.S MUSIC",
             modifier = Modifier.weight(1f)
         )
         Box(
@@ -2271,7 +2307,7 @@ private fun ControlsAndGesturesScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp)
-                .padding(bottom = 120.dp)
+                .padding(bottom = 176.dp)
         ) {
             SettingsAccordionSection("Player cover") {
             Text(
@@ -2491,11 +2527,11 @@ private fun SettingsMainScreen(navController: androidx.navigation.NavController)
             .nestedScroll(nestedScrollConnection)
             .verticalScroll(scrollState)
             .padding(horizontal = 18.dp)
-            .padding(bottom = 120.dp)
+            .padding(bottom = 176.dp)
     ) {
         DsmusicPageHeading(
             title = "Settings",
-            subtitle = "Make Quantune look and sound the way you like.",
+            subtitle = "Make D.S Music look and sound the way you like.",
             kicker = "YOUR LISTENING SPACE",
             modifier = Modifier
                 .fillMaxWidth()
@@ -2582,7 +2618,7 @@ private fun SettingsMainScreen(navController: androidx.navigation.NavController)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SettingsDashboardTile(
                 title = "Playback",
-                subtitle = "Sound quality, autoplay and song transitions",
+                subtitle = "Playback, autoplay & Lyrics Translation settings",
                 iconResId = R.drawable.ic_settings_playback,
                 modifier = Modifier.weight(1f),
                 onClick = { navController.navigate(SettingsRoute.Playback.route) }
@@ -2595,7 +2631,6 @@ private fun SettingsMainScreen(navController: androidx.navigation.NavController)
                 onClick = { navController.navigate(SettingsRoute.Controls.route) }
             )
         }
-
         Text(
             "LIBRARY & ACCOUNT",
             style = DsmusicTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp, fontWeight = FontWeight.Bold),
@@ -2646,7 +2681,7 @@ private fun SettingsMainScreen(navController: androidx.navigation.NavController)
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             SettingsDashboardTile(
-                title = "About Quantune",
+                title = "About D.S Music",
                 subtitle = "Version, updates and credits",
                 iconResId = R.drawable.ic_settings_info,
                 modifier = Modifier.weight(1f),
@@ -2758,6 +2793,112 @@ private fun SettingsCategoryItem(
     )
 }
 
+private data class StorageBreakdownSnapshot(
+    val persistentAudioBytes: Long,
+    val legacyAudioBytes: Long,
+    val persistentArtworkBytes: Long,
+    val legacyArtworkBytes: Long,
+    val httpCacheBytes: Long,
+    val imageCacheBytes: Long,
+    val otherCacheBytes: Long,
+    val codeCacheBytes: Long,
+    val cacheDirectoryTotalBytes: Long
+)
+
+private fun storageFileTreeSize(file: File?): Long {
+    if (file == null || !file.exists()) return 0L
+    if (file.isFile) return file.length().coerceAtLeast(0L)
+    return file.listFiles()?.sumOf { storageFileTreeSize(it) } ?: 0L
+}
+
+private fun readStorageBreakdown(context: Context): StorageBreakdownSnapshot {
+    val app = context.applicationContext
+    val cache = app.cacheDir
+    val excluded = setOf("media_cache", "media_artwork", "http_cache_innertube", "image_cache")
+    val other = cache.listFiles()?.filterNot { it.name in excluded }?.sumOf { storageFileTreeSize(it) } ?: 0L
+    return StorageBreakdownSnapshot(
+        persistentAudioBytes = storageFileTreeSize(File(app.filesDir, "media_cache")),
+        legacyAudioBytes = storageFileTreeSize(File(cache, "media_cache")),
+        persistentArtworkBytes = storageFileTreeSize(File(app.filesDir, "media_artwork")),
+        legacyArtworkBytes = storageFileTreeSize(File(cache, "media_artwork")),
+        httpCacheBytes = storageFileTreeSize(File(cache, "http_cache_innertube")),
+        imageCacheBytes = storageFileTreeSize(File(cache, "image_cache")),
+        otherCacheBytes = other,
+        codeCacheBytes = storageFileTreeSize(app.codeCacheDir),
+        cacheDirectoryTotalBytes = storageFileTreeSize(cache)
+    )
+}
+
+@Composable
+private fun StorageBreakdownRow(label: String, bytes: Long, emphasized: Boolean = false) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            style = if (emphasized) DsmusicTheme.typography.bodyMedium else DsmusicTheme.typography.bodySmall,
+            fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Normal,
+            color = if (emphasized) DsmusicTheme.colorScheme.onSurface else DsmusicTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            android.text.format.Formatter.formatFileSize(LocalContext.current, bytes.coerceAtLeast(0L)),
+            style = if (emphasized) DsmusicTheme.typography.bodyMedium else DsmusicTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (emphasized) DsmusicTheme.colorScheme.primary else DsmusicTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun StorageBreakdownCard() {
+    val context = LocalContext.current.applicationContext
+    var snapshot by remember(context) { mutableStateOf<StorageBreakdownSnapshot?>(null) }
+    var refreshKey by remember { mutableStateOf(0) }
+    var loading by remember { mutableStateOf(false) }
+    LaunchedEffect(context, refreshKey) {
+        loading = true
+        snapshot = withContext(Dispatchers.IO) { readStorageBreakdown(context) }
+        loading = false
+    }
+    SettingsGroupCard(listOf {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.weight(1f)) {
+                    Text("Storage breakdown", style = DsmusicTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text("Find what is occupying Quantune's app storage.", style = DsmusicTheme.typography.bodySmall, color = DsmusicTheme.colorScheme.onSurfaceVariant)
+                }
+                DsmusicTextButton(onClick = { refreshKey++ }, enabled = !loading) {
+                    Icon(imageVector = Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Refresh")
+                }
+            }
+            val value = snapshot
+            if (value == null) {
+                Text(if (loading) "Calculating storage usage…" else "Storage information unavailable.", style = DsmusicTheme.typography.bodySmall, color = DsmusicTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Text("PERSISTENT APP STORAGE", style = DsmusicTheme.typography.labelSmall, color = DsmusicTheme.colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+                StorageBreakdownRow("Cached audio", value.persistentAudioBytes)
+                StorageBreakdownRow("Saved song artwork", value.persistentArtworkBytes)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(DsmusicTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)))
+                Text("ANDROID CACHE DIRECTORY", style = DsmusicTheme.typography.labelSmall, color = DsmusicTheme.colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+                StorageBreakdownRow("Legacy audio cache", value.legacyAudioBytes)
+                StorageBreakdownRow("Legacy artwork", value.legacyArtworkBytes)
+                StorageBreakdownRow("HTTP / metadata", value.httpCacheBytes)
+                StorageBreakdownRow("Image cache", value.imageCacheBytes)
+                StorageBreakdownRow("Other temporary files", value.otherCacheBytes)
+                StorageBreakdownRow("Code cache", value.codeCacheBytes)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(DsmusicTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)))
+                StorageBreakdownRow("Android cache folder total", value.cacheDirectoryTotalBytes, emphasized = true)
+                Text(
+                    "Cached audio and artwork are retained in persistent app storage. A large legacy audio-cache value means older files are still in Android's cache directory.",
+                    style = DsmusicTheme.typography.bodySmall,
+                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    })
+}
+
 @Composable
 private fun MusicManagementScreen(
     navController: androidx.navigation.NavController,
@@ -2795,55 +2936,43 @@ private fun MusicManagementScreen(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 120.dp)
+                .padding(bottom = 176.dp)
         ) {
             SettingsAccordionSection(stringResource(R.string.settings_header_library)) {
-            SettingsGroupCard(buildList {
-                add { LibrarySourceHeader() }
-                libraryPaths.forEach { path ->
-                    add { LibraryPathRow(path, onRemovePath) }
-                }
+                SettingsGroupCard(listOf { LibrarySourceHeader() })
                 if (libraryPaths.isEmpty()) {
-                    add { LibraryPathRow(stringResource(R.string.setting_music_source_default), null) }
-                }
-                add { AddMorePathRow(onAddPathClick) }
-            })
-
-            
-            }
-            SettingsAccordionSection("Short recordings") {
-            SettingsGroupCard(buildList {
-                add {
-                    IgnoreShortAudioRow(ignoreShortAudio, onIgnoreShortAudioChange)
-                }
-                if (ignoreShortAudio) {
-                    add {
-                        IgnoreShortAudioDurationRow(ignoreShortAudioDuration, onIgnoreShortAudioDurationChange)
+                    SettingsGroupCard(listOf {
+                        LibraryPathRow(stringResource(R.string.setting_music_source_default), null)
+                    })
+                } else {
+                    libraryPaths.forEach { path ->
+                        SettingsGroupCard(listOf { LibraryPathRow(path, onRemovePath) })
                     }
                 }
-            })
-
-            
+                SettingsGroupCard(listOf { AddMorePathRow(onAddPathClick) })
+            }
+            SettingsAccordionSection("Short recordings") {
+                SettingsGroupCard(listOf { IgnoreShortAudioRow(ignoreShortAudio, onIgnoreShortAudioChange) })
+                if (ignoreShortAudio) {
+                    SettingsGroupCard(listOf {
+                        IgnoreShortAudioDurationRow(ignoreShortAudioDuration, onIgnoreShortAudioDurationChange)
+                    })
+                }
             }
             SettingsAccordionSection("Hidden Folders") {
-            SettingsGroupCard(buildList {
-                hiddenFolders.forEach { folder ->
-                    add { HiddenFolderRow(folder, onRemoveHiddenFolder) }
-                }
                 if (hiddenFolders.isEmpty()) {
-                    add {
+                    SettingsGroupCard(listOf {
                         DsmusicListItem(
                             headlineContent = { Text("No hidden folders yet", style = DsmusicTheme.typography.bodyLarge) },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                         )
+                    })
+                } else {
+                    hiddenFolders.forEach { folder ->
+                        SettingsGroupCard(listOf { HiddenFolderRow(folder, onRemoveHiddenFolder) })
                     }
                 }
-                add {
-                    AddHiddenFolderRow(onAddHiddenFolderClick)
-                }
-            })
-
-            
+                SettingsGroupCard(listOf { AddHiddenFolderRow(onAddHiddenFolderClick) })
             }
             SettingsAccordionSection("Downloads") {
             SettingsGroupCard(listOf(
@@ -2853,40 +2982,36 @@ private fun MusicManagementScreen(
             
             }
             SettingsAccordionSection(stringResource(R.string.settings_header_storage)) {
-            SettingsGroupCard(buildList {
-                add { SongCacheSizeRow(songCacheSize, songCacheMaxSize, onSongCacheMaxSizeChange, onClearSongCache) }
-                add { ImageCacheSizeRow(imageCacheSize, imageCacheMaxSize, onImageCacheMaxSizeChange, onClearImageCache) }
-                add {
+                StorageBreakdownCard()
+                SettingsGroupCard(listOf { SongCacheSizeRow(songCacheSize, songCacheMaxSize, onSongCacheMaxSizeChange, onClearSongCache) })
+                SettingsGroupCard(listOf { ImageCacheSizeRow(imageCacheSize, imageCacheMaxSize, onImageCacheMaxSizeChange, onClearImageCache) })
+                SettingsGroupCard(listOf {
                     DsmusicListItem(
                         modifier = Modifier.clickable { onMediaCacheToggle(!mediaCacheEnabled) },
                         headlineContent = { Text("Save online audio", fontWeight = FontWeight.SemiBold) },
                         supportingContent = {
-                            Text(if (mediaCacheEnabled) "Temporarily save online songs so they load faster next time."
+                            Text(
+                                if (mediaCacheEnabled) "Temporarily save online songs so they load faster next time."
                                 else "Online songs will not be saved for faster repeat playback.",
-                                color = DsmusicTheme.colorScheme.onSurfaceVariant)
+                                color = DsmusicTheme.colorScheme.onSurfaceVariant
+                            )
                         },
                         trailingContent = { DsmusicSwitch(checked = mediaCacheEnabled, onCheckedChange = onMediaCacheToggle) },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                     )
-                }
+                })
                 if (mediaCacheEnabled) {
-                    add {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically) {
+                    SettingsGroupCard(listOf {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text("Online audio storage limit", style = DsmusicTheme.typography.bodyLarge)
-                                Text(mediaCacheLimitGb.toString() + " GB", style = DsmusicTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold, color = DsmusicTheme.colorScheme.primary)
+                                Text("$mediaCacheLimitGb GB", style = DsmusicTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = DsmusicTheme.colorScheme.primary)
                             }
-                            Slider(value = mediaCacheLimitGb.toFloat(),
-                                onValueChange = { onMediaCacheLimitChange(it.toInt().coerceIn(1, 10)) },
-                                valueRange = 1f..10f, steps = 8)
-                            Text("This limit takes effect right away. When storage is full, the oldest saved songs are removed first.",
-                                style = DsmusicTheme.typography.bodySmall, color = DsmusicTheme.colorScheme.onSurfaceVariant)
+                            Slider(value = mediaCacheLimitGb.toFloat(), onValueChange = { onMediaCacheLimitChange(it.toInt().coerceIn(1, 10)) }, valueRange = 1f..10f, steps = 8)
+                            Text("This limit takes effect right away. When storage is full, the oldest saved songs are removed first.", style = DsmusicTheme.typography.bodySmall, color = DsmusicTheme.colorScheme.onSurfaceVariant)
                         }
-                    }
+                    })
                 }
-            })
             }
             
         }
@@ -2910,17 +3035,20 @@ private fun BackupRestoreScreen(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 120.dp)
+                .padding(bottom = 176.dp)
         ) {
             SettingsAccordionSection("Backup & Restore") {
-            SettingsGroupCard(buildList {
-                add {
+                SettingsGroupCard(listOf {
                     DsmusicListItem(
                         onClick = onBackupClick,
                         content = {
                             Column {
                                 Text("Export Settings & Library", style = DsmusicTheme.typography.bodyLarge)
-                                Text("Save settings, appearance, player customisation, favourites, playlists and Explore preferences", style = DsmusicTheme.typography.bodyMedium, color = DsmusicTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    "Save settings, appearance, player customisation, favourites, playlists and Explore preferences",
+                                    style = DsmusicTheme.typography.bodyMedium,
+                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         },
                         leadingContent = {
@@ -2933,8 +3061,8 @@ private fun BackupRestoreScreen(
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                     )
-                }
-                add {
+                })
+                SettingsGroupCard(listOf {
                     DsmusicListItem(
                         onClick = { onIncludeListeningHistoryChange(!includeListeningHistory) },
                         content = {
@@ -2955,14 +3083,18 @@ private fun BackupRestoreScreen(
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                     )
-                }
-                add {
+                })
+                SettingsGroupCard(listOf {
                     DsmusicListItem(
                         onClick = onRestoreClick,
                         content = {
                             Column {
                                 Text("Import Settings & Library", style = DsmusicTheme.typography.bodyLarge)
-                                Text("Restore settings and library data. Sign in again on this device; downloaded audio and stream-cache files are not included.", style = DsmusicTheme.typography.bodyMedium, color = DsmusicTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    "Restore settings and library data. Sign in again on this device; downloaded audio and stream-cache files are not included.",
+                                    style = DsmusicTheme.typography.bodyMedium,
+                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         },
                         leadingContent = {
@@ -2975,14 +3107,11 @@ private fun BackupRestoreScreen(
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                     )
-                }
-            })
+                })
             }
-            
         }
     }
 }
-
 @Composable
 private fun IgnoreShortAudioRow(checked: Boolean, onToggle: (Boolean) -> Unit) {
     DsmusicListItem(
@@ -3126,7 +3255,7 @@ private fun AccountScreen(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 120.dp)
+                .padding(bottom = 176.dp)
         ) {
             SettingsAccordionSection("YouTube Music Account") {
             SettingsGroupCard(listOf(
@@ -3158,7 +3287,7 @@ private fun AccountScreen(
                             )
                             if (ytCookies != null) {
                                 Text(
-                                    text = "Profile: Quantune User",
+                                    text = "Profile: D.S Music User",
                                     style = DsmusicTheme.typography.bodyMedium,
                                     color = DsmusicTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold
@@ -3201,10 +3330,8 @@ private fun AccountScreen(
             
             }
             SettingsAccordionSection("Playlists & privacy") {
-            SettingsGroupCard(listOf(
-                { PauseHistoryRow(pauseHistory, onPauseHistoryChange) },
-                { ManualSyncRow() }
-            ))
+                SettingsGroupCard(listOf { PauseHistoryRow(pauseHistory, onPauseHistoryChange) })
+                SettingsGroupCard(listOf { ManualSyncRow() })
             }
             
         }
@@ -3414,7 +3541,7 @@ private fun AppearanceScreen(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 120.dp)
+                .padding(bottom = 176.dp)
         ) {
             Text(
                 "Change how the player and app look. Choose layouts, button styles, colours and text settings.",
@@ -4220,6 +4347,7 @@ private val playerButtonNames = linkedMapOf(
     "dislike" to "Not for me",
     "sleep" to "Sleep timer",
     "shuffle" to "Shuffle",
+    "listen_together" to "Listen Together",
     "repeat" to "Repeat"
 )
 
@@ -4235,7 +4363,7 @@ private fun PlayerButtonsSettings(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                "Choose 3 to 6 actions and arrange their order in the player.",
+                "Choose 3 to 7 actions and arrange their order in the player.",
                 style = DsmusicTheme.typography.bodySmall,
                 color = DsmusicTheme.colorScheme.onSurfaceVariant
             )
@@ -4285,9 +4413,9 @@ private fun PlayerButtonsSettings(
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         com.dsann.music.ui.theme.Checkbox(
                             checked = false,
-                            enabled = orderedSelected.size < 6,
+                            enabled = orderedSelected.size < 7,
                             onCheckedChange = { enabled ->
-                                if (enabled && orderedSelected.size < 6) {
+                                if (enabled && orderedSelected.size < 7) {
                                     onSelectionChanged(orderedSelected + key)
                                 }
                             }
@@ -4303,12 +4431,14 @@ private fun PlayerButtonsSettings(
                 }
             }
             Text(
-                "${selected.size}/6 selected",
+                "${selected.size}/7 selected",
                 color = DsmusicTheme.colorScheme.primary,
                 style = DsmusicTheme.typography.labelSmall
             )
             DsmusicTextButton(onClick = {
-                onSelectionChanged(listOf("lyrics", "video", "queue", "share", "download"))
+                onSelectionChanged(listOf(
+                    "lyrics", "video", "queue", "share", "download", "listen_together", "repeat"
+                ))
             }) { Text("Restore default buttons") }
         }
     })
@@ -4558,8 +4688,11 @@ private fun PlaybackScreen(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 120.dp)
+                .padding(bottom = 176.dp)
         ) {
+            SettingsAccordionSection("Lyrics Translation") {
+                AiLyricsTranslationSettingsSection()
+            }
             SettingsAccordionSection("Autoplay") {
             SettingsGroupCard(listOf(
                 { AutoplayRow(autoplayEnabled, onAutoplayToggle) }
@@ -4809,7 +4942,7 @@ private fun WhatsNewScreen(navController: androidx.navigation.NavController) {
         Triple<List<com.dsann.music.update.GitHubReleaseClient.ReleaseInfo>, Boolean, String?>?
     >(initialValue = null, retryKey) {
         value = withContext(Dispatchers.IO) {
-            val client = com.dsann.music.update.GitHubReleaseClient("DS-ann", "Quantune")
+            val client = com.dsann.music.update.GitHubReleaseClient("DS-ann", "D.S-Music2")
             val loadedReleases = client.getAllReleases()
             val requestError = client.lastError
             Triple(
@@ -4869,7 +5002,7 @@ private fun WhatsNewScreen(navController: androidx.navigation.NavController) {
                     .padding(paddingValues)
                     .padding(horizontal = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(top = 24.dp, bottom = 120.dp)
+                contentPadding = PaddingValues(top = 24.dp, bottom = 176.dp)
             ) {
                 val groupedReleases = releases!!.groupBy { release ->
                     release.tagName.removePrefix("v").removePrefix("V").substringBefore('.')
@@ -5066,7 +5199,7 @@ private fun AboutBrandCard() {
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_launcher_art),
-                        contentDescription = "Quantune app icon",
+                        contentDescription = "D.S Music app icon",
                         tint = Color.Unspecified,
                         modifier = Modifier.size(70.dp)
                     )
@@ -5717,7 +5850,7 @@ private fun SongCacheSizeRow(
     onClear: () -> Unit
 ) {
     CacheSizeRow(
-        title = "Temporary songs",
+        title = "Song & stream storage",
         currentSize = cacheSize,
         maxSize = maxSize,
         onMaxSizeChange = onMaxSizeChange,
@@ -5783,7 +5916,7 @@ private fun CreditsCard(onOpenUrl: (String) -> Unit) {
                     )
                     Spacer(Modifier.height(3.dp))
                     Text(
-                        "Quantune Developer",
+                        "D.S Music Developer",
                         style = DsmusicTheme.typography.bodySmall,
                         color = DsmusicTheme.colorScheme.onSurfaceVariant
                     )
@@ -5797,7 +5930,7 @@ private fun CreditsCard(onOpenUrl: (String) -> Unit) {
             }
 
             DsmusicOutlinedButton(
-                onClick = { onOpenUrl("https://github.com/DS-ann/Quantune") },
+                onClick = { onOpenUrl("https://github.com/DS-ann/D.S-Music2") },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(14.dp)
             ) {
@@ -5960,80 +6093,67 @@ private fun FeedbackScreen(navController: androidx.navigation.NavController) {
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 120.dp)
+                .padding(bottom = 176.dp)
         ) {
             SettingsAccordionSection("Report & Request") {
-            SettingsGroupCard(
-                items = listOf(
-                    {
-                        DsmusicListItem(
-                            headlineContent = { Text("Report a Bug", style = DsmusicTheme.typography.bodyLarge) },
-                            supportingContent = { Text("Open a form to report a problem", style = DsmusicTheme.typography.bodyMedium) },
-                            leadingContent = { Icon(Icons.Rounded.BugReport, null, tint = DsmusicTheme.colorScheme.error) },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            modifier = Modifier.clickable {
-                                val title = URLEncoder.encode("[Bug] ", "UTF-8")
-                                val body = URLEncoder.encode("## Description\n\n\n## Device Information\n$debugInfo\n\n## Steps to Reproduce\n1.\n2.\n3.\n", "UTF-8")
-                                val url = "https://github.com/DS-ann/Quantune/issues/new?title=$title&body=$body"
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                            }
-                        )
-                    },
-                    {
-                        DsmusicListItem(
-                            headlineContent = { Text("Request Feature", style = DsmusicTheme.typography.bodyLarge) },
-                            supportingContent = { Text("Suggest a new feature for Quantune", style = DsmusicTheme.typography.bodyMedium) },
-                            leadingContent = { Icon(Icons.Rounded.OpenInNew, null, tint = DsmusicTheme.colorScheme.primary) },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            modifier = Modifier.clickable {
-                                val title = URLEncoder.encode("[Feature] ", "UTF-8")
-                                val body = URLEncoder.encode("## Feature Description\n\n\n## Why is this needed?\n\n", "UTF-8")
-                                val url = "https://github.com/DS-ann/Quantune/issues/new?title=$title&body=$body"
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                            }
-                        )
-                    }
-                )
-            )
-
-            
+                SettingsGroupCard(listOf {
+                    DsmusicListItem(
+                        headlineContent = { Text("Report a Bug", style = DsmusicTheme.typography.bodyLarge) },
+                        supportingContent = { Text("Open a form to report a problem", style = DsmusicTheme.typography.bodyMedium) },
+                        leadingContent = { Icon(Icons.Rounded.BugReport, null, tint = DsmusicTheme.colorScheme.error) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier.clickable {
+                            val title = URLEncoder.encode("[Bug] ", "UTF-8")
+                            val body = URLEncoder.encode("## Description\n\\n\\n## Device Information\\n$debugInfo\\n\\n## Steps to Reproduce\\n1.\\n2.\\n3.\\n", "UTF-8")
+                            val url = "https://github.com/DS-ann/D.S-Music2/issues/new?title=$title&body=$body"
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        }
+                    )
+                })
+                SettingsGroupCard(listOf {
+                    DsmusicListItem(
+                        headlineContent = { Text("Request Feature", style = DsmusicTheme.typography.bodyLarge) },
+                        supportingContent = { Text("Suggest a new feature for D.S Music", style = DsmusicTheme.typography.bodyMedium) },
+                        leadingContent = { Icon(Icons.Rounded.OpenInNew, null, tint = DsmusicTheme.colorScheme.primary) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier.clickable {
+                            val title = URLEncoder.encode("[Feature] ", "UTF-8")
+                            val body = URLEncoder.encode("## Feature Description\n\\n\\n## Why is this needed?\\n\\n", "UTF-8")
+                            val url = "https://github.com/DS-ann/D.S-Music2/issues/new?title=$title&body=$body"
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        }
+                    )
+                })
             }
             SettingsAccordionSection("Debug Information") {
-            SettingsGroupCard(
-                items = listOf(
-                    {
-                        DsmusicListItem(
-                            headlineContent = { Text("Copy Debug Information", style = DsmusicTheme.typography.bodyLarge) },
-                            supportingContent = { Text("Copy your device and app version", style = DsmusicTheme.typography.bodyMedium) },
-                            leadingContent = { Icon(Icons.Rounded.ContentCopy, null, tint = DsmusicTheme.colorScheme.onSurfaceVariant) },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            modifier = Modifier.clickable {
-                                val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("Debug Info", debugInfo)
-                                clipboardManager.setPrimaryClip(clip)
+                SettingsGroupCard(listOf {
+                    DsmusicListItem(
+                        headlineContent = { Text("Copy Debug Information", style = DsmusicTheme.typography.bodyLarge) },
+                        supportingContent = { Text("Copy your device and app version", style = DsmusicTheme.typography.bodyMedium) },
+                        leadingContent = { Icon(Icons.Rounded.ContentCopy, null, tint = DsmusicTheme.colorScheme.onSurfaceVariant) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier.clickable {
+                            val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboardManager.setPrimaryClip(ClipData.newPlainText("Debug Info", debugInfo))
+                        }
+                    )
+                })
+                SettingsGroupCard(listOf {
+                    DsmusicListItem(
+                        headlineContent = { Text("Export Logs", style = DsmusicTheme.typography.bodyLarge) },
+                        supportingContent = { Text("Share app details to help investigate a problem", style = DsmusicTheme.typography.bodyMedium) },
+                        leadingContent = { Icon(Icons.Rounded.Description, null, tint = DsmusicTheme.colorScheme.onSurfaceVariant) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier.clickable {
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                putExtra(Intent.EXTRA_TEXT, debugInfo)
+                                type = "text/plain"
                             }
-                        )
-                    },
-                    {
-                        DsmusicListItem(
-                            headlineContent = { Text("Export Logs", style = DsmusicTheme.typography.bodyLarge) },
-                            supportingContent = { Text("Share app details to help investigate a problem", style = DsmusicTheme.typography.bodyMedium) },
-                            leadingContent = { Icon(Icons.Rounded.Description, null, tint = DsmusicTheme.colorScheme.onSurfaceVariant) },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            modifier = Modifier.clickable {
-                                val sendIntent: Intent = Intent().apply {
-                                    action = Intent.ACTION_SEND
-                                    putExtra(Intent.EXTRA_TEXT, debugInfo)
-                                    type = "text/plain"
-                                }
-                                context.startActivity(Intent.createChooser(sendIntent, "Export Logs"))
-                            }
-                        )
-                    }
-                )
-            )
+                            context.startActivity(Intent.createChooser(sendIntent, "Export Logs"))
+                        }
+                    )
+                })
             }
-            
         }
     }
 }

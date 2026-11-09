@@ -6,6 +6,7 @@ import com.dsann.music.ui.theme.DsmusicTextButton
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -29,6 +30,8 @@ import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -64,6 +67,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
@@ -98,6 +102,8 @@ import com.dsann.music.ui.SettingsViewModel
 import com.dsann.music.ui.explore.QueueSongActionsBottomSheet
 import com.dsann.music.R
 import com.dsann.music.data.lyrics.LyricLine
+import com.dsann.music.data.features.AiLyricsTranslationSettingsStore
+import com.dsann.music.data.features.AiLyricsTranslationSession
 import com.dsann.music.data.lyrics.LineSyncedLyricTimeline
 import com.dsann.music.data.lyrics.LyricsResult
 import com.dsann.music.model.SongItem
@@ -109,6 +115,7 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 
 @Composable
@@ -630,7 +637,11 @@ private fun PortraitSyncedLyricPreview(
                 }
             }
 
-            if (fittedText.second) Text(
+            val activeLyricsTextLayout = remember(activeLineText, fittedText.first, availableWidthPx) {
+                androidx.compose.runtime.mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null)
+            }
+
+            if (fittedText.second) LyricsText(
                 text = activeLineText.orEmpty(),
                 style = previewTextStyle.copy(
                     fontSize = fittedText.first.sp,
@@ -640,8 +651,13 @@ private fun PortraitSyncedLyricPreview(
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Clip,
+                outlineWidth = 0.dp,
+                onTextLayout = { activeLyricsTextLayout.value = it },
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().onGloballyPositioned { coordinates ->
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth()
+                    .onGloballyPositioned { coordinates ->
                     val position = coordinates.positionInRoot()
                     onLineBoundsChanged(
                         Rect(
@@ -684,6 +700,97 @@ private fun LandscapePlayerDetailsPane(
     var showProviderPicker by remember { mutableStateOf(false) }
     val panelShape = RoundedCornerShape(24.dp)
 
+    val context = LocalContext.current
+    val translationSettingsStore = remember(context) {
+        AiLyricsTranslationSettingsStore(context)
+    }
+    val translationSettings = remember(translationSettingsStore) {
+        translationSettingsStore.load()
+    }
+    val translationSource = remember(syncedLyrics, plainLyrics) {
+        when {
+            !syncedLyrics.isNullOrEmpty() -> syncedLyrics.joinToString("\n") { line ->
+                line.content.ifBlank { line.words.joinToString("") { word -> word.text } }
+            }
+            !plainLyrics.isNullOrBlank() -> plainLyrics.orEmpty()
+            else -> ""
+        }
+    }
+    val translationKey = remember(currentSong?.id, translationSource, translationSettings) {
+        currentSong?.id?.takeIf { translationSource.isNotBlank() }?.let { songId ->
+            AiLyricsTranslationSession.cacheKey(songId, translationSource, translationSettings)
+        }
+    }
+    val translationCache by AiLyricsTranslationSession.entries.collectAsStateWithLifecycle()
+    val cachedTranslation = translationKey?.let { translationCache[it] }
+    val translationPreferences = remember(context) {
+        context.applicationContext.getSharedPreferences(
+            "lyrics_translation_settings",
+            Context.MODE_PRIVATE
+        )
+    }
+    var translationEnabled by remember(translationSettings.enabled) {
+        mutableStateOf(translationSettings.enabled)
+    }
+    var showTranslatedLyrics by remember(currentSong?.id, translationKey) {
+        mutableStateOf(cachedTranslation != null)
+    }
+    var translationBusy by remember { mutableStateOf(false) }
+    var translationMessage by remember { mutableStateOf("") }
+    val translationScope = rememberCoroutineScope()
+
+    DisposableEffect(translationPreferences) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
+            if (key == "enabled") {
+                translationEnabled = preferences.getBoolean("enabled", true)
+                if (!translationEnabled) {
+                    showTranslatedLyrics = false
+                    translationMessage = ""
+                }
+            }
+        }
+        translationPreferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            translationPreferences.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+    LaunchedEffect(cachedTranslation) {
+        if (cachedTranslation != null) {
+            showTranslatedLyrics = true
+        }
+    }
+    val requestTranslation: () -> Unit = {
+        when {
+            !translationEnabled -> translationMessage = "Enable translation in Settings → Playback."
+            translationBusy -> Unit
+            cachedTranslation != null -> showTranslatedLyrics = !showTranslatedLyrics
+            currentSong == null || translationSource.isBlank() ->
+                translationMessage = "Load lyrics before translating."
+            else -> {
+                translationBusy = true
+                translationMessage = "Translating…"
+                translationScope.launch {
+                    try {
+                        val result = AiLyricsTranslationSession.translate(
+                            context = context,
+                            songId = currentSong.id,
+                            source = translationSource
+                        )
+                        showTranslatedLyrics = true
+                        translationMessage = "Translated with ${result.provider}."
+                    } catch (error: Exception) {
+                        translationMessage = error.message ?: "Lyrics translation failed."
+                    } finally {
+                        translationBusy = false
+                    }
+                }
+            }
+        }
+    }
+    val translatedSyncedLyrics = cachedTranslation?.let {
+        AiLyricsTranslationSession.mapToSyncedLines(syncedLyrics, it.translatedText)
+    }
+
     Column(
         modifier = modifier
             .background(contentColor.copy(alpha = 0.035f), panelShape)
@@ -701,6 +808,18 @@ private fun LandscapePlayerDetailsPane(
                 style = DsmusicTheme.typography.labelLarge
             )
             Spacer(Modifier.weight(1f))
+            if (translationEnabled) {
+                DsmusicIconButton(
+                    onClick = requestTranslation,
+                    enabled = !translationBusy
+                ) {
+                    Icon(
+                        Icons.Rounded.Translate,
+                        contentDescription = if (showTranslatedLyrics) "Show original lyrics" else "Translate lyrics",
+                        tint = if (showTranslatedLyrics) accentColor else contentColor
+                    )
+                }
+            }
             DsmusicIconButton(onClick = { showProviderPicker = true }) {
                 Icon(Icons.Rounded.MoreVert, contentDescription = "Choose lyrics source")
             }
@@ -718,12 +837,24 @@ private fun LandscapePlayerDetailsPane(
             )
         }
 
+        if (translationMessage.isNotBlank()) {
+            Text(
+                translationMessage,
+                color = secondaryColor,
+                style = DsmusicTheme.typography.labelSmall,
+                maxLines = 1
+            )
+        }
         Spacer(Modifier.height(10.dp))
 
         PlayerLyricsContent(
             currentSong = currentSong,
-            syncedLyrics = syncedLyrics,
-            plainLyrics = plainLyrics,
+            syncedLyrics = if (showTranslatedLyrics) translatedSyncedLyrics else syncedLyrics,
+            plainLyrics = if (showTranslatedLyrics && translatedSyncedLyrics == null) {
+                cachedTranslation?.translatedText ?: plainLyrics
+            } else {
+                plainLyrics
+            },
             isLoading = isLyricsLoading,
             isPlaying = isPlaying,
             lyricsError = lyricsError,
@@ -770,6 +901,7 @@ fun FullPlayerScreen(
     accentColor: Color,
     context: Context,
     onCollapse: () -> Unit,
+    onNavigateToListenTogether: () -> Unit,
     dragModifier: Modifier = Modifier,
     isPlayerVisible: Boolean,
     modifier: Modifier = Modifier
@@ -857,6 +989,7 @@ fun FullPlayerScreen(
         currentPositionFlow = viewModel.currentPosition,
         isPlayerVisible = isPlayerVisible,
         onCollapse = onCollapse,
+        onNavigateToListenTogether = onNavigateToListenTogether,
         onPlayPauseClick = {
             if (uiState.isPlaying) viewModel.pauseAudio() else viewModel.playAudio()
         },
@@ -915,6 +1048,7 @@ fun FullPlayer(
     currentPositionFlow: StateFlow<Int>,
     isPlayerVisible: Boolean,
     onCollapse: () -> Unit,
+    onNavigateToListenTogether: () -> Unit,
     onPlayPauseClick: () -> Unit,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
@@ -929,7 +1063,9 @@ fun FullPlayer(
     playerLayout: String = "Standard",
     playerArtworkScale: Float = 1f,
     playerButtonsPill: Boolean = true,
-    playerButtons: List<String> = listOf("lyrics", "video", "queue", "share", "download"),
+    playerButtons: List<String> = listOf(
+        "lyrics", "video", "queue", "share", "download", "listen_together", "repeat"
+    ),
     playerTitleAlign: String = "Left",
     playerTitleSize: String = "Medium",
     playerTitleWeight: String = "Bold",
@@ -1368,8 +1504,9 @@ fun FullPlayer(
             label = "LyricsCircularReveal"
         )
 
-        // Tie the visibility/readiness directly to the lyricsRevealProgress animation state
-        val lyricsContentReady = lyricsRevealProgress > 0.8f
+        // Finish the existing reveal before composing populated lyrics. This prevents
+        // the first text-layout / karaoke-geometry pass from competing with the transition.
+        val lyricsContentReady = lyricsRevealProgress >= 1f
 
         val playerControlsContent: @Composable ColumnScope.() -> Unit = {
             // Header Row (Nav controls + collapse) - Symmetric centering
@@ -1726,7 +1863,7 @@ fun FullPlayer(
                             onClick = {
                                 val shareIntent = Intent().apply {
                                     this.action = Intent.ACTION_SEND
-                                    putExtra(Intent.EXTRA_TEXT, "Listening on Quantune. Check out: https://music.youtube.com/watch?v=${songForActions?.videoId.orEmpty()}")
+                                    putExtra(Intent.EXTRA_TEXT, "Listening on D.S Music. Check out: https://music.youtube.com/watch?v=${songForActions?.videoId.orEmpty()}")
                                     type = "text/plain"
                                 }
                                 context.startActivity(Intent.createChooser(shareIntent, "Share Track"))
@@ -1806,6 +1943,18 @@ fun FullPlayer(
                             label = "Shuffle",
                             isSelected = isShuffleEnabled,
                             onClick = { viewModel.toggleShuffle() },
+                            contentColor = contentColor,
+                            accentColor = dynamicAccentColor,
+                            isDark = isDark
+                        )
+                        "listen_together" -> PillChip(
+                            style = playerButtonStyle,
+                            icon = Icons.Rounded.Groups,
+                            label = "Listen Together",
+                            onClick = {
+                                onCollapse()
+                                onNavigateToListenTogether()
+                            },
                             contentColor = contentColor,
                             accentColor = dynamicAccentColor,
                             isDark = isDark
@@ -2269,7 +2418,7 @@ fun FullPlayer(
                 }
                 val sourceText = when {
                     song.isDownloadedOffline -> "Downloaded audio file (offline)"
-                    song.isCachedTrack && !songFileMetadata.isRemote -> "Quantune cache (cached audio stream)"
+                    song.isCachedTrack && !songFileMetadata.isRemote -> "D.S Music cache (cached audio stream)"
                     !song.videoId.isNullOrBlank() && songFileMetadata.isRemote -> "YouTube Music stream"
                     songFileMetadata.isRemote -> "Remote audio stream"
                     else -> "Device audio file"

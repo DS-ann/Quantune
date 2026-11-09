@@ -85,6 +85,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.dsann.music.data.innertube.AlbumPage
@@ -115,7 +116,8 @@ fun AlbumDetailView(
     onSongClick: (OnlineSong, List<OnlineSong>, Int) -> Unit,
     onSongMenuClick: (OnlineSong) -> Unit,
     onStartRadioClick: (String) -> Unit,
-    onCollectionMenuClick: () -> Unit
+    onCollectionMenuClick: () -> Unit,
+    bottomContentPadding: Dp = 176.dp
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -127,6 +129,7 @@ fun AlbumDetailView(
         subtitle = "Album • ${albumPage.songs.size} tracks",
         sharedElementKey = albumPage.album.browseId,
         onBack = onBack,
+        bottomContentPadding = bottomContentPadding,
         landscapeHeaderOnLeft = true,
         compactCoverHeader = true,
         headerActions = {
@@ -185,7 +188,8 @@ fun PlaylistDetailView(
     onStartRadioClick: (String) -> Unit,
     onPlaylistSaved: (String, String, String) -> Unit = { _, _, _ -> },
     onPlaylistDeleted: () -> Unit = {},
-    onCollectionMenuClick: () -> Unit = {}
+    onCollectionMenuClick: () -> Unit = {},
+    bottomContentPadding: Dp = 176.dp
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -209,6 +213,7 @@ fun PlaylistDetailView(
         },
         sharedElementKey = playlistPage.playlist.playlistId,
         onBack = onBack,
+        bottomContentPadding = bottomContentPadding,
         landscapeHeaderOnLeft = true,
         headerActions = {
             Row(
@@ -425,7 +430,8 @@ fun ArtistDetailView(
     onSongMenuClick: (OnlineSong) -> Unit,
     onSubscribeClick: ((String) -> Unit)? = null,
     onStartRadioClick: ((String) -> Unit)? = null,
-    onSectionClick: ((String, String?, String) -> Unit)? = null
+    onSectionClick: ((String, String?, String) -> Unit)? = null,
+    bottomContentPadding: Dp = 176.dp
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -465,6 +471,7 @@ fun ArtistDetailView(
         isCircular = true,
         sharedElementKey = artistPage.artist.browseId,
         onBack = onBack,
+        bottomContentPadding = bottomContentPadding,
         landscapeHeaderOnLeft = true,
         compactCoverHeader = true,
         headerActions = {
@@ -645,6 +652,7 @@ fun AdaptiveDetailContainer(
     onBack: () -> Unit,
     landscapeHeaderOnLeft: Boolean = false,
     compactCoverHeader: Boolean = false,
+    bottomContentPadding: Dp = 176.dp,
     content: LazyListScope.() -> Unit
 ) {
     val lazyListState = rememberLazyListState()
@@ -663,7 +671,12 @@ fun AdaptiveDetailContainer(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize()
+        // Paint the page surface behind the system status bar, then inset all page
+        // content below it. This keeps genre/playlist details aligned during transitions.
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DsmusicTheme.colorScheme.background)
+            .statusBarsPadding()
     ) {
         if (isLandscape) {
         if (landscapeHeaderOnLeft) {
@@ -678,7 +691,7 @@ fun AdaptiveDetailContainer(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .padding(start = 18.dp, top = 10.dp, end = 16.dp, bottom = 12.dp),
+                        .padding(start = 18.dp, top = 10.dp, end = 16.dp, bottom = bottomContentPadding + 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Row(
@@ -785,7 +798,7 @@ fun AdaptiveDetailContainer(
                 LazyColumn(
                     state = lazyListState,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
-                    contentPadding = PaddingValues(top = 18.dp, bottom = 120.dp, start = 16.dp, end = 20.dp)
+                    contentPadding = PaddingValues(top = 18.dp, bottom = bottomContentPadding, start = 16.dp, end = 20.dp)
                 ) {
                     content()
                 }
@@ -833,7 +846,7 @@ fun AdaptiveDetailContainer(
                 LazyColumn(
                     state = lazyListState,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
-                    contentPadding = PaddingValues(top = 32.dp, bottom = 120.dp, start = 8.dp, end = 24.dp)
+                    contentPadding = PaddingValues(top = 32.dp, bottom = bottomContentPadding, start = 8.dp, end = 24.dp)
                 ) {
                     item {
                         Text(
@@ -871,7 +884,7 @@ fun AdaptiveDetailContainer(
             }
 
             // Floating Back Button (High-contrast visible)
-            Box(modifier = Modifier.statusBarsPadding().padding(start = 16.dp, top = 16.dp)) {
+            Box(modifier = Modifier.padding(start = 16.dp, top = 16.dp)) {
                 DsmusicIconButton(
                     onClick = onBack,
                     modifier = Modifier.background(DsmusicTheme.colorScheme.surfaceVariant, CircleShape),
@@ -895,7 +908,7 @@ fun AdaptiveDetailContainer(
         LazyColumn(
             state = lazyListState,
             modifier = Modifier.fillMaxSize().background(DsmusicTheme.colorScheme.background),
-            contentPadding = PaddingValues(top = 56.dp, bottom = 120.dp)
+            contentPadding = PaddingValues(top = 56.dp, bottom = bottomContentPadding)
         ) {
             item(key = "detail-cover-header") {
                 Column(
@@ -967,7 +980,6 @@ fun AdaptiveDetailContainer(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             DsmusicIconButton(
@@ -1065,7 +1077,7 @@ fun AdaptiveDetailContainer(
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 120.dp)
+                contentPadding = PaddingValues(bottom = bottomContentPadding)
             ) {
                 item { Spacer(modifier = Modifier.height(240.dp)) }
 
@@ -1108,7 +1120,7 @@ fun AdaptiveDetailContainer(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 DsmusicIconButton(
                     onClick = onBack,
@@ -1360,7 +1372,8 @@ fun SectionDetailView(
     onPlaylistClick: (OnlinePlaylist) -> Unit,
     onArtistClick: (OnlineArtist) -> Unit,
     onSongMenuClick: (OnlineSong) -> Unit,
-    onStartRadioClick: (String) -> Unit
+    onStartRadioClick: (String) -> Unit,
+    bottomContentPadding: Dp = 176.dp
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -1375,6 +1388,7 @@ fun SectionDetailView(
             subtitle = "Songs • ${songs.size} items",
             sharedElementKey = section.title,
             onBack = onBack,
+            bottomContentPadding = bottomContentPadding,
             headerActions = {
                 ExpressiveConnectedButtonGroup(
                     onShuffleClick = { if (songs.isNotEmpty()) onSongClick(songs.first(), songs.shuffled(), 0) },
@@ -1419,6 +1433,7 @@ fun SectionDetailView(
             subtitle = "Collection • ${section.items.size} items",
             sharedElementKey = section.title,
             onBack = onBack,
+            bottomContentPadding = bottomContentPadding,
             headerActions = null
         ) {
             item {

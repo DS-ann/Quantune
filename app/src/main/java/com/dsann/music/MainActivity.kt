@@ -40,6 +40,8 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -52,6 +54,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.dsann.music.ui.theme.DsmusicTheme
+import com.dsann.music.ui.theme.Icon
+import com.dsann.music.ui.theme.Text
 import com.dsann.music.ui.theme.LocalPageTransitionDurationMillis
 import com.dsann.music.ui.theme.Scaffold
 import androidx.compose.runtime.Composable
@@ -104,6 +108,7 @@ import com.dsann.music.ui.CachedRootTabLifecycle
 import com.dsann.music.ui.AudioFormatChoiceDialogHost
 import com.dsann.music.ui.PlayerBottomSheetCompose
 import com.dsann.music.ui.MiniPlayerHeight
+import com.dsann.music.ui.ListenTogetherPlaybackBridge
 import com.dsann.music.ui.SettingsScreenContent
 import com.dsann.music.ui.SettingsViewModel
 import com.dsann.music.ui.TagEditorScreenEntryPoint
@@ -111,6 +116,8 @@ import com.dsann.music.ui.explore.ExploreScreen
 import com.dsann.music.ui.explore.GoogleSignInScreen
 import com.dsann.music.ui.library.LibraryScreen
 import com.dsann.music.ui.library.LocalMusicScreen
+import com.dsann.music.ui.library.cancelLocalMusicScan
+import com.dsann.music.ui.library.scanLocalFiles
 import com.dsann.music.ui.theme.DsmusicNavigationBar
 import com.dsann.music.ui.theme.DsmusicNavigationDestination
 import com.dsann.music.ui.theme.DsmusicAppTheme
@@ -209,10 +216,12 @@ class MainActivity : AppCompatActivity() {
             }
 
             val currentSong by playerViewModel.currentSong.collectAsStateWithLifecycle()
+            val measuredBottomNavHeightPx by playerViewModel.bottomNavHeight.collectAsStateWithLifecycle()
             val playerBackgroundColor by playerViewModel.playerBackgroundColor.collectAsStateWithLifecycle()
             val dynamicAlbumColor = if (currentSong != null) playerBackgroundColor else null
 
             DsmusicAppTheme(darkTheme = isDarkTheme, dynamicAlbumColor = dynamicAlbumColor) {
+                ListenTogetherPlaybackBridge(viewModel = playerViewModel)
                 // The platform splash is a solid colour. Follow it with a short branded
                 // gradient layer so the opening transition matches the launcher artwork.
                 var showStartupOverlay by remember { mutableStateOf(savedInstanceState == null) }
@@ -250,6 +259,7 @@ class MainActivity : AppCompatActivity() {
                 val rootBackStackEntry by currentNavController.currentBackStackEntryAsState()
                 val rootBackRoute = rootBackStackEntry?.destination?.route
                 val rootTabRoutes = remember { setOf("explore", "search", "library", "local_music", "settings") }
+                val bottomNavigationRoutes = rootTabRoutes
                 val rootTabOrder = remember { listOf("explore", "search", "library", "local_music", "settings") }
                 val rootTabIndices = remember { rootTabOrder.withIndex().associate { it.value to it.index } }
                 val rootTabStateHolder = rememberSaveableStateHolder()
@@ -272,28 +282,53 @@ class MainActivity : AppCompatActivity() {
                 val isPlayerBackActive = isPlayerExpanded || playerExpansionFraction > 0.01f
 
                 var editingSong by remember { mutableStateOf<SongItem?>(null) }
+                var showSongRecognizerSubpage by remember { mutableStateOf(false) }
+                var showSongRecognizerShortcutOnSearch by remember { mutableStateOf(false) }
+                var showListenTogetherSubpage by remember { mutableStateOf(false) }
                 val configuration = androidx.compose.ui.platform.LocalConfiguration.current
                 // Use a wide-window breakpoint: phones in landscape and tablets use a side rail.
                 val useNavigationRail = configuration.screenWidthDp >= 600
                 val isLandscapeLayout = configuration.orientation ==
                     android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                var rootTabSelectionVersion by remember { mutableStateOf(0) }
+
+                fun navigateToRootTab(route: String) {
+                    rootTabSelectionVersion += 1
+                    val activeRoute = currentNavController.currentDestination?.route
+                    if (activeRoute == "search" && route != "search") {
+                        searchViewModel.clearSearch()
+                    }
+                    if (route == "explore" && activeRoute == "explore" && showListenTogetherSubpage) {
+                        showListenTogetherSubpage = false
+                    }
+                    if (route != "search" || activeRoute == "search") {
+                        showSongRecognizerSubpage = false
+                    }
+                    // Root screens are rendered and retained by rootTabStateHolder above.
+                    // The NavHost routes are only selection anchors, so do not save/restore a
+                    // second navigation stack here. Always normalize it to the requested tab;
+                    // this also recovers cleanly if a nested Settings page was left active.
+                    currentNavController.navigate(route) {
+                        popUpTo(currentNavController.graph.findStartDestination().id) {
+                            saveState = false
+                        }
+                        launchSingleTop = true
+                        restoreState = false
+                    }
+                }
 
                 Scaffold(
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     // The portrait dock floats above the screen. Keep the host behind
                     // its outline transparent so no full-width slab appears around it.
-                    containerColor = if (!useNavigationRail && !isLandscapeLayout) {
-                        androidx.compose.ui.graphics.Color.Transparent
-                    } else {
-                        DsmusicTheme.colorScheme.background
-                    },
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
                     bottomBarOverlay = true,
                     bottomBar = {
                         if (!useNavigationRail) {
                         val navBackStackEntry by currentNavController.currentBackStackEntryAsState()
                         val currentDestination = navBackStackEntry?.destination
 
-                        val showBottomBar = currentDestination?.route in listOf("explore", "search", "library", "local_music", "settings")
+                        val showBottomBar = currentDestination?.route in bottomNavigationRoutes
 
                         val density = LocalDensity.current
                         val reportedBottomPadding = WindowInsets.navigationBars
@@ -371,20 +406,7 @@ class MainActivity : AppCompatActivity() {
                                 .onGloballyPositioned { coordinates ->
                                     playerViewModel.setBottomNavHeight(coordinates.size.height.toFloat())
                                 },
-                            onNavigate = { route ->
-                                if (currentDestination?.route == "search" && route != "search") {
-                                    exploreViewModel.clearSearch()
-                                }
-                                if (currentDestination?.route != route) {
-                                    currentNavController.navigate(route) {
-                                        popUpTo(currentNavController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            }
+                            onNavigate = { route -> navigateToRootTab(route) }
                         )
                         }
                     }
@@ -396,6 +418,12 @@ class MainActivity : AppCompatActivity() {
                     val currentDestination = navBackStackEntry?.destination
                     val currentRoute = currentDestination?.route
                     LaunchedEffect(currentRoute) {
+                        if (currentRoute != null && currentRoute != "explore") {
+                            showListenTogetherSubpage = false
+                        }
+                        if (currentRoute != null && currentRoute != "search") {
+                            showSongRecognizerSubpage = false
+                        }
                         if (currentRoute != null && currentRoute in rootTabRoutes) {
                             lastRootTab = currentRoute
                             if (!isLegacyAndroid6) {
@@ -423,8 +451,20 @@ class MainActivity : AppCompatActivity() {
                     var rootTabSlideDirection by remember { mutableStateOf(1f) }
                     val rootTabSlideProgress = remember { androidx.compose.animation.core.Animatable(1f) }
                     val rootTabOpacity = remember { androidx.compose.animation.core.Animatable(1f) }
-                    LaunchedEffect(activeCachedRootTab) {
+                    LaunchedEffect(activeCachedRootTab, rootTabSelectionVersion) {
                         val targetRoute = activeCachedRootTab
+
+                        // A route change cancels this effect, including an in-flight animation.
+                        // Promote the previous incoming tab before handling the latest selection.
+                        // This prevents a cancelled transition from leaving the tab track midway
+                        // and makes rapid taps (including tapping back to the previous tab) work.
+                        incomingRootTab?.let { interruptedTarget ->
+                            renderedRootTab = interruptedTarget
+                            incomingRootTab = null
+                            rootTabSlideProgress.snapTo(1f)
+                            rootTabOpacity.snapTo(1f)
+                        }
+
                         if (targetRoute != null && targetRoute != renderedRootTab) {
                             val outgoingRoute = renderedRootTab
                             val outgoingIndex = outgoingRoute?.let { rootTabIndices[it] } ?: 0
@@ -498,7 +538,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     // Keep the tab viewport and navigation dock at their normal dimensions while the player expands.
                     // PlayerBottomSheetCompose is drawn later in this Box and overlays both surfaces.
-                    val showBottomBar = currentDestination?.route in listOf("explore", "search", "library", "local_music", "settings")
+                    val showBottomBar = currentDestination?.route in bottomNavigationRoutes
                     // Keep the rail persistent in wide layouts; scroll-driven bottom-bar hiding is phone-only.
                     val showNavigationRail = useNavigationRail && showBottomBar
                     val layoutDirection = LocalLayoutDirection.current
@@ -514,7 +554,7 @@ class MainActivity : AppCompatActivity() {
                         "Tall" -> 76.dp
                         else -> 68.dp
                     }
-                    val railOuterGap = if (navBarStyle == "Docked") 0.dp else 12.dp
+                    val railOuterGap = 0.dp
                     val railStartPadding = railSystemInset + railOuterGap
                     val railInsetState = animateDpAsState(
                         targetValue = if (showNavigationRail) railSystemInset + railWidth + railOuterGap else 0.dp,
@@ -543,26 +583,23 @@ class MainActivity : AppCompatActivity() {
                     // Keep the page viewport above the visible navigation dock at all times.
                     // The custom Scaffold draws the dock as an overlay, so its height must be
                     // reserved explicitly instead of relying on Scaffold's content padding.
+                    val measuredBottomDockHeight = with(LocalDensity.current) {
+                        measuredBottomNavHeightPx.toDp()
+                    }
                     val bottomDockInset = when {
                         useNavigationRail -> systemBottomInset
-                        currentRoute in rootTabRoutes ->
-                            configuredNavHeight + systemBottomInset
+                        currentRoute in bottomNavigationRoutes ->
+                            measuredBottomDockHeight.takeIf { it > 0.dp }
+                                ?: (configuredNavHeight + systemBottomInset)
                         else -> 0.dp
                     }
-                    val finalPadding = bottomDockInset
-
-                    // The mini-player is a second overlay above the navigation dock. Reserve
-                    // only its own height and gap here; the navigation inset is already applied
-                    // to every page through finalPadding and must not be counted twice.
+                    // The player and dock share the measured position used by
+                    // PlayerBottomSheetCompose, so list-end clearance uses that same geometry.
                     val miniPlayerBottomGap = if (useNavigationRail) 8.dp else 4.dp
-                    val miniPlayerScrollReserve = if (
-                        currentSong != null &&
-                            !isPlayerBackActive &&
-                            currentRoute != null &&
-                            currentRoute != "onboarding"
-                    ) {
-                        miniPlayerHeight + miniPlayerBottomGap
-                    } else 0.dp
+                    // Keep the last row fully scrollable above the mini-player capsule,
+                    // its shadow, the bottom dock and the system gesture inset.
+                    val exploreBottomContentPadding = bottomDockInset +
+                        (if (currentSong != null) miniPlayerHeight + miniPlayerBottomGap else 0.dp) + 48.dp
 
                     Box(
                         modifier = Modifier.fillMaxSize()
@@ -570,13 +607,13 @@ class MainActivity : AppCompatActivity() {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(
-                                    start = railInset.coerceAtLeast(0.dp),
-                                    bottom = (finalPadding + miniPlayerScrollReserve).coerceAtLeast(0.dp)
+                                .padding(start = railInset.coerceAtLeast(0.dp))
+                                // Keep the viewport beneath the floating controls so the page
+                                // remains visible through the mini-player and dock outer gutters.
+                                .background(
+                                    if (isLandscapeLayout) androidx.compose.ui.graphics.Color.Transparent
+                                    else DsmusicTheme.colorScheme.background
                                 )
-                                // Keep transparent page regions on the selected app palette;
-                                // this ends above the floating dock and does not paint its gutter.
-                                .background(DsmusicTheme.colorScheme.background)
                                 .clipToBounds()
                         ) {
                             // Only the active tab and the recent cache stay composed. On Android 6,
@@ -617,7 +654,16 @@ class MainActivity : AppCompatActivity() {
                                         "explore" -> ExploreScreen(
                                             viewModel = exploreViewModel,
                                             playerSharedViewModel = playerViewModel,
-                                            onNavigateToLibrary = {
+                                            bottomContentPadding = exploreBottomContentPadding,
+                                            onNavigateToListenTogether = {
+                                                showListenTogetherSubpage = true
+                                            },
+                                            showListenTogetherSubpage = showListenTogetherSubpage,
+                                            onCloseListenTogetherSubpage = {
+                                                showListenTogetherSubpage = false
+                                            },
+
+onNavigateToLibrary = {
                                                 currentNavController.navigate("library") {
                                                     popUpTo(currentNavController.graph.findStartDestination().id) {
                                                         saveState = true
@@ -630,8 +676,14 @@ class MainActivity : AppCompatActivity() {
                                         "search" -> ExploreScreen(
                                             viewModel = searchViewModel,
                                             playerSharedViewModel = playerViewModel,
+                                            bottomContentPadding = exploreBottomContentPadding,
                                             isSearchDestination = true,
-                                            onNavigateToLibrary = {
+                                            showSongRecognizerSubpage = showSongRecognizerSubpage,
+                                            onCloseSongRecognizerSubpage = { showSongRecognizerSubpage = false },
+                                            onSongRecognizerShortcutVisibilityChange = {
+                                                showSongRecognizerShortcutOnSearch = it
+                                            },
+onNavigateToLibrary = {
                                                 currentNavController.navigate("library") {
                                                     popUpTo(currentNavController.graph.findStartDestination().id) {
                                                         saveState = true
@@ -668,7 +720,7 @@ class MainActivity : AppCompatActivity() {
                                             }
                                         )
                                                 "local_music" -> LocalMusicScreen(viewModel = playerViewModel)
-                                                "settings" -> SettingsScreenContent()
+"settings" -> SettingsScreenContent()
                                             }
                                         }
                                     }
@@ -842,37 +894,26 @@ class MainActivity : AppCompatActivity() {
                                 animationSpec = if (isLegacyAndroid6) snap() else spring(stiffness = Spring.StiffnessMediumLow),
                                 label = "RailIconSize"
                             )
-                            val railShape = when (navBarStyle) {
-                                "Docked" -> RoundedCornerShape(topEnd = 18.dp, bottomEnd = 18.dp)
-                                "Minimal" -> RoundedCornerShape(0.dp)
-                                else -> RoundedCornerShape(22.dp)
-                            }
+                            val railShape = RoundedCornerShape(topEnd = 18.dp, bottomEnd = 18.dp)
                             val railSurface = DsmusicTheme.colorScheme.surfaceContainer
                             val railBorderBase = if (railSurface.luminance() > 0.5f) {
                                 androidx.compose.ui.graphics.Color.Black
                             } else {
                                 androidx.compose.ui.graphics.Color.White
                             }
-                            val railBorder = railBorderBase.copy(
-                                alpha = if (navBarStyle == "Floating") 0.78f else 0.56f
-                            )
+                            val railBorder = railBorderBase.copy(alpha = 0.56f)
                             Column(
                                 modifier = Modifier
                                     .align(Alignment.CenterStart)
                                     .padding(start = railStartPadding)
                                     .width(railWidth)
-                                    .then(
-                                        if (navBarStyle == "Floating") {
-                                            Modifier.shadow(14.dp, railShape, clip = false)
-                                        } else Modifier
-                                    )
                                     .clip(railShape)
                                     .background(
                                         if (navBarStyle == "Minimal") androidx.compose.ui.graphics.Color.Transparent
                                         else railSurface
                                     )
                                     .border(
-                                        width = if (navBarStyle == "Floating") 0.9.dp else 0.75.dp,
+                                        width = 0.75.dp,
                                         color = railBorder,
                                         shape = railShape
                                     )
@@ -903,15 +944,7 @@ class MainActivity : AppCompatActivity() {
                                                     else androidx.compose.ui.graphics.Color.Transparent
                                                 )
                                                 .clickable {
-                                                    if (!selected) {
-                                                        currentNavController.navigate(route) {
-                                                            popUpTo(currentNavController.graph.findStartDestination().id) {
-                                                                saveState = true
-                                                            }
-                                                            launchSingleTop = true
-                                                            restoreState = true
-                                                        }
-                                                    }
+                                                    navigateToRootTab(route)
                                                 }
                                                 .padding(
                                                     vertical = when {
@@ -954,6 +987,32 @@ class MainActivity : AppCompatActivity() {
                             viewModel = playerViewModel,
                             bottomNavigationVisible = showBottomBar && !useNavigationRail,
                             navigationRailInset = if (useNavigationRail && isLandscapeLayout) railInset else 0.dp,
+                            onNavigateToListenTogether = {
+                                showListenTogetherSubpage = true
+                                if (currentRoute != "explore") {
+                                    currentNavController.navigate("explore") {
+                                        popUpTo(currentNavController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            },
+                            onNavigateToSongRecognizer = {
+                                showSongRecognizerSubpage = true
+                                if (currentRoute != "search") {
+                                    currentNavController.navigate("search") {
+                                        popUpTo(currentNavController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            },
+                            showSongRecognizerShortcut = currentRoute == "search" &&
+                                showSongRecognizerShortcutOnSearch && !showSongRecognizerSubpage,
                             modifier = Modifier.layout { measurable, constraints ->
                                 // Portrait retains its existing rail inset behavior. In landscape,
                                 // keep the player host full-width and morph only the collapsed capsule
@@ -980,6 +1039,80 @@ class MainActivity : AppCompatActivity() {
                             }.fillMaxSize()
                         )
                         AudioFormatChoiceDialogHost()
+
+                        // App-wide snackbar overlay. This is hosted by MainActivity rather
+                        // than inside the player so it stays above root tabs, feature pages,
+                        // and the full-screen player.
+                        val snackbarHostState = remember { com.dsann.music.ui.theme.SnackbarHostState() }
+                        LaunchedEffect(Unit) {
+                            com.dsann.music.ui.SnackbarController.events.collect { event ->
+                                snackbarHostState.showSnackbar(
+                                    com.dsann.music.ui.CustomSnackbarVisuals(
+                                        message = event.message,
+                                        duration = event.duration,
+                                        iconResId = event.iconResId,
+                                        iconVector = event.iconVector
+                                    )
+                                )
+                            }
+                        }
+
+                        val snackbarBottomPadding = when {
+                            isPlayerBackActive -> 96.dp
+                            currentSong != null && currentRoute != "onboarding" ->
+                                miniPlayerHeight + miniPlayerBottomGap + bottomDockInset + 16.dp
+                            currentRoute in rootTabRoutes -> bottomDockInset + 16.dp
+                            else -> systemBottomInset + 16.dp
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .zIndex(1000f)
+                        ) {
+                            com.dsann.music.ui.theme.SnackbarHost(
+                                hostState = snackbarHostState,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = snackbarBottomPadding)
+                            ) { data ->
+                                com.dsann.music.ui.theme.Snackbar(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    containerColor = DsmusicTheme.colorScheme.inverseSurface,
+                                    contentColor = DsmusicTheme.colorScheme.inverseOnSurface,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    val customVisuals = data.visuals as? com.dsann.music.ui.CustomSnackbarVisuals
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(vertical = 2.dp)
+                                    ) {
+                                        if (customVisuals?.iconVector != null) {
+                                            Icon(
+                                                imageVector = customVisuals.iconVector,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(22.dp),
+                                                tint = DsmusicTheme.colorScheme.inversePrimary
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                        } else if (customVisuals?.iconResId != null) {
+                                            Icon(
+                                                painter = painterResource(id = customVisuals.iconResId),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(22.dp),
+                                                tint = DsmusicTheme.colorScheme.inversePrimary
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                        }
+                                        Text(
+                                            text = data.visuals.message,
+                                            style = DsmusicTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                     }
                 }
@@ -1019,7 +1152,7 @@ class MainActivity : AppCompatActivity() {
                         ) {
                             Image(
                                 painter = painterResource(id = R.drawable.ic_launcher_art),
-                                contentDescription = "Quantune",
+                                contentDescription = "D.S Music",
                                 modifier = Modifier.size(280.dp)
                             )
                         }
@@ -1100,7 +1233,7 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val client = GitHubReleaseClient("DS-ann", "Quantune")
+                val client = GitHubReleaseClient("DS-ann", "D.S-Music2")
                 val release = client.latestRelease ?: return@launch
 
                 val currentVersion = BuildConfig.VERSION_NAME
@@ -1298,6 +1431,20 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         ensureServiceRunning()
+
+        val activeRoute = navController?.currentDestination?.route
+        if (activeRoute == "library" || activeRoute == "local_music") {
+            lifecycleScope.launch {
+                scanLocalFiles(applicationContext, playerViewModel, forceRefresh = false, owner = activeRoute ?: "library")
+            }
+        }
+    }
+
+    override fun onStop() {
+        // Playback and widgets continue in the service, but a screen-only MediaStore scan
+        // should not compete for storage I/O while the app is in the background.
+        cancelLocalMusicScan(playerViewModel)
+        super.onStop()
     }
 
     override fun onDestroy() {

@@ -5,68 +5,46 @@ import com.dsann.music.data.lyrics.LyricsResult
 import com.dsann.music.data.lyrics.PaxsenixApi
 import com.dsann.music.data.lyrics.TrackMetadata
 import com.dsann.music.data.lyrics.providers.LyricsProvider
+import com.google.gson.JsonParser
 
 class PaxsenixSpotifyProvider(private val api: PaxsenixApi) : LyricsProvider {
-    companion object {
-        private const val TAG = "PaxsenixSpotify"
-    }
-
+    companion object { private const val TAG = "PaxsenixSpotify" }
     override fun getName(): String = "Spotify"
-
-    override fun getPriority(): Int = 1 // Highest priority for word-by-word
+    override fun getPriority(): Int = 1
 
     override fun search(track: TrackMetadata): LyricsResult? {
-        try {
-            val query = "${track.cleanedTitle} ${track.cleanedArtist}"
-            val searchResponse = api.searchSpotify(query).execute()
-            
-            if (searchResponse.isSuccessful && searchResponse.body() != null) {
-                val searchBody = searchResponse.body()!!
-                if (searchBody.isJsonArray && searchBody.asJsonArray.size() > 0) {
-                    val firstResult = searchBody.asJsonArray.get(0).asJsonObject
-                    val trackId = if (firstResult.has("trackId")) firstResult.get("trackId").asString else null
-                    
-                    if (trackId != null) {
-                        val lyricsResponse = api.getSpotifyLyrics(trackId).execute()
-                        if (lyricsResponse.isSuccessful && lyricsResponse.body() != null) {
-                            val rawBody = lyricsResponse.body()!!.string()
-                            val lyricsStr = cleanJsonLyrics(rawBody)
-                            
-                            if (lyricsStr.isNotBlank() && !lyricsStr.contains("\"error\"")) {
-                                val result = LyricsResult(
-                                    providerName = getName(),
-                                    matchedTitle = if (firstResult.has("name")) firstResult.get("name").asString else track.cleanedTitle,
-                                    matchedArtist = if (firstResult.has("artistName")) firstResult.get("artistName").asString else track.cleanedArtist
-                                )
-                                
-                                if (lyricsStr.contains("[00:")) {
-                                    result.setSyncedLyrics(lyricsStr)
-                                    if (PaxsenixProviderUtils.isWordByWord(lyricsStr)) {
-                                        result.setWordByWord(true)
-                                    }
-                                } else {
-                                    result.setPlainLyrics(lyricsStr)
-                                }
-                                return result
-                            }
-                        }
-                    }
-                }
+        return try {
+            val searchResponse = api.searchSpotify("${track.cleanedTitle} ${track.cleanedArtist}").execute()
+            if (!searchResponse.isSuccessful || searchResponse.body() == null) {
+                Log.w(TAG, "Search HTTP ${searchResponse.code()}")
+                return null
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Search failed: ${e.message}")
+            val match = PaxsenixProviderUtils.firstSearchResult(searchResponse.body()!!) ?: return null
+            val rawId = PaxsenixProviderUtils.string(
+                match, "trackId", "track_id", "id", "spotifyId", "spotify_id", "uri"
+            ) ?: return null
+            val id = PaxsenixProviderUtils.normalizeSpotifyTrackId(rawId) ?: return null
+            val lyricsResponse = api.getSpotifyLyrics(id).execute()
+            if (!lyricsResponse.isSuccessful || lyricsResponse.body() == null) {
+                Log.w(TAG, "Lyrics HTTP ${lyricsResponse.code()}")
+                return null
+            }
+            val raw = lyricsResponse.body()!!.string()
+            val decoded = try {
+                PaxsenixProviderUtils.extractLyrics(JsonParser.parseString(raw))
+            } catch (_: Exception) { null } ?: raw.trim().takeIf { it.isNotEmpty() && !it.startsWith("{") } ?: return null
+            val result = LyricsResult(
+                providerName = getName(),
+                matchedTitle = PaxsenixProviderUtils.string(match, "name", "title", "trackName") ?: track.cleanedTitle,
+                matchedArtist = PaxsenixProviderUtils.string(match, "artistName", "artist") ?: track.cleanedArtist
+            )
+            if (LyricsResult.looksSynchronized(decoded)) result.setSyncedLyrics(decoded)
+            else result.setPlainLyrics(decoded)
+            if (PaxsenixProviderUtils.isWordByWord(decoded)) result.setWordByWord(true)
+            result.takeIf { it.hasLyrics() }
+        } catch (error: Exception) {
+            Log.w(TAG, "Spotify lookup failed: ${error.message}")
+            null
         }
-        return null
-    }
-
-    private fun cleanJsonLyrics(raw: String): String {
-        val trimmed = raw.trim()
-        return if (trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
-            try {
-                com.google.gson.JsonParser.parseString(trimmed).asString
-            } catch (e: Exception) {
-                trimmed.removeSurrounding("\"").replace("\\n", "\n").replace("\\\"", "\"")
-            }
-        } else trimmed
     }
 }

@@ -11,5 +11,9 @@ data class SyncLrcResponse(
     @SerializedName("instrumental") val instrumental: Boolean?,
     @SerializedName("karaoke") val karaoke: String?,
     @SerializedName("synced") val synced: String?,
-    @SerializedName("plain") val plain: String?
+    @SerializedName("plain") val plain: String?,
+    // New API variants can return a single selected field rather than all three.
+    @SerializedName("lyrics") val lyrics: String? = null,
+    @SerializedName("type") val type: String? = null,
+    @SerializedName("format") val format: String? = null
 )

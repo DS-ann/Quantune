@@ -18,7 +18,12 @@ data class LyricsResult(
     var matchedDuration: Float = 0f,
     var fetchTimestamp: Long = System.currentTimeMillis(),
     /** True when the lyric payload was dropped to save memory; refetch before using again. */
-    var payloadClearedForMemory: Boolean = false
+    var payloadClearedForMemory: Boolean = false,
+    // Optional source credits required by community lyric catalogues such as Unison.
+    var sourceCreditText: String? = null,
+    var sourceCreditUrl: String? = null,
+    var sourceSubmitterText: String? = null,
+    var sourceSubmitterUrl: String? = null
 ) {
     /**
      * Returns true if this result has any usable lyrics content.

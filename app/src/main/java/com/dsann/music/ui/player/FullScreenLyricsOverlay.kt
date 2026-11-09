@@ -19,6 +19,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,23 +37,28 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Translate
 import com.dsann.music.ui.theme.LoadingIndicator
 import com.dsann.music.ui.theme.Icon
 import com.dsann.music.ui.theme.IconButton
 import com.dsann.music.ui.theme.ListItem
 import com.dsann.music.ui.theme.ListItemDefaults
 import com.dsann.music.ui.theme.DsmusicTheme
+import com.dsann.music.ui.theme.GoogleSansFlexNonRounded
 import com.dsann.music.ui.theme.dsmusicHomeStudioGradientBrush
 import com.dsann.music.ui.theme.ModalBottomSheet
 import com.dsann.music.ui.theme.Text
 import com.dsann.music.ui.theme.TextButton
 import com.dsann.music.ui.theme.rememberModalBottomSheetState
 import com.dsann.music.ui.theme.rememberDsmusicModalSheetGeometry
+import com.dsann.music.ui.theme.observeKey
+import android.content.SharedPreferences
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,11 +71,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalContext
 import com.dsann.music.util.NetworkFailureClassifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
@@ -78,9 +87,20 @@ import com.dsann.music.R
 import com.dsann.music.data.lyrics.LyricLine
 import com.dsann.music.data.lyrics.LyricsResult
 import com.dsann.music.model.SongItem
+import com.dsann.music.data.features.AiLyricsTranslationService
+import com.dsann.music.data.features.AiLyricsTranslationSettingsStore
+import com.dsann.music.data.features.AiLyricsTranslationSession
+import com.dsann.music.data.features.AiLyricsTranslationCatalog
+import com.dsann.music.util.EncryptedFeatureSecretStore
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlinx.coroutines.delay
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * Optimized circular reveal modifier utilizing a remembered path and in-place reset/rebuild.
@@ -217,11 +237,35 @@ internal fun PlayerLyricsContent(
     onSeekTo: (Int) -> Unit,
     selectedProvider: String?,
     providerResults: Map<String, LyricsResult>,
+    gradientFontBorderWidth: Dp = 1.dp,
+    centerLineLyrics: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val compactLandscapeLyrics = LocalConfiguration.current.orientation ==
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val context = LocalContext.current
+    val appearancePreferences = remember(context) {
+        context.getSharedPreferences("AppSettings", android.content.Context.MODE_PRIVATE)
+    }
+    val lyricsAlignment by appearancePreferences.observeKey("lyrics_alignment", "Original")
+    val lyricsTextSize by appearancePreferences.observeKey("lyrics_text_size", "Standard")
+    val lyricsFontFamilyChoice by appearancePreferences.observeKey("lyrics_font_family", "Rounded")
+    val configuredLyricsScale = when (lyricsTextSize) {
+        "Small" -> 0.85f
+        "Large" -> 1.18f
+        else -> 1f
+    }
+    val plainLyricsFontFamily = when (lyricsFontFamilyChoice) {
+        "Sans" -> FontFamily.SansSerif
+        "Serif" -> FontFamily.Serif
+        "Mono" -> FontFamily.Monospace
+        else -> GoogleSansFlexNonRounded
+    }
+    val plainLyricsTextAlign = when (lyricsAlignment) {
+        "Left" -> androidx.compose.ui.text.style.TextAlign.Start
+        "Center" -> androidx.compose.ui.text.style.TextAlign.Center
+        else -> androidx.compose.ui.text.style.TextAlign.Unspecified
+    }
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         when {
@@ -242,39 +286,58 @@ internal fun PlayerLyricsContent(
                 selectedProvider = selectedProvider,
                 providerResults = providerResults,
                 lyricsColorStyle = lyricsColorStyle,
+                gradientFontBorderWidth = gradientFontBorderWidth,
+                centerLineLyrics = centerLineLyrics,
                 modifier = Modifier.fillMaxSize()
             )
             !plainLyrics.isNullOrBlank() -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 28.dp)
-                ) {
-                    Text(
-                        text = plainLyrics,
-                        style = DsmusicTheme.typography.titleLarge.copy(
-                            brush = if (lyricsColorStyle == "Home Studio Gradient") {
-                                dsmusicHomeStudioGradientBrush()
-                            } else null,
-                            fontSize = DsmusicTheme.typography.titleLarge.fontSize *
-                                if (compactLandscapeLyrics) 0.78f else 1f,
-                            lineHeight = DsmusicTheme.typography.titleLarge.lineHeight *
-                                if (compactLandscapeLyrics) 0.82f else 1f
-                        ),
-                        color = when (lyricsColorStyle) {
-                            "Home Studio Gradient" -> Color.Unspecified
-                            "White" -> Color.White
-                            "UI Matching" -> dynamicAccentColor
-                            else -> contentColor.copy(alpha = 0.9f)
-                        }
-                    )
-                    LyricsMetadataFooter(
-                        currentSong = currentSong,
-                        selectedProvider = selectedProvider,
-                        providerResults = providerResults,
-                        contentColor = contentColor
-                    )
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    // Use the same viewport-relative scale and typography metrics as
+                    // karaoke/synced lines: 38 sp text with a 50 sp line height.
+                    val viewportScale = if (compactLandscapeLyrics && maxHeight != Dp.Infinity) {
+                        (maxHeight.value / 420f).coerceIn(0.58f, 0.86f)
+                    } else {
+                        1f
+                    }
+                    val plainLyricsScale = (configuredLyricsScale * viewportScale)
+                        .coerceIn(0.48f, 1.18f)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 28.dp)
+                    ) {
+                        LyricsText(
+                            text = plainLyrics,
+                            style = DsmusicTheme.typography.headlineMedium.copy(
+                                brush = if (lyricsColorStyle == "Home Studio Gradient") {
+                                    dsmusicHomeStudioGradientBrush()
+                                } else null,
+                                fontFamily = plainLyricsFontFamily,
+                                fontSize = 44.sp * plainLyricsScale,
+                                lineHeight = 58.sp * plainLyricsScale,
+                                fontWeight = FontWeight.ExtraBold,
+                                platformStyle = PlatformTextStyle(includeFontPadding = true),
+                                textAlign = plainLyricsTextAlign
+                            ),
+                            color = when (lyricsColorStyle) {
+                                "Home Studio Gradient" -> Color.Unspecified
+                                "White" -> Color.White
+                                "UI Matching" -> dynamicAccentColor
+                                else -> contentColor.copy(alpha = 0.9f)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            outlineWidth = 1.dp,
+                            fillTextWidth = true,
+                            drawOutlineForSolidText = true
+                        )
+                        LyricsMetadataFooter(
+                            currentSong = currentSong,
+                            selectedProvider = selectedProvider,
+                            providerResults = providerResults,
+                            contentColor = contentColor
+                        )
+                    }
                 }
             }
             NetworkFailureClassifier.isNoInternetFailure(lyricsError, context) -> {
@@ -325,6 +388,188 @@ internal fun FullScreenLyricsOverlay(
     val consumeClicks = remember { MutableInteractionSource() }
     var showProvidersSheet by remember { mutableStateOf(false) }
     var syncOffsetMs by remember(currentSong?.id) { mutableStateOf(0L) }
+
+    val context = LocalContext.current
+    val useLowCostReveal = remember(context) {
+        val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE)
+            as? android.app.ActivityManager
+        if (activityManager == null) {
+            false
+        } else {
+            val memoryInfo = android.app.ActivityManager.MemoryInfo()
+            activityManager.getMemoryInfo(memoryInfo)
+            val fourGiB = 4L * 1024L * 1024L * 1024L
+            activityManager.isLowRamDevice || (memoryInfo.totalMem in 1L..fourGiB)
+        }
+    }
+    val translationScope = rememberCoroutineScope()
+    val translationSettingsStore = remember(context) { AiLyricsTranslationSettingsStore(context) }
+    val featureSecretStore = remember(context) { EncryptedFeatureSecretStore(context) }
+    val translationSettings = remember(translationSettingsStore) { translationSettingsStore.load() }
+    val translationPreferences = remember(context) {
+        context.applicationContext.getSharedPreferences(
+            "lyrics_translation_settings",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+    var translationEnabled by remember(translationSettings.enabled) {
+        mutableStateOf(translationSettings.enabled)
+    }
+
+    // Do not build a second whole-song lyrics string or hash it during composition when
+    // translation is disabled. When enabled, prepare both values off the UI thread.
+    var translationSource by remember { mutableStateOf("") }
+    var translationKey by remember { mutableStateOf<String?>(null) }
+    var translationSourceReady by remember { mutableStateOf(false) }
+    LaunchedEffect(
+        currentSong?.id,
+        syncedLyrics,
+        plainLyrics,
+        translationSettings,
+        translationEnabled
+    ) {
+        translationSourceReady = false
+        translationSource = ""
+        translationKey = null
+        if (!translationEnabled) {
+            translationSourceReady = true
+            return@LaunchedEffect
+        }
+
+        val songId = currentSong?.id
+        val prepared = withContext(Dispatchers.Default) {
+            val source = when {
+                !syncedLyrics.isNullOrEmpty() -> syncedLyrics.joinToString("\n") { line ->
+                    line.content.ifBlank { line.words.joinToString("") { word -> word.text } }
+                }
+                !plainLyrics.isNullOrBlank() -> plainLyrics.orEmpty()
+                else -> ""
+            }
+            val key = songId?.takeIf { source.isNotBlank() }?.let {
+                AiLyricsTranslationSession.cacheKey(it, source, translationSettings)
+            }
+            source to key
+        }
+        translationSource = prepared.first
+        translationKey = prepared.second
+        translationSourceReady = true
+    }
+
+    val translationCache by AiLyricsTranslationSession.entries.collectAsStateWithLifecycle()
+    val cachedTranslation = translationKey?.let { translationCache[it] }
+    var translatedLyrics by remember(currentSong?.id) { mutableStateOf<String?>(null) }
+    var translatedSyncedLyrics by remember(currentSong?.id) {
+        mutableStateOf<List<LyricLine>?>(null)
+    }
+    var showTranslatedLyrics by remember(currentSong?.id) { mutableStateOf(false) }
+    var translationBusy by remember { mutableStateOf(false) }
+    var translationStatus by remember { mutableStateOf("") }
+    var translationJob by remember { mutableStateOf<Job?>(null) }
+
+    DisposableEffect(translationPreferences) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
+            if (key == "enabled") {
+                val isEnabled = preferences.getBoolean("enabled", true)
+                translationEnabled = isEnabled
+                if (!isEnabled) {
+                    translationJob?.cancel()
+                    translationJob = null
+                    translationBusy = false
+                    translatedLyrics = null
+                    translatedSyncedLyrics = null
+                    showTranslatedLyrics = false
+                    translationStatus = ""
+                }
+            }
+        }
+        translationPreferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            translationPreferences.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
+    val requestLyricsTranslation: () -> Unit = {
+        if (!translationEnabled) {
+            translationStatus = "Enable AI lyrics translation in Settings → Playback."
+        } else if (!translationBusy) {
+            if (!translationSourceReady) {
+                translationStatus = "Preparing lyrics for translation…"
+            } else if (translatedLyrics != null || translatedSyncedLyrics != null) {
+                showTranslatedLyrics = !showTranslatedLyrics
+            } else if (translationSource.isBlank()) {
+                translationStatus = "Load lyrics before requesting a translation."
+            } else {
+                translationBusy = true
+                translationStatus = "Translating lyrics…"
+                translationJob = translationScope.launch {
+                    try {
+                        val settings = translationSettingsStore.load()
+                        if (!settings.enabled) {
+                            throw IllegalStateException(
+                                "Enable AI lyrics translation in Settings → Playback."
+                            )
+                        }
+                        val result = AiLyricsTranslationSession.translate(
+                            context = context,
+                            songId = currentSong?.id
+                                ?: throw IllegalStateException("No track is currently selected."),
+                            source = translationSource
+                        )
+                        translatedLyrics = result.translatedText
+                        translatedSyncedLyrics = withContext(Dispatchers.Default) {
+                            AiLyricsTranslationSession.mapToSyncedLines(
+                                syncedLyrics,
+                                result.translatedText
+                            )
+                        }
+                        showTranslatedLyrics = true
+                        translationStatus = "Translated with ${settings.provider} · tap Original to switch back."
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        translationStatus = error.message ?: "Lyrics translation failed."
+                    } finally {
+                        translationBusy = false
+                        translationJob = null
+                    }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(
+        currentSong?.id,
+        translationSource,
+        cachedTranslation,
+        translationEnabled,
+        translationSourceReady
+    ) {
+        translationJob?.cancel()
+        translationJob = null
+        translationBusy = false
+        if (!translationEnabled || !translationSourceReady) {
+            translatedLyrics = null
+            translatedSyncedLyrics = null
+            showTranslatedLyrics = false
+            translationStatus = ""
+            return@LaunchedEffect
+        }
+        translatedLyrics = cachedTranslation?.translatedText
+        translatedSyncedLyrics = if (cachedTranslation != null) {
+            withContext(Dispatchers.Default) {
+                AiLyricsTranslationSession.mapToSyncedLines(
+                    syncedLyrics,
+                    cachedTranslation.translatedText
+                )
+            }
+        } else {
+            null
+        }
+        showTranslatedLyrics = cachedTranslation != null
+        translationStatus = cachedTranslation?.let {
+            "Reused translation · ${it.provider}"
+        }.orEmpty()
+    }
     var showSyncControls by remember { mutableStateOf(false) }
     var syncControlActivity by remember { mutableStateOf(0) }
 
@@ -358,12 +603,20 @@ internal fun FullScreenLyricsOverlay(
         }
     }
 
+    val lyricsRevealModifier = if (useLowCostReveal) {
+        Modifier.graphicsLayer {
+            alpha = revealProgressProvider().coerceIn(0f, 1f)
+        }
+    } else {
+        Modifier.circularRevealFrom(
+            progressProvider = revealProgressProvider,
+            centerProvider = revealCenterProvider
+        )
+    }
+
     Box(
         modifier = modifier
-            .circularRevealFrom(
-                progressProvider = revealProgressProvider,
-                centerProvider = revealCenterProvider
-            )
+            .then(lyricsRevealModifier)
             .background(backgroundBrush)
             .clickable(
                 interactionSource = consumeClicks,
@@ -469,23 +722,56 @@ internal fun FullScreenLyricsOverlay(
                     )
                 }
 
-                IconButton(
-                    onClick = { showProvidersSheet = true },
-                    interactionSource = remember { MutableInteractionSource() }
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.MoreVert,
-                        contentDescription = "Change Lyrics Provider",
-                        tint = contentColor.copy(alpha = 0.8f),
-                        modifier = Modifier.size(24.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (translationEnabled) {
+                        IconButton(
+                            onClick = requestLyricsTranslation,
+                            enabled = !translationBusy,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Translate,
+                                contentDescription = when {
+                                    translationBusy -> "Translating lyrics"
+                                    showTranslatedLyrics -> "Show original lyrics"
+                                    else -> "Translate lyrics"
+                                },
+                                tint = contentColor.copy(alpha = if (translationBusy) 0.4f else 0.9f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = { showProvidersSheet = true },
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.MoreVert,
+                            contentDescription = "Change Lyrics Provider",
+                            tint = contentColor.copy(alpha = 0.8f),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
+            }
+
+            if (translationStatus.isNotBlank()) {
+                Text(
+                    text = translationStatus,
+                    style = DsmusicTheme.typography.labelSmall,
+                    color = contentSecondary,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+                )
             }
 
             PlayerLyricsContent(
                 currentSong = currentSong,
-                syncedLyrics = syncedLyrics,
-                plainLyrics = plainLyrics,
+                syncedLyrics = if (showTranslatedLyrics) translatedSyncedLyrics else syncedLyrics,
+                plainLyrics = if (showTranslatedLyrics && translatedSyncedLyrics == null) {
+                    translatedLyrics
+                } else {
+                    plainLyrics
+                },
                 isLoading = isLoading,
                 isPlaying = isPlaying,
                 lyricsError = lyricsError,
@@ -500,6 +786,9 @@ internal fun FullScreenLyricsOverlay(
                 onSeekTo = onSeekTo,
                 selectedProvider = selectedProvider,
                 providerResults = providerResults,
+                // Keep the same 1 dp gradient font contour in fullscreen lyrics.
+                gradientFontBorderWidth = 1.dp,
+                centerLineLyrics = true,
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
 

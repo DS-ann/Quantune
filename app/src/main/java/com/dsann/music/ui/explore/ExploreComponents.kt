@@ -303,6 +303,7 @@ fun HomeFeedSkeleton() {
 @Composable
 fun WelcomeGreetingBanner(
     userName: String?,
+    onListenTogetherClick: (() -> Unit)? = null,
     onRecapClick: (() -> Unit)? = null
 ) {
     val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
@@ -343,6 +344,26 @@ fun WelcomeGreetingBanner(
                     style = DsmusicTheme.typography.titleMedium,
                     color = DsmusicTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            if (onListenTogetherClick != null) {
+                DsmusicOutlinedButton(
+                    onClick = onListenTogetherClick,
+                    contentPadding = PaddingValues(horizontal = 9.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Groups,
+                        contentDescription = "Listen Together",
+                        modifier = Modifier.size(17.dp),
+                        tint = DsmusicTheme.colorScheme.primary
+                    )
+                    Text(
+                        "Together",
+                        style = DsmusicTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
             }
             if (onRecapClick != null) {
                 Row(

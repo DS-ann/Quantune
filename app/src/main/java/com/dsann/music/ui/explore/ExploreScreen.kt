@@ -128,6 +128,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -192,8 +193,15 @@ fun ExploreScreen(
     viewModel: ExploreViewModel,
     playerSharedViewModel: PlayerSharedViewModel,
     onNavigateToLibrary: () -> Unit = {},
+    onNavigateToListenTogether: () -> Unit = {},
+    showListenTogetherSubpage: Boolean = false,
+    onCloseListenTogetherSubpage: () -> Unit = {},
+    showSongRecognizerSubpage: Boolean = false,
+    onCloseSongRecognizerSubpage: () -> Unit = {},
     isSearchDestination: Boolean = false,
-    onLeaveSearchDestination: () -> Unit = {}
+    onLeaveSearchDestination: () -> Unit = {},
+    bottomContentPadding: Dp = 176.dp,
+    onSongRecognizerShortcutVisibilityChange: (Boolean) -> Unit = {}
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -602,6 +610,18 @@ fun ExploreScreen(
         showReplayScreen = false
     }
 
+    androidx.activity.compose.BackHandler(
+        enabled = showListenTogetherSubpage && !isPlayerBackActive
+    ) {
+        onCloseListenTogetherSubpage()
+    }
+
+    androidx.activity.compose.BackHandler(
+        enabled = isSearchDestination && showSongRecognizerSubpage && !isPlayerBackActive
+    ) {
+        onCloseSongRecognizerSubpage()
+    }
+
     LaunchedEffect(isSearchDestination) {
         if (isSearchDestination) {
             viewModel.loadMoodsAndGenres()
@@ -637,13 +657,17 @@ fun ExploreScreen(
             "playlist" to 3,
             "artist" to 3,
             "section" to 3,
-            "credits" to 3
+            "credits" to 3,
+            "listen_together" to 4,
+            "song_recognizer" to 4
         )
     }
 
     val currentScreen =
-        remember(detailStack, isLoadingDetail, detailOfflineError, isAccountVisible, showCreditsForSong, showReplayScreen) {
+        remember(detailStack, isLoadingDetail, detailOfflineError, isAccountVisible, showCreditsForSong, showReplayScreen, showListenTogetherSubpage, showSongRecognizerSubpage) {
             when {
+                isSearchDestination && showSongRecognizerSubpage -> "song_recognizer"
+                showListenTogetherSubpage -> "listen_together"
                 detailOfflineError -> "offline"
                 isLoadingDetail -> "loading"
                 showCreditsForSong != null -> "credits"
@@ -660,6 +684,16 @@ fun ExploreScreen(
                 else -> "home"
             }
         }
+
+    // The shortcut belongs to the Search root/results page, not genre browsing or
+    // a nested album/playlist/artist/section detail pushed from those results.
+    LaunchedEffect(isSearchDestination, currentScreen, showSearchGenreBrowser, showSongRecognizerSubpage) {
+        if (isSearchDestination) {
+            onSongRecognizerShortcutVisibilityChange(
+                currentScreen == "home" && !showSearchGenreBrowser && !showSongRecognizerSubpage
+            )
+        }
+    }
 
     // AnimatedContent keeps the outgoing and incoming pages side-by-side for the
     // whole slide. A shared opacity dip reaches 50% at the midpoint, then returns to 100%.
@@ -831,12 +865,29 @@ fun ExploreScreen(
                                         )
                                     }
 
-                                    "loading" -> DetailScreenSkeleton()
+                                    "loading" -> Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(DsmusicTheme.colorScheme.background)
+                                            .statusBarsPadding()
+                                            .padding(bottom = bottomContentPadding)
+                                    ) {
+                                        DetailScreenSkeleton()
+                                    }
 
-                                    "offline" -> com.dsann.music.ui.theme.NoInternetState(
-                                        modifier = Modifier.fillMaxSize(),
-                                        onRetry = { viewModel.retryLastDetailLoad() }
-                                    )
+                                    "offline" -> Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(DsmusicTheme.colorScheme.background)
+                                            .statusBarsPadding()
+                                            .padding(bottom = bottomContentPadding),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        com.dsann.music.ui.theme.NoInternetState(
+                                            modifier = Modifier.fillMaxSize(),
+                                            onRetry = { viewModel.retryLastDetailLoad() }
+                                        )
+                                    }
 
                                     "album" -> albumDetail?.let { detail ->
                                         AlbumDetailView(
@@ -845,6 +896,7 @@ fun ExploreScreen(
                                             isLoadingStream = currentTrackIsLoading,
                                              isPlaybackActive = isPlaybackActive,
                                             onBack = { handleDetailBack() },
+                                            bottomContentPadding = bottomContentPadding,
                                             onSongClick = { song, queue, index ->
                                                 viewModel.playOnlineSongWithQueue(
                                                     song,
@@ -873,6 +925,7 @@ fun ExploreScreen(
                                             isLoadingStream = currentTrackIsLoading,
                                              isPlaybackActive = isPlaybackActive,
                                             onBack = { handleDetailBack() },
+                                            bottomContentPadding = bottomContentPadding,
                                             onSongClick = { song, queue, index ->
                                                 viewModel.playOnlineSongWithQueue(
                                                     song,
@@ -913,6 +966,7 @@ fun ExploreScreen(
                                             isPlaybackActive = isPlaybackActive,
                                              isSubscribed = detail.artist.isSubscribed,
                                             onBack = { handleDetailBack() },
+                                            bottomContentPadding = bottomContentPadding,
                                             onSongClick = { song, queue, index ->
                                                 viewModel.playOnlineSongWithQueue(
                                                     song,
@@ -958,6 +1012,7 @@ fun ExploreScreen(
                                             isLoadingStream = currentTrackIsLoading,
                                              isPlaybackActive = isPlaybackActive,
                                             onBack = { handleDetailBack() },
+                                            bottomContentPadding = bottomContentPadding,
                                             onSongClick = { song, queue, index ->
                                                 viewModel.playOnlineSongWithQueue(
                                                     song,
@@ -981,6 +1036,28 @@ fun ExploreScreen(
                                             }
                                         )
                                     }
+
+                                    "listen_together" -> com.dsann.music.ui.ListenTogetherScreen(
+                                        viewModel = playerSharedViewModel,
+                                        onBack = onCloseListenTogetherSubpage
+                                    )
+
+                                    "song_recognizer" -> com.dsann.music.ui.SongRecognizerScreen(
+                                        onBack = onCloseSongRecognizerSubpage,
+                                        onPlaySong = { song ->
+                                            playerSharedViewModel.setSongList(listOf(song))
+                                            playerSharedViewModel.playSongAtIndex(0)
+                                            com.dsann.music.ui.SnackbarController.showMessage("Playing ${song.title}")
+                                        },
+                                        onPlayNextSong = { song ->
+                                            playerSharedViewModel.addToQueueNext(song)
+                                            com.dsann.music.ui.SnackbarController.showMessage("Playing next: ${song.title}")
+                                        },
+                                        onAddToQueue = { song ->
+                                            playerSharedViewModel.addToQueue(song)
+                                            com.dsann.music.ui.SnackbarController.showMessage("Added to queue: ${song.title}")
+                                        }
+                                    )
 
                                     "credits" -> showCreditsForSong?.let { s ->
                                         SongCreditsScreen(
@@ -1046,7 +1123,8 @@ fun ExploreScreen(
                                             isLandscape = isLandscape,
                                             onClearSearch = onSearchHeaderClearSearch,
                                             showGenreBrowser = showSearchGenreBrowser,
-                                            onGenreBrowserBack = { showSearchGenreBrowser = false }
+                                            onGenreBrowserBack = { showSearchGenreBrowser = false },
+                                            onNavigateToListenTogether = onNavigateToListenTogether
                                         )
 
                                         Box(modifier = Modifier.weight(1f)) {
@@ -1054,7 +1132,7 @@ fun ExploreScreen(
                                                 isSearchDestination && showSearchGenreBrowser && !isSearchActive && searchQuery.isBlank() -> {
                                                     LazyColumn(
                                                         modifier = Modifier.fillMaxSize(),
-                                                        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 124.dp),
+                                                        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 16.dp, bottom = bottomContentPadding),
                                                         verticalArrangement = Arrangement.spacedBy(12.dp)
                                                     ) {
                                                         item(key = "search-genre-intro") {
@@ -1217,7 +1295,7 @@ fun ExploreScreen(
                                                             start = 18.dp,
                                                             end = 18.dp,
                                                             top = 18.dp,
-                                                            bottom = 124.dp
+                                                            bottom = bottomContentPadding
                                                         ),
                                                         verticalArrangement = Arrangement.spacedBy(22.dp)
                                                     ) {
@@ -1596,7 +1674,7 @@ fun ExploreScreen(
                                                     LazyColumn(
                                                         state = searchListState,
                                                         modifier = Modifier.fillMaxSize().background(Color.Transparent),
-                                                        contentPadding = PaddingValues(bottom = 120.dp)
+                                                        contentPadding = PaddingValues(bottom = bottomContentPadding)
                                                     ) {
                                                         if (searchOfflineError) {
                                                             item(key = "search-offline-retry") {
@@ -1892,7 +1970,7 @@ fun ExploreScreen(
                                                                     modifier = Modifier.fillMaxSize()
                                                                         .background(Color.Transparent),
                                                                     contentPadding = PaddingValues(
-                                                                        bottom = 120.dp
+                                                                        bottom = bottomContentPadding
                                                                     )
                                                                 ) {
 
@@ -1940,6 +2018,9 @@ fun ExploreScreen(
                                                                             WelcomeGreetingBanner(
                                                                                 userName = customProfileName.takeIf { it.isNotBlank() }
                                                                                     ?: userProfile?.name,
+                                                                                onListenTogetherClick = if (!isSearchDestination) {
+                                                                                    onNavigateToListenTogether
+                                                                                } else null,
                                                                                 onRecapClick = if (!isSearchDestination) {
                                                                                     { showReplayScreen = true }
                                                                                 } else null
@@ -2516,7 +2597,7 @@ private fun ExploreCustomizerDialog(
 
                             CreditsTextSection(
                                 title = "Produced by",
-                                content = listOf(if (contributors.size > 1) contributors.last() else "Quantune Engine")
+                                content = listOf(if (contributors.size > 1) contributors.last() else "D.S Music Engine")
                             )
 
                             CreditsTextSection(
@@ -2583,7 +2664,7 @@ private fun ExploreCustomizerDialog(
 
                             CreditsTextSection(
                                 title = "Produced by",
-                                content = listOf(if (contributors.size > 1) contributors.last() else "Quantune Engine")
+                                content = listOf(if (contributors.size > 1) contributors.last() else "D.S Music Engine")
                             )
 
                             CreditsTextSection(
@@ -2657,7 +2738,8 @@ private fun ExploreCustomizerDialog(
         isLandscape: Boolean,
         onClearSearch: () -> Unit,
         showGenreBrowser: Boolean,
-        onGenreBrowserBack: () -> Unit
+        onGenreBrowserBack: () -> Unit,
+        onNavigateToListenTogether: () -> Unit
     ) {
         val recentAccountHistory = remember(accountHistory) { accountHistory.take(10) }
         // Avoid Material3 SearchBar's expanded full-window implementation here. On
@@ -3071,7 +3153,7 @@ private fun ExploreCustomizerDialog(
                     DsmusicPageHeading(
                         title = if (isSearchDestination) "Search" else "Explore",
                         subtitle = if (isSearchDestination) "Find your next favourite." else null,
-                        kicker = if (isSearchDestination) "FIND YOUR SOUND" else "QUANTUNE",
+                        kicker = if (isSearchDestination) "FIND YOUR SOUND" else "D.S MUSIC",
                         modifier = Modifier.weight(1f)
                     )
                 } else {
@@ -3136,16 +3218,36 @@ private fun ExploreCustomizerDialog(
                         tint = DsmusicTheme.colorScheme.primary,
                         modifier = Modifier.size(22.dp)
                     )
-                    BasicText(
-                        text = searchQuery.ifBlank { "Songs, artists, albums, playlists..." },
+                    Column(
                         modifier = Modifier.weight(1f),
-                        style = DsmusicTheme.typography.bodyLarge.copy(
-                            color = if (searchQuery.isBlank()) DsmusicTheme.colorScheme.onSurfaceVariant
-                                else DsmusicTheme.colorScheme.onSurface
-                        ),
-                        maxLines = 1
-                    )
-                    if (searchQuery.isNotBlank()) {
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
+                        BasicText(
+                            text = searchQuery.ifBlank { "Search music" },
+                            style = DsmusicTheme.typography.titleSmall.copy(
+                                color = DsmusicTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            maxLines = 1
+                        )
+                        if (searchQuery.isBlank()) {
+                            BasicText(
+                                text = "Songs, artists, albums and playlists",
+                                style = DsmusicTheme.typography.bodySmall.copy(
+                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                ),
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    if (searchQuery.isBlank()) {
+                        Icon(
+                            Icons.Rounded.ChevronRight,
+                            contentDescription = "Open music search",
+                            tint = DsmusicTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(21.dp)
+                        )
+                    } else {
                         DsmusicIconButton(
                             onClick = onClearSearch,
                             modifier = Modifier.size(34.dp)
@@ -3234,4 +3336,5 @@ private fun ExploreCustomizerDialog(
                 }
             }
         }
+
     }

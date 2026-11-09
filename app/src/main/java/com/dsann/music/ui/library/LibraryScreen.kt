@@ -193,10 +193,20 @@ import com.dsann.music.ui.explore.SongCreditsScreen
 import com.dsann.music.viewmodel.AccountViewModel
 import com.dsann.music.viewmodel.ExploreViewModel
 import com.dsann.music.viewmodel.PlayerSharedViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.WeakHashMap
 
 enum class SortOrder {
     A_Z,
@@ -377,10 +387,14 @@ fun LibraryScreen(
         if (activeTab.isBlank() || activeTab == "Cache") activeTab = "Playlists"
     }
 
-    // Trigger local files scan on first composition
-    LaunchedEffect(Unit) {
+    // Scan only while Library is visible. Cached inactive tabs must not keep scanning.
+    LaunchedEffect(rootTabActive) {
+        if (!rootTabActive) {
+            cancelLocalMusicScan(viewModel, owner = "library")
+            return@LaunchedEffect
+        }
         if (localSongs.isEmpty()) {
-            scanLocalFiles(context, viewModel)
+            scanLocalFiles(context, viewModel, forceRefresh = false)
         }
     }
 
@@ -890,7 +904,7 @@ fun LibraryScreen(
                                                     fontWeight = FontWeight.ExtraBold
                                                 )
                                                 Text(
-                                                    "Quantune · ${sourceSongs.size} songs",
+                                                    "D.S Music · ${sourceSongs.size} songs",
                                                     style = DsmusicTheme.typography.bodyMedium,
                                                     color = DsmusicTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -1235,7 +1249,7 @@ itemsIndexed(
                                                     start = 8.dp,
                                                     top = 12.dp,
                                                     end = 8.dp,
-                                                    bottom = 160.dp
+                                                    bottom = 176.dp
                                                 ),
                                                 verticalArrangement = Arrangement.spacedBy(2.dp)
                                             ) {
@@ -1251,7 +1265,7 @@ itemsIndexed(
                                                 start = 0.dp,
                                                 top = 0.dp,
                                                 end = 0.dp,
-                                                bottom = 160.dp
+                                                bottom = 176.dp
                                             ),
                                             verticalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
@@ -1768,7 +1782,7 @@ private fun UnifiedLibraryContent(
     } else {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 160.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 176.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
@@ -2252,7 +2266,7 @@ private fun PlaylistsTabContent(
             LazyVerticalGrid(
                 state = playlistGridState,
                 columns = if (showAsList) GridCells.Fixed(1) else GridCells.Adaptive(minSize = 152.dp),
-                contentPadding = PaddingValues(bottom = 160.dp),
+                contentPadding = PaddingValues(bottom = 176.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
@@ -2554,7 +2568,7 @@ private fun LocalPlaylistDetailsScreen(
                     try {
                         val remotePlaylistId = YouTubeMusic.createPlaylist(
                             title = playlist.title,
-                            description = "Created with Quantune",
+                            description = "Created with D.S Music",
                             privacyStatus = "PRIVATE",
                             videoIds = uploadableVideoIds
                         ).getOrThrow()
@@ -2563,7 +2577,7 @@ private fun LocalPlaylistDetailsScreen(
                             viewModel.markLocalPlaylistUploaded(playlist.id, remotePlaylistId)
                         } catch (saveError: Exception) {
                             com.dsann.music.ui.SnackbarController.showMessage(
-                                "Uploaded to YouTube Music, but Quantune could not save the link. Do not upload again."
+                                "Uploaded to YouTube Music, but D.S Music could not save the link. Do not upload again."
                             )
                             return@launch
                         }
@@ -2702,7 +2716,7 @@ private fun LocalPlaylistDetailsScreen(
                         LibraryGradientPlaylistHero(
                             title = playlist.title,
                             subtitle = songs.size.toString() + " songs · On this device",
-                            status = "Saved in Quantune",
+                            status = "Saved in D.S Music",
                             artwork = artworkUrl,
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -2818,7 +2832,7 @@ private fun LocalPlaylistDetailsScreen(
                             LibraryGradientPlaylistHero(
                                 title = playlist.title,
                                 subtitle = songs.size.toString() + " songs · On this device",
-                                status = "Saved in Quantune",
+                                status = "Saved in D.S Music",
                                 artwork = artworkUrl,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -3060,7 +3074,7 @@ private fun PodcastsTabContent(nestedScrollConnection: androidx.compose.ui.input
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(bottom = 160.dp),
+                contentPadding = PaddingValues(bottom = 176.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
@@ -3125,7 +3139,7 @@ private fun SongsTabContent(nestedScrollConnection: androidx.compose.ui.input.ne
                     .fillMaxSize()
                     .weight(1f)
                     .nestedScroll(nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 160.dp),
+                contentPadding = PaddingValues(bottom = 176.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(onlineSongs) { song ->
@@ -3237,7 +3251,7 @@ private fun AlbumsTabContent(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(if (showAsList) 1 else 2),
-                contentPadding = PaddingValues(bottom = 160.dp),
+                contentPadding = PaddingValues(bottom = 176.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
@@ -3397,7 +3411,7 @@ private fun ArtistsTabContent(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(if (showAsList) 1 else 2),
-                contentPadding = PaddingValues(bottom = 160.dp),
+                contentPadding = PaddingValues(bottom = 176.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
@@ -3543,8 +3557,13 @@ fun RecapTabContent(
     onSongMenuClick: (SongItem) -> Unit = {}
 ) {
     val context = LocalContext.current
-    LaunchedEffect(Unit) {
-        if (localSongs.isEmpty()) scanLocalFiles(context, viewModel)
+    val rootTabActive = LocalRootTabActive.current
+    LaunchedEffect(rootTabActive) {
+        if (!rootTabActive) {
+            cancelLocalMusicScan(viewModel, owner = "library")
+            return@LaunchedEffect
+        }
+        if (localSongs.isEmpty()) scanLocalFiles(context, viewModel, forceRefresh = false)
     }
     val events by viewModel.listeningHistoryEventsFlow.collectAsStateWithLifecycle(emptyList())
     val activePlayerSong by viewModel.currentSong.collectAsStateWithLifecycle()
@@ -3729,7 +3748,7 @@ fun RecapTabContent(
             .fillMaxSize()
             .statusBarsPadding()
             .nestedScroll(nestedScrollConnection),
-        contentPadding = PaddingValues(bottom = 160.dp),
+        contentPadding = PaddingValues(bottom = 176.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item(key = "replay-header") {
@@ -3918,7 +3937,7 @@ fun RecapTabContent(
                                     scope.launch {
                                         YouTubeMusic.createPlaylist(
                                             title = "Replay - " + selectedPeriod,
-                                            description = "Made with Quantune Replay",
+                                            description = "Made with D.S Music Replay",
                                             privacyStatus = "PRIVATE",
                                             videoIds = ids
                                         ).onSuccess {
@@ -4146,25 +4165,105 @@ private fun isDsmusicDownloadedSong(song: SongItem): Boolean {
 private fun isDsmusicDownloadedLocation(relativePathValue: String?, rawPath: String?): Boolean {
     val relativePath = relativePathValue.orEmpty().trim('/').lowercase(java.util.Locale.ROOT)
     val appFolders = listOf(
-        "music/quantune", "download/quantune", "downloads/quantune", "music/d.s music", "download/d.s music", "downloads/d.s music"
+        "music/d.s music", "download/d.s music", "downloads/d.s music"
     )
     if (appFolders.any { relativePath == it || relativePath.startsWith("$it/") }) return true
 
     val path = rawPath.orEmpty().replace('\\', '/').lowercase(java.util.Locale.ROOT)
-    return path.contains("/music/quantune/") ||
-        path.contains("/download/quantune/") ||
-        path.contains("/downloads/quantune/") ||
-        path.contains("/music/d.s music/") ||
+    return path.contains("/music/d.s music/") ||
         path.contains("/download/d.s music/") ||
         path.contains("/downloads/d.s music/")
 }
 
-// Background scanner helper
-internal suspend fun scanLocalFiles(context: Context, viewModel: PlayerSharedViewModel) {
+// A single scanner serves Library and Local Music. Repeated refresh signals reuse the
+// in-flight job instead of launching overlapping MediaStore queries and metadata reads.
+private object LocalMusicScanCoordinator {
+    private data class ScanEntry(val owner: String, val job: Job)
+
+    private val coordinatorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scanMutex = Mutex()
+    private val lock = Any()
+    private val scanJobs = WeakHashMap<PlayerSharedViewModel, ScanEntry>()
+    private val completedScans = WeakHashMap<PlayerSharedViewModel, Boolean>()
+
+    suspend fun scan(
+        context: Context,
+        viewModel: PlayerSharedViewModel,
+        forceRefresh: Boolean,
+        owner: String
+    ) {
+        val job = synchronized(lock) {
+            if (!forceRefresh && completedScans[viewModel] == true) {
+                return@synchronized null
+            }
+
+            val activeEntry = scanJobs[viewModel]
+            val activeJob = activeEntry?.job?.takeIf { it.isActive }
+            if (activeJob != null && activeEntry?.owner == owner && !forceRefresh) {
+                return@synchronized activeJob
+            }
+            // A manual refresh or a different active screen supersedes the older query.
+            // The mutex ensures the new pass starts only after the old cursor is closed.
+            activeJob?.cancel()
+            if (forceRefresh) completedScans.remove(viewModel)
+
+            lateinit var scanJob: Job
+            scanJob = coordinatorScope.launch(start = CoroutineStart.LAZY) {
+                try {
+                    val completed = scanMutex.withLock {
+                        performLocalFilesScan(context.applicationContext, viewModel)
+                    }
+                    if (completed) {
+                        synchronized(lock) {
+                            if (scanJobs[viewModel]?.job === scanJob) {
+                                completedScans[viewModel] = true
+                            }
+                        }
+                    }
+                } finally {
+                    synchronized(lock) {
+                        if (scanJobs[viewModel]?.job === scanJob) {
+                            scanJobs.remove(viewModel)
+                        }
+                    }
+                }
+            }
+            scanJobs[viewModel] = ScanEntry(owner, scanJob)
+            scanJob.start()
+            scanJob
+        }
+        job?.join()
+    }
+
+    fun cancel(viewModel: PlayerSharedViewModel, owner: String? = null) {
+        val job = synchronized(lock) {
+            scanJobs[viewModel]
+                ?.takeIf { owner == null || it.owner == owner }
+                ?.job
+        }
+        job?.cancel()
+    }
+}
+
+internal suspend fun scanLocalFiles(
+    context: Context,
+    viewModel: PlayerSharedViewModel,
+    forceRefresh: Boolean = true,
+    owner: String = "library"
+) {
+    LocalMusicScanCoordinator.scan(context, viewModel, forceRefresh, owner)
+}
+
+internal fun cancelLocalMusicScan(viewModel: PlayerSharedViewModel, owner: String? = null) {
+    LocalMusicScanCoordinator.cancel(viewModel, owner)
+}
+
+private suspend fun performLocalFilesScan(context: Context, viewModel: PlayerSharedViewModel): Boolean =
     withContext(Dispatchers.IO) {
         val songs = ArrayList<SongItem>()
         try {
-            val proj = mutableListOf(
+            currentCoroutineContext().ensureActive()
+            val projection = mutableListOf(
                 android.provider.MediaStore.Audio.Media._ID,
                 android.provider.MediaStore.Audio.Media.TITLE,
                 android.provider.MediaStore.Audio.Media.DISPLAY_NAME,
@@ -4183,17 +4282,25 @@ internal suspend fun scanLocalFiles(context: Context, viewModel: PlayerSharedVie
             val prefs = context.getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
             val downloadedVideoIdsByUri =
                 com.dsann.music.util.SongDownloader.getDownloadedVideoIdsByUri(context)
-            val hiddenFolders = (prefs.getString("hidden_folders", "") ?: "").split("||").filter { it.isNotEmpty() }
+            val hiddenFolders = (prefs.getString("hidden_folders", "") ?: "")
+                .split("||")
+                .filter { it.isNotEmpty() }
             val ignoreShort = prefs.getBoolean("ignore_short_audio", false)
-            val minDurationMs = if (ignoreShort) prefs.getFloat("ignore_short_audio_duration", 30f).toLong() * 1000L else 0L
+            val minDurationMs = if (ignoreShort) {
+                prefs.getFloat("ignore_short_audio_duration", 30f).toLong() * 1000L
+            } else {
+                0L
+            }
 
-            context.contentResolver.query(
+            val cursor = context.contentResolver.query(
                 android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                proj,
+                projection,
                 null,
                 null,
                 "${android.provider.MediaStore.Audio.Media.TITLE} ASC"
-            )?.use { c ->
+            ) ?: return@withContext false
+
+            cursor.use { c ->
                 val idCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media._ID)
                 val titleCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.TITLE)
                 val displayNameCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.DISPLAY_NAME)
@@ -4203,37 +4310,47 @@ internal suspend fun scanLocalFiles(context: Context, viewModel: PlayerSharedVie
                 val albumNameCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.ALBUM)
                 val dataCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.DATA)
                 val relativePathCol = c.getColumnIndex("relative_path")
-                val durCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.DURATION)
+                val durationCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.DURATION)
                 val dateCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.DATE_ADDED)
+
                 while (c.moveToNext()) {
+                    // A large library can take noticeable time to walk on Android 6.
+                    // Check every row and around the optional embedded-tag read so leaving
+                    // the tab releases the cursor and stops further file work promptly.
+                    currentCoroutineContext().ensureActive()
+
                     val path = c.getString(dataCol)
                     val relativePath = if (relativePathCol >= 0) c.getString(relativePathCol) else null
                     val isDownloadedFile = isDsmusicDownloadedLocation(relativePath, path)
                     if (!isDownloadedFile && c.getInt(isMusicCol) == 0) continue
                     if (!isDownloadedFile && path != null && hiddenFolders.any { path.startsWith(it) }) continue
 
-                    val duration = c.getLong(durCol)
+                    val duration = c.getLong(durationCol)
                     if (!isDownloadedFile && ignoreShort && duration < minDurationMs) continue
 
-                    // Some source containers cannot store tags. Recover basic display metadata
-                    // from the downloaded filename instead of returning blank/unknown tracks.
                     val displayName = c.getString(displayNameCol).orEmpty().ifBlank {
                         path?.substringAfterLast('/') ?: ""
                     }
                     val baseName = displayName.substringBeforeLast('.', displayName)
                     val nameSeparator = baseName.lastIndexOf(" - ")
-                    val fallbackTitle = if (nameSeparator > 0) baseName.substring(0, nameSeparator).trim() else baseName
-                    val fallbackArtist = if (nameSeparator > 0) baseName.substring(nameSeparator + 3).trim() else ""
+                    val fallbackTitle = if (nameSeparator > 0) {
+                        baseName.substring(0, nameSeparator).trim()
+                    } else {
+                        baseName
+                    }
+                    val fallbackArtist = if (nameSeparator > 0) {
+                        baseName.substring(nameSeparator + 3).trim()
+                    } else {
+                        ""
+                    }
                     val mediaId = c.getLong(idCol)
                     val mediaUri = android.content.ContentUris.withAppendedId(
                         android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                         mediaId
                     )
 
-                    // MediaStore often omits artwork for downloaded files. Read embedded tags
-                    // for every format produced by D.S Music; the reader uses native MP4/Opus
-                    // parsing where needed and MediaMetadataRetriever for the other formats.
-                    val downloadExtension = displayName.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT)
+                    val downloadExtension = displayName.substringAfterLast('.', "")
+                        .lowercase(java.util.Locale.ROOT)
                     val hasReadableDownloadedMetadata = downloadExtension in setOf(
                         "mp3", "m4a", "mp4", "m4b", "m4p",
                         "opus", "ogg", "flac", "aac", "wav", "mka", "webm"
@@ -4245,7 +4362,10 @@ internal suspend fun scanLocalFiles(context: Context, viewModel: PlayerSharedVie
                             mediaUri = mediaUri,
                             cacheKey = "media-$mediaId"
                         )
-                    } else null
+                    } else {
+                        null
+                    }
+                    currentCoroutineContext().ensureActive()
 
                     val storedTitle = c.getString(titleCol).orEmpty()
                     val storedArtist = c.getString(artistCol).orEmpty()
@@ -4274,7 +4394,6 @@ internal suspend fun scanLocalFiles(context: Context, viewModel: PlayerSharedVie
                     val mediaStoreAlbum = c.getString(albumNameCol)?.takeIf {
                         it.isNotBlank() && !it.equals("<unknown>", ignoreCase = true)
                     }
-                    val albumName = mediaStoreAlbum ?: embeddedMetadata?.album
 
                     songs.add(
                         SongItem(
@@ -4287,14 +4406,12 @@ internal suspend fun scanLocalFiles(context: Context, viewModel: PlayerSharedVie
                             c.getLong(dateCol)
                         ).apply {
                             mediaStoreRelativePath = relativePath
-                            this.albumName = albumName
+                            albumName = mediaStoreAlbum ?: embeddedMetadata?.album
                             val sourceVideoId = downloadedVideoIdsByUri[mediaUri.toString()]
                             if (!sourceVideoId.isNullOrBlank()) {
                                 videoId = sourceVideoId
                                 isDownloadedOffline = true
                             }
-                            // Prefer an extracted embedded cover. When a downloaded file has
-                            // no readable artwork, use its saved YouTube thumbnail as a fallback.
                             thumbnailUrl = embeddedMetadata?.artworkUri
                                 ?: sourceVideoId?.takeIf { it.isNotBlank() }?.let {
                                     "https://img.youtube.com/vi/$it/hqdefault.jpg"
@@ -4303,12 +4420,20 @@ internal suspend fun scanLocalFiles(context: Context, viewModel: PlayerSharedVie
                     )
                 }
             }
-        } catch (_: Exception) {}
-        withContext(Dispatchers.Main) {
-            viewModel.setLocalSongs(songs)
+
+            // Never publish a partial list if this scan was interrupted or failed.
+            currentCoroutineContext().ensureActive()
+            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                viewModel.setLocalSongs(songs)
+            }
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.e("LocalMusicScanner", "MediaStore scan failed; retaining the previous library snapshot", error)
+            false
         }
     }
-}
 
 private fun getActivityFromContext(context: Context): Activity? {
     var ctx = context
@@ -4342,7 +4467,6 @@ private val attemptedCacheTitleRepairs =
 private fun isGenericCachedSongTitle(value: String?): Boolean {
     val title = value?.trim().orEmpty()
     return title.isBlank() ||
-        title.equals("Quantune", ignoreCase = true) ||
         title.equals("D.S Music", ignoreCase = true) ||
         title.equals("Unknown Title", ignoreCase = true) ||
         title.equals("<unknown>", ignoreCase = true) ||
@@ -5032,7 +5156,7 @@ if (filteredCacheEntries.isEmpty()) {
                 )
                 LazyColumn(
                     modifier = Modifier.weight(0.58f).fillMaxHeight(),
-                    contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 160.dp),
+                    contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 176.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     item(key = "cache-playlist-songs-heading") {
@@ -5049,7 +5173,7 @@ if (filteredCacheEntries.isEmpty()) {
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f),
-                contentPadding = PaddingValues(start = 0.dp, top = 16.dp, end = 0.dp, bottom = 160.dp),
+                contentPadding = PaddingValues(start = 0.dp, top = 16.dp, end = 0.dp, bottom = 176.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 cacheListContent()

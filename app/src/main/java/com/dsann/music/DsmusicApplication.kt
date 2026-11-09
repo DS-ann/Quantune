@@ -48,9 +48,9 @@ class DsmusicApplication : Application(), ImageLoaderFactory {
             .okHttpClient { InnerTubeClient.httpClient }
             .memoryCache {
                 MemoryCache.Builder(this)
-                    // Keep a larger recent-artwork working set on API 23 while decoding each
-                    // visible tile at the same requested size as newer Android versions.
-                    .maxSizePercent(if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) 0.10 else 0.06)
+                    // Keep the decoded-artwork working set bounded on low-memory legacy devices.
+                    // Original image files remain in the disk cache and can be decoded on demand.
+                    .maxSizePercent(0.06)
                     .strongReferencesEnabled(true)
                     .weakReferencesEnabled(true)
                     .build()

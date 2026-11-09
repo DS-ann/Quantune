@@ -6,6 +6,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -50,7 +51,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
@@ -91,6 +94,60 @@ private data class LyricDisplayItem(
     val isPast: Boolean = false
 )
 
+internal data class LyricsScrollBoundaries(
+    val lyricIndices: IntArray,
+    val completionTimes: LongArray
+)
+
+/** Precompute the existing line-completion sequence once per lyric payload. */
+internal fun buildLyricsScrollBoundaries(lines: List<LyricLine>): LyricsScrollBoundaries {
+    val lyricIndices = lines.indices.filter { !lines[it].isInterlude }.toIntArray()
+    if (lyricIndices.size < 2) {
+        return LyricsScrollBoundaries(lyricIndices, LongArray(0))
+    }
+
+    val completionTimes = LongArray(lyricIndices.size - 1)
+    var greatestCompletionTime = Long.MIN_VALUE
+    for (index in completionTimes.indices) {
+        val currentLine = lines[lyricIndices[index]]
+        val nextLine = lines[lyricIndices[index + 1]]
+        val finalWordEnd = currentLine.words
+            .maxOfOrNull { it.absoluteStartTimeMs + it.durationMs }
+            ?.takeIf { it > 0L }
+        val completionTime = finalWordEnd ?: nextLine.startTimeMs
+        greatestCompletionTime = maxOf(greatestCompletionTime, completionTime)
+        completionTimes[index] = greatestCompletionTime
+    }
+    return LyricsScrollBoundaries(lyricIndices, completionTimes)
+}
+
+/**
+ * Binary search over prefix maxima returns exactly the line the original sequential
+ * scan stopped at, including when provider timestamps overlap or arrive out of order.
+ */
+internal fun findLyricsScrollTargetIndex(
+    boundaries: LyricsScrollBoundaries,
+    positionMs: Long
+): Int {
+    val lyricIndices = boundaries.lyricIndices
+    if (lyricIndices.isEmpty()) return -1
+    if (boundaries.completionTimes.isEmpty()) return lyricIndices.first()
+
+    var low = 0
+    var high = boundaries.completionTimes.lastIndex
+    var lastCompleted = -1
+    while (low <= high) {
+        val middle = (low + high) ushr 1
+        if (positionMs >= boundaries.completionTimes[middle]) {
+            lastCompleted = middle
+            low = middle + 1
+        } else {
+            high = middle - 1
+        }
+    }
+    return lyricIndices[(lastCompleted + 1).coerceIn(0, lyricIndices.lastIndex)]
+}
+
 /**
  * Expensive glyph geometry is created once after text layout, not again on every karaoke frame.
  */
@@ -100,8 +157,14 @@ private data class KaraokeWordGeometry(
     val bounds: Rect
 )
 
+private data class KaraokeCharacterGeometry(
+    val wordIndex: Int,
+    val bounds: Rect
+)
+
 private data class KaraokeTextGeometry(
-    val words: List<KaraokeWordGeometry>
+    val words: List<KaraokeWordGeometry>,
+    val characters: List<KaraokeCharacterGeometry>
 )
 
 // Apple Music-inspired easing curves
@@ -130,6 +193,8 @@ internal fun SyncedLyricsCompose(
     selectedProvider: String? = null,
     providerResults: Map<String, LyricsResult> = emptyMap(),
     lyricsColorStyle: String = "Home Studio Gradient",
+    gradientFontBorderWidth: Dp = 1.dp,
+    centerLineLyrics: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -186,7 +251,7 @@ internal fun SyncedLyricsCompose(
         // The active-line binary search requires monotonic timestamps; explicitly sort
         // each track so an early playback position can never resolve to the final line.
         lyrics.mapIndexedNotNull { index, line ->
-            if (isKaraokeMode && line.isInterlude) null
+            if (line.isInterlude) null
             else LyricDisplayItem(
                 line = line,
                 originalIndex = index
@@ -298,40 +363,31 @@ internal fun SyncedLyricsCompose(
         }
     }
 
-    // Word highlighting remains driven by activeIndex. The viewport advances only after
-    // the outgoing line completes: final karaoke word end, or next line time for synced lyrics.
-    val scrollTargetIndex by remember(displayItems, lyricClock) {
+    // Precompute completion boundaries once. Per-frame target lookup is now O(log n)
+    // instead of repeatedly scanning forward through the lyrics list.
+    val scrollBoundaries = remember(displayItems) {
+        buildLyricsScrollBoundaries(displayItems.map { it.line })
+    }
+    val scrollTargetIndex by remember(scrollBoundaries, lyricClock) {
         derivedStateOf {
-            if (displayItems.isEmpty()) {
-                -1
-            } else {
-                var targetIndex = displayItems.indexOfFirst { !it.line.isInterlude }
-                var lineIndex = targetIndex
-                val positionMs = lyricClock.intValue.toLong()
-                while (lineIndex >= 0) {
-                    val nextLineIndex = (lineIndex + 1 until displayItems.size)
-                        .firstOrNull { !displayItems[it].line.isInterlude }
-                        ?: break
-                    val line = displayItems[lineIndex].line
-                    val finalWordEnd = line.words
-                        .maxOfOrNull { it.absoluteStartTimeMs + it.durationMs }
-                        ?.takeIf { it > 0L }
-                    val completionTime = finalWordEnd
-                        ?: displayItems[nextLineIndex].line.startTimeMs
-                    if (positionMs >= completionTime) {
-                        targetIndex = nextLineIndex
-                        lineIndex = nextLineIndex
-                    } else break
-                }
-                targetIndex
-            }
+            findLyricsScrollTargetIndex(
+                boundaries = scrollBoundaries,
+                positionMs = lyricClock.intValue.toLong()
+            )
         }
     }
     val density = LocalDensity.current
+    // The first frame after opening a long track should position immediately. A long
+    // animated jump from item 0 to the current song position can stall weaker devices.
+    val hasPositionedInitialLyrics = remember(lyricTrackKey) {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
     LaunchedEffect(lyricTrackKey, displayItems, scrollTargetIndex, density) {
         if (scrollTargetIndex == 0) {
             listState.scrollToItem(0)
+            hasPositionedInitialLyrics.value = true
         } else if (scrollTargetIndex > 0) {
+            val isInitialPosition = !hasPositionedInitialLyrics.value
             val previousLineIndex = (scrollTargetIndex - 1 downTo 0)
                 .firstOrNull { !displayItems[it].line.isInterlude }
             val previousLine = previousLineIndex?.let { displayItems[it].line }
@@ -363,8 +419,10 @@ internal fun SyncedLyricsCompose(
                 scrollTargetIndex,
                 displayItems,
                 with(density) { 36.dp.roundToPx() },
-                scrollDurationMs = scrollDurationMs
+                scrollDurationMs = scrollDurationMs,
+                immediateInitialPosition = isInitialPosition
             )
+            hasPositionedInitialLyrics.value = true
         } else if (lyricClock.intValue <= (displayItems.firstOrNull()?.line?.startTimeMs ?: 0L)) {
             listState.scrollToItem(0)
         }
@@ -431,6 +489,8 @@ internal fun SyncedLyricsCompose(
                             lyricsColorStyle = lyricsColorStyle,
                             textScale = lyricsScale,
                             alignment = lyricsAlignment,
+                            gradientFontBorderWidth = gradientFontBorderWidth,
+                            centerLineLyrics = centerLineLyrics,
                             fontFamilyChoice = lyricsFontFamily,
                             onClick = {
                                 onSeekTo(
@@ -472,10 +532,14 @@ private fun LyricLineItem(
     lyricsColorStyle: String,
     textScale: Float,
     alignment: String,
+    gradientFontBorderWidth: Dp = 1.dp,
+    centerLineLyrics: Boolean = false,
     fontFamilyChoice: String,
     onClick: () -> Unit
 ) {
     val isKaraoke = line.isWordByWord && line.words.isNotEmpty()
+    // Keep the same 1 dp gradient font contour in the fullscreen renderer.
+    val lineSyncedGradientBorderWidth = gradientFontBorderWidth
     val scale = 1.0f
 
     // The active synced line must be fully legible on the exact frame its timestamp
@@ -532,6 +596,7 @@ private fun LyricLineItem(
         "UI Matching" -> accentColor
         else -> contentColor
     }
+    // Keep the original dim treatment for non-highlighted lyric lines.
     val dimColor = renderedColor.copy(alpha = 0.35f)
     val litColor = renderedColor
 
@@ -558,7 +623,12 @@ private fun LyricLineItem(
             indication = null,
             onClick = onClick
         )
-        .padding(start = 28.dp, end = 24.dp, top = 12.dp, bottom = 12.dp)
+        .padding(
+            start = if (centerLineLyrics) 24.dp else 28.dp,
+            end = 24.dp,
+            top = 12.dp,
+            bottom = 12.dp
+        )
         .graphicsLayer {
             this.alpha = alpha
             scaleX = scale
@@ -579,10 +649,16 @@ private fun LyricLineItem(
             translationY = driftDp * density
         }
 
-    val lineAlignment = when (alignment) {
-        "Left" -> TextAlign.Start
-        "Center" -> TextAlign.Center
-        else -> if (line.isRightAligned) TextAlign.End else TextAlign.Start
+    // In the immersive fullscreen player, all lyric lines use a fixed horizontal
+    // centre. The inline player continues to respect the saved lyrics alignment.
+    val lineAlignment = if (centerLineLyrics) {
+        TextAlign.Center
+    } else {
+        when (alignment) {
+            "Left" -> TextAlign.Start
+            "Center" -> TextAlign.Center
+            else -> if (line.isRightAligned) TextAlign.End else TextAlign.Start
+        }
     }
     // Ordinary line-synced lyrics are rendered once, without a backdrop or
     // glow layer. Karaoke keeps its separate word-timing overlay below.
@@ -593,6 +669,13 @@ private fun LyricLineItem(
         fontWeight = if (isActive && !isKaraoke) FontWeight.ExtraBold else FontWeight.Bold,
         lineHeight = 50.sp * textScale,
         textAlign = lineAlignment,
+        shadow = if (isActive && !isKaraoke && lyricsColorStyle == "White") {
+            androidx.compose.ui.graphics.Shadow(
+                color = Color.White.copy(alpha = 0.9f),
+                offset = androidx.compose.ui.geometry.Offset(0f, 0f),
+                blurRadius = 8f
+            )
+        } else null,
         platformStyle = PlatformTextStyle(includeFontPadding = true)
     )
 
@@ -608,21 +691,60 @@ private fun LyricLineItem(
 
     val mainTextLayoutResult = remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
     val bracketTextLayoutResult = remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+    val gradientOutlineWidthPx = with(LocalDensity.current) {
+        gradientFontBorderWidth.toPx()
+    }
 
     Column(modifier = commonModifier) {
         // ── Main Text Box ──
         // Keep glyph overhangs inside the visible row on every Android version.
         // Apply the same inset to the dim base and karaoke overlay so their geometry stays aligned.
-        Box(modifier = Modifier.padding(horizontal = 6.dp)) {
+        Box(modifier = (if (centerLineLyrics) Modifier.fillMaxWidth() else Modifier)
+            .padding(horizontal = 6.dp)) {
             // Base Dim Text
-            Text(
+            LyricsText(
                 text = mainContent,
-                style = mainTextStyle,
+                style = if (isKaraoke || !isActive) mainTextStyle.copy(brush = null) else mainTextStyle,
                 color = if (isKaraoke) dimColor else if (isActive && lyricsBrush != null) Color.Unspecified
                     else if (isActive) renderedColor else dimColor,
                 onTextLayout = { mainTextLayoutResult.value = it },
-                maxLines = Int.MAX_VALUE
+                maxLines = Int.MAX_VALUE,
+                outlineWidth = lineSyncedGradientBorderWidth,
+                textAlign = lineAlignment,
+                fillTextWidth = centerLineLyrics
             )
+
+            // Karaoke font border: render with a stroked font style, then remove
+            // the border from words whose gradient highlight has not started yet.
+            if (isKaraoke && isActive && lyricsBrush != null && gradientOutlineWidthPx > 0f) {
+                Text(
+                    text = mainContent,
+                    style = mainTextStyle.copy(
+                        brush = SolidColor(Color.Black),
+                        drawStyle = Stroke(width = gradientOutlineWidthPx)
+                    ),
+                    color = Color.Unspecified,
+                    maxLines = Int.MAX_VALUE,
+                    modifier = Modifier
+                        .then(if (centerLineLyrics) Modifier.fillMaxWidth() else Modifier)
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .drawWithCache {
+                            val layout = mainTextLayoutResult.value
+                            val geometry = layout?.let { buildKaraokeTextGeometry(it, line.words, 0) }
+                            onDrawWithContent {
+                                if (geometry != null) {
+                                    drawProgressiveKaraokeFontBorder(
+                                        geometry = geometry,
+                                        words = line.words,
+                                        pos = currentPositionProvider().toLong(),
+                                        drawScope = this,
+                                        strokeWidthPx = gradientOutlineWidthPx
+                                    )
+                                }
+                            }
+                        }
+                )
+            }
 
             // Overlay Lit Text
             if (isKaraoke && isActive) {
@@ -630,14 +752,19 @@ private fun LyricLineItem(
                     text = mainContent,
                     style = mainTextStyle.copy(
                         shadow = androidx.compose.ui.graphics.Shadow(
-                            color = accentColor.copy(alpha = 0.5f),
+                            color = if (lyricsColorStyle == "White") {
+                                Color.White.copy(alpha = 0.9f)
+                            } else {
+                                accentColor.copy(alpha = 0.5f)
+                            },
                             offset = androidx.compose.ui.geometry.Offset(0f, 0f),
-                            blurRadius = 7f
+                            blurRadius = if (lyricsColorStyle == "White") 8f else 7f
                         )
                     ),
                     color = if (lyricsBrush != null) Color.Unspecified else litColor,
                     maxLines = Int.MAX_VALUE,
                     modifier = Modifier
+                        .then(if (centerLineLyrics) Modifier.fillMaxWidth() else Modifier)
                         .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
                         .drawWithCache {
                             val layout = mainTextLayoutResult.value
@@ -645,10 +772,11 @@ private fun LyricLineItem(
                             onDrawWithContent {
                                 drawContent()
                                 if (geometry != null) {
+                                    val playbackPositionMs = currentPositionProvider().toLong()
                                     eraseFutureText(
                                         geometry = geometry,
                                         words = line.words,
-                                        pos = currentPositionProvider().toLong(),
+                                        pos = playbackPositionMs,
                                         drawScope = this
                                     )
                                 }
@@ -660,16 +788,53 @@ private fun LyricLineItem(
 
         // ── Bracket Text Box ──
         if (bracketContent != null) {
-            Box(modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 4.dp)) {
+            Box(modifier = (if (centerLineLyrics) Modifier.fillMaxWidth() else Modifier)
+                .padding(start = 6.dp, end = 6.dp, top = 4.dp)) {
                 // Base Dim Text
-                Text(
+                LyricsText(
                     text = bracketContent,
-                    style = bracketTextStyle,
+                    style = if (isKaraoke || !isActive) bracketTextStyle.copy(brush = null) else bracketTextStyle,
                     color = if (isKaraoke) dimColor else if (isActive && lyricsBrush != null) Color.Unspecified
                     else if (isActive) renderedColor else dimColor,
                     onTextLayout = { bracketTextLayoutResult.value = it },
-                    maxLines = 1
+                    maxLines = 1,
+                    outlineWidth = lineSyncedGradientBorderWidth,
+                    textAlign = lineAlignment,
+                    fillTextWidth = centerLineLyrics
                 )
+
+                // Karaoke font border, limited to words with an active gradient.
+                if (isKaraoke && isActive && lyricsBrush != null && gradientOutlineWidthPx > 0f) {
+                    Text(
+                        text = bracketContent,
+                        style = bracketTextStyle.copy(
+                            brush = SolidColor(Color.Black),
+                            drawStyle = Stroke(width = gradientOutlineWidthPx)
+                        ),
+                        color = Color.Unspecified,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .then(if (centerLineLyrics) Modifier.fillMaxWidth() else Modifier)
+                            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                            .drawWithCache {
+                                val layout = bracketTextLayoutResult.value
+                                val geometry = layout?.let {
+                                    buildKaraokeTextGeometry(it, line.words, bracketStartIndex)
+                                }
+                                onDrawWithContent {
+                                    if (geometry != null) {
+                                        drawProgressiveKaraokeFontBorder(
+                                            geometry = geometry,
+                                            words = line.words,
+                                            pos = currentPositionProvider().toLong(),
+                                            drawScope = this,
+                                            strokeWidthPx = gradientOutlineWidthPx
+                                        )
+                                }
+                                }
+                            }
+                    )
+                }
 
                 // Overlay Lit Text
                 if (isKaraoke && isActive) {
@@ -677,14 +842,19 @@ private fun LyricLineItem(
                         text = bracketContent,
                         style = bracketTextStyle.copy(
                             shadow = androidx.compose.ui.graphics.Shadow(
-                                color = accentColor.copy(alpha = 0.4f),
+                                color = if (lyricsColorStyle == "White") {
+                                    Color.White.copy(alpha = 0.9f)
+                                } else {
+                                    accentColor.copy(alpha = 0.4f)
+                                },
                                 offset = androidx.compose.ui.geometry.Offset(0f, 0f),
-                                blurRadius = 7f
+                                blurRadius = if (lyricsColorStyle == "White") 8f else 7f
                             )
                         ),
                         color = if (lyricsBrush != null) Color.Unspecified else litColor,
                         maxLines = 1,
                         modifier = Modifier
+                            .then(if (centerLineLyrics) Modifier.fillMaxWidth() else Modifier)
                             .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
                             .drawWithCache {
                                 val layout = bracketTextLayoutResult.value
@@ -692,10 +862,11 @@ private fun LyricLineItem(
                                 onDrawWithContent {
                                     drawContent()
                                     if (geometry != null) {
+                                        val playbackPositionMs = currentPositionProvider().toLong()
                                         eraseFutureText(
                                             geometry = geometry,
                                             words = line.words,
-                                            pos = currentPositionProvider().toLong(),
+                                            pos = playbackPositionMs,
                                             drawScope = this
                                         )
                                     }
@@ -721,14 +892,53 @@ private fun LyricLineItem(
                     .padding(horizontal = 6.dp)
                     .padding(top = 4.dp)
             ) {
-                Text(
+                LyricsText(
                     text = backgroundText,
-                    style = backgroundStyle,
+                    style = if (isKaraoke || !isActive) backgroundStyle.copy(brush = null) else backgroundStyle,
                     color = if (isActive) contentColor.copy(alpha = 0.82f) else dimColor,
                     modifier = Modifier.fillMaxWidth(),
                     onTextLayout = { backgroundLayoutResult.value = it },
-                    maxLines = 2
+                    maxLines = 2,
+                    outlineWidth = lineSyncedGradientBorderWidth,
+                    textAlign = lineAlignment,
+                    fillTextWidth = centerLineLyrics
                 )
+
+                // Karaoke background-vocal font border: reveal only the glyph stroke
+                // covered by the same timed gradient sweep as the background-vocal fill.
+                if (isKaraoke && isActive && lyricsBrush != null && gradientOutlineWidthPx > 0f && line.backgroundWords.isNotEmpty()) {
+                    Text(
+                        text = backgroundText,
+                        style = backgroundStyle.copy(
+                            brush = SolidColor(Color.Black),
+                            drawStyle = Stroke(width = gradientOutlineWidthPx)
+                        ),
+                        color = Color.Unspecified,
+                        maxLines = 2,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer {
+                                compositingStrategy = CompositingStrategy.Offscreen
+                            }
+                            .drawWithCache {
+                                val layout = backgroundLayoutResult.value
+                                val geometry = layout?.let {
+                                    buildKaraokeTextGeometry(it, line.backgroundWords, 0)
+                                }
+                                onDrawWithContent {
+                                    if (geometry != null) {
+                                        drawProgressiveKaraokeFontBorder(
+                                            geometry = geometry,
+                                            words = line.backgroundWords,
+                                            pos = currentPositionProvider().toLong(),
+                                            drawScope = this,
+                                            strokeWidthPx = gradientOutlineWidthPx
+                                        )
+                                }
+                                }
+                            }
+                    )
+                }
 
                 if (line.backgroundWords.isNotEmpty() && isActive) {
                     Text(
@@ -774,29 +984,43 @@ private fun buildKaraokeTextGeometry(
     words: List<LyricWord>,
     wordOffset: Int
 ): KaraokeTextGeometry {
-    val textLength = layout.layoutInput.text.length
+    val text = layout.layoutInput.text.text
     val geometries = ArrayList<KaraokeWordGeometry>(words.size)
+    val characterGeometries = ArrayList<KaraokeCharacterGeometry>()
 
-    // Build one cached path per timed word, not one path per character. During playback that
-    // reduces per-frame mask draws from roughly one per glyph to one per word.
     words.forEachIndexed { wordIndex, word ->
         val first = max(0, word.charRange.first - wordOffset)
-        val endExclusive = min(textLength, word.charRange.last - wordOffset + 1)
+        val endExclusive = min(text.length, word.charRange.last - wordOffset + 1)
         if (first >= endExclusive) return@forEachIndexed
 
+        // Keep this enclosing path only for masking the karaoke fill. Font borders
+        // below are native TextStyle strokes clipped with cached character bounds.
         val wordPath = layout.getPathForRange(first, endExclusive)
+        val visibleCharacters = ArrayList<Rect>()
         var left = Float.POSITIVE_INFINITY
         var top = Float.POSITIVE_INFINITY
         var right = Float.NEGATIVE_INFINITY
         var bottom = Float.NEGATIVE_INFINITY
 
         for (charIndex in first until endExclusive) {
+            if (text[charIndex].isWhitespace()) continue
             val bounds = layout.getBoundingBox(charIndex)
             if (bounds.width <= 0f || bounds.height <= 0f) continue
+            visibleCharacters.add(bounds)
             left = min(left, bounds.left)
             top = min(top, bounds.top)
             right = max(right, bounds.right)
             bottom = max(bottom, bounds.bottom)
+        }
+
+        val characterCount = visibleCharacters.size
+        visibleCharacters.forEachIndexed { characterIndex, bounds ->
+            characterGeometries.add(
+                KaraokeCharacterGeometry(
+                    wordIndex = wordIndex,
+                    bounds = bounds
+                )
+            )
         }
 
         if (left.isFinite() && top.isFinite() && right > left && bottom > top) {
@@ -810,7 +1034,7 @@ private fun buildKaraokeTextGeometry(
         }
     }
 
-    return KaraokeTextGeometry(words = geometries)
+    return KaraokeTextGeometry(words = geometries, characters = characterGeometries)
 }
 
 private fun eraseFutureText(
@@ -858,6 +1082,49 @@ private fun calculateWordProgress(word: LyricWord, pos: Long): Float =
         wordDurationMs = word.durationMs,
         playbackPositionMs = pos
     )
+ 
+/**
+ * Clear the stroked font border from words whose gradient has not started.
+ * The border itself is rendered by TextStyle.drawStyle on a text layer.
+ */
+private fun drawProgressiveKaraokeFontBorder(
+    geometry: KaraokeTextGeometry,
+    words: List<LyricWord>,
+    pos: Long,
+    drawScope: androidx.compose.ui.graphics.drawscope.ContentDrawScope,
+    strokeWidthPx: Float
+) {
+    val revealPath = Path()
+    val wordGeometryByIndex = geometry.words.associateBy { it.wordIndex }
+    geometry.characters.forEach { character ->
+        val word = words.getOrNull(character.wordIndex) ?: return@forEach
+        val wordGeometry = wordGeometryByIndex[character.wordIndex] ?: return@forEach
+        val progress = calculateWordProgress(word, pos)
+        if (progress <= 0f) return@forEach
+
+        // As soon as the gradient frontier enters a glyph, reveal that glyph's
+        // complete font stroke. Do not progressively crop the stroke across the letter.
+        val revealBoundary = wordGeometry.bounds.left + wordGeometry.bounds.width * progress
+        val bounds = character.bounds
+        if (revealBoundary <= bounds.left) return@forEach
+
+        val halfStroke = strokeWidthPx / 2f
+        revealPath.addRect(
+            Rect(
+                left = bounds.left - halfStroke,
+                top = bounds.top - halfStroke,
+                right = bounds.right + halfStroke,
+                bottom = bounds.bottom + halfStroke
+            )
+        )
+    }
+
+    if (!revealPath.isEmpty) {
+        drawScope.clipPath(revealPath) {
+            drawScope.drawContent()
+        }
+    }
+}
 
 // ════════════════════════════════════════════════════════════════════════════════
 // ─ Interlude Item Composable
@@ -996,7 +1263,8 @@ private suspend fun performSmoothedScroll(
     activeIndex: Int,
     displayItems: List<LyricDisplayItem>,
     estimatedItemHalfHeightPx: Int,
-    scrollDurationMs: Int = 140
+    scrollDurationMs: Int = 140,
+    immediateInitialPosition: Boolean = false
 ) {
     if (activeIndex !in displayItems.indices) return
 
@@ -1014,10 +1282,18 @@ private suspend fun performSmoothedScroll(
         val viewportCenter = (layout.viewportStartOffset + layout.viewportEndOffset) / 2
         // animateScrollToItem uses the LazyList's built-in fling animation;
         // its API does not accept an AnimationSpec parameter.
-        listState.animateScrollToItem(
-            index = activeIndex,
-            scrollOffset = -(viewportCenter - estimatedItemHalfHeightPx)
-        )
+        val initialScrollOffset = -(viewportCenter - estimatedItemHalfHeightPx)
+        if (immediateInitialPosition) {
+            listState.scrollToItem(
+                index = activeIndex,
+                scrollOffset = initialScrollOffset
+            )
+        } else {
+            listState.animateScrollToItem(
+                index = activeIndex,
+                scrollOffset = initialScrollOffset
+            )
+        }
         withFrameNanos { }
         layout = listState.layoutInfo
         item = layout.visibleItemsInfo.firstOrNull { it.index == activeIndex } ?: return
@@ -1029,13 +1305,17 @@ private suspend fun performSmoothedScroll(
     val itemCenter = item!!.offset + item!!.size / 2f
     val correctionPx = itemCenter - viewportCenter
     if (abs(correctionPx) > 1.5f) {
-        listState.animateScrollBy(
-            value = correctionPx,
-            animationSpec = tween(
-                durationMillis = scrollDurationMs.coerceAtLeast(1),
-                easing = FastOutSlowInEasing
+        if (immediateInitialPosition) {
+            listState.scrollBy(correctionPx)
+        } else {
+            listState.animateScrollBy(
+                value = correctionPx,
+                animationSpec = tween(
+                    durationMillis = scrollDurationMs.coerceAtLeast(1),
+                    easing = FastOutSlowInEasing
+                )
             )
-        )
+        }
     }
 }
 

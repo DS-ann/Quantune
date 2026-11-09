@@ -425,30 +425,139 @@ class BiniLyricsProvider(client: OkHttpClient) : LyricsProvider {
 
 /** Community-submitted lyrics from Unison; response formats may be TTML, LRC, or plain text. */
 class UnisonLyricsProvider(client: OkHttpClient) : LyricsProvider {
-    private val http = lyricsHttp(client)
+    // Unison lookups may need a metadata-search fallback after a stale video ID or
+    // an exact title/artist miss; allow the service a little more time than generic APIs.
+    private val http = client.newBuilder()
+        .callTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(12, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
 
     override fun getName(): String = "Unison"
     override fun getPriority(): Int = 6
 
     override fun search(track: TrackMetadata): LyricsResult? {
-        val url = "https://unison.boidu.dev/lyrics".toHttpUrl().newBuilder()
+        // Prefer the active video ID, but never let a stale/mismatched ID block the
+        // metadata catalogue lookup.
+        if (!track.videoId.isNullOrBlank()) {
+            fetchByVideoId(track.videoId!!, track)?.let { return it }
+        }
+
+        fetchByMetadata(track)?.let { return it }
+        return searchMetadataIndex(track)
+    }
+
+    private fun fetchByVideoId(videoId: String, track: TrackMetadata): LyricsResult? {
+        val url = "https://unison.betterlyrics.org/lyrics".toHttpUrl().newBuilder()
+            .addQueryParameter("v", videoId)
+            .build()
+        return parseUnisonResponse(lyricsJson(http, url), track)
+    }
+
+    private fun fetchByMetadata(track: TrackMetadata): LyricsResult? {
+        val url = "https://unison.betterlyrics.org/lyrics".toHttpUrl().newBuilder()
             .addQueryParameter("song", cleanLyricTitle(track.cleanedTitle))
             .addQueryParameter("artist", track.cleanedArtist)
             .apply {
                 if (track.album.isNotBlank()) addQueryParameter("album", track.album)
                 val seconds = track.durationMs / 1000L
                 if (seconds > 0L) addQueryParameter("duration", seconds.toString())
-            }.build()
+            }
+            .build()
+        return parseUnisonResponse(lyricsJson(http, url), track)
+    }
+
+    private fun searchMetadataIndex(track: TrackMetadata): LyricsResult? {
+        val url = "https://unison.betterlyrics.org/lyrics/search".toHttpUrl().newBuilder()
+            .addQueryParameter("song", cleanLyricTitle(track.cleanedTitle))
+            .addQueryParameter("artist", track.cleanedArtist)
+            .apply {
+                if (track.album.isNotBlank()) addQueryParameter("album", track.album)
+                val seconds = track.durationMs / 1000L
+                if (seconds > 0L) addQueryParameter("duration", seconds.toString())
+                addQueryParameter("limit", "5")
+            }
+            .build()
         val response = lyricsJson(http, url) ?: return null
-        if (response.text("success")?.equals("true", true) != true) return null
-        val raw = response.field("data").text("lyrics")
-            ?: response.field("data").text("content")
-            ?: response.text("lyrics")
-        return lyricResult(getName(), track, raw)
+        if (response.text("success")?.equals("true", true) != true) {
+            Log.d("UnisonLyrics", "Search had no candidates: ${response.text("code") ?: response.text("error") ?: "unknown"}")
+            return null
+        }
+
+        val candidates = response.field("data").asArrayOrNull()
+            ?: response.field("results").asArrayOrNull()
+            ?: return null
+
+        for (candidate in candidates) {
+            val entry = candidate.asObjectOrNull() ?: continue
+            // Some deployments include the full lyric body in search; others return
+            // summaries and require a second lookup by video ID or entry ID.
+            parseUnisonData(entry, track)?.let { return it }
+
+            val videoId = entry.text("videoId")?.takeIf { it.isNotBlank() }
+            if (videoId != null) {
+                fetchByVideoId(videoId, track)?.let { return it }
+            }
+
+            val id = entry.text("id")?.takeIf { it.isNotBlank() }
+            if (id != null) {
+                val byIdUrl = "https://unison.betterlyrics.org/lyrics".toHttpUrl()
+                    .newBuilder()
+                    .addPathSegment(id)
+                    .build()
+                parseUnisonResponse(lyricsJson(http, byIdUrl), track)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun parseUnisonResponse(
+        response: JsonElement?,
+        track: TrackMetadata
+    ): LyricsResult? {
+        if (response == null) return null
+        val success = response.text("success")
+        if (success != null && !success.equals("true", true)) {
+            Log.d("UnisonLyrics", "Lookup miss: ${response.text("code") ?: response.text("error") ?: "unknown"}")
+            return null
+        }
+        val data = response.field("data").asObjectOrNull()
+            ?: response.asObjectOrNull()?.takeIf { it.has("lyrics") }
+            ?: return null
+        return parseUnisonData(data, track)
+    }
+
+    private fun parseUnisonData(data: JsonObject, track: TrackMetadata): LyricsResult? {
+        val raw = data.text("lyrics") ?: data.text("content") ?: return null
+        val videoId = data.text("videoId")?.takeIf { it.isNotBlank() } ?: track.videoId
+        val result = lyricResult(
+            getName(),
+            track,
+            raw,
+            matchedTitle = data.text("song") ?: track.cleanedTitle,
+            matchedArtist = data.text("artist") ?: track.cleanedArtist,
+            durationSeconds = data.asNumber("duration")
+        ) ?: return null
+
+        // Unison asks integrating apps to credit both the database and the submitter.
+        if (!videoId.isNullOrBlank() && videoId.matches(Regex("""[A-Za-z0-9_-]+"""))) {
+            result.sourceCreditText = "Lyrics from Unison"
+            result.sourceCreditUrl = "https://unison.betterlyrics.org/song/$videoId"
+        }
+        val submitter = data.field("submitter")
+        val displayName = submitter.text("displayName")?.takeIf { it.isNotBlank() }
+        val keyId = submitter.text("keyId")?.takeIf { it.isNotBlank() }
+        if (displayName != null && keyId != null) {
+            result.sourceSubmitterText = "Submitted by $displayName"
+            result.sourceSubmitterUrl =
+                "https://unison.betterlyrics.org/curator/${android.net.Uri.encode(keyId)}"
+        }
+        return result
     }
 }
 
-/** Genius provides useful uncensored/plain lyrics when a timed source is unavailable. */
+/** Geniusius provides useful uncensored/plain lyrics when a timed source is unavailable. */
 class GeniusLyricsProvider(client: OkHttpClient) : LyricsProvider {
     private val http = lyricsHttp(client)
 

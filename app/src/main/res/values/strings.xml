@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources> <!-- App name -->
-    <string name="app_name">Quantune</string> <!-- Bottom tabs -->
+    <string name="app_name">D.S Music</string> <!-- Bottom tabs -->
     <string name="tab_library">Library</string>
     <string name="tab_explore">Explore</string>
     <string name="tab_effects">Effects</string>
@@ -38,9 +38,9 @@
 
         + Many improvements and fixes<br><br>
 
-        <a href="https://github.com/DS-ann/Quantune/releases"><b>View Full Changelog</b></a><br><br>
+        <a href="https://github.com/DS-ann/D.S-Music2/releases"><b>View Full Changelog</b></a><br><br>
 
-        <i>Quantune is more than an offline music player.</i>
+        <i>D.S Music is more than an offline music player.</i>
         ]]></string> <!-- Widget Descriptions -->
     <string name="widget_small_desc">Expressive Aura - Compact 2x2 player with a pulsing artistic
         background.</string>

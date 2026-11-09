@@ -16,6 +16,7 @@ import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.MediaRouter2
 import android.net.Uri
 import android.os.Binder
 import android.os.Build
@@ -95,7 +96,6 @@ private fun usableCacheTrackTitle(value: String?): String? {
     val candidate = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     return candidate.takeUnless {
         it.equals("D.S Music", ignoreCase = true) ||
-            it.equals("Quantune", ignoreCase = true) ||
             it.equals("Unknown Title", ignoreCase = true) ||
             it.equals("<unknown>", ignoreCase = true) ||
             it.equals("Unknown", ignoreCase = true) ||
@@ -107,7 +107,6 @@ private fun usableCacheTrackArtist(value: String?): String? {
     val candidate = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     return candidate.takeUnless {
         it.equals("D.S Music", ignoreCase = true) ||
-            it.equals("Quantune", ignoreCase = true) ||
             it.equals("Unknown Artist", ignoreCase = true) ||
             it.equals("<unknown>", ignoreCase = true) ||
             it.equals("Unknown", ignoreCase = true) ||
@@ -819,6 +818,7 @@ class AudioPlaybackService : MediaSessionService() {
     private var widgetLyricsObserverJob: Job? = null
     private var widgetPlainLyricsObserverJob: Job? = null
     private var widgetSongObserverJob: Job? = null
+    @Volatile private var widgetLyricsRequestedSongId: Long? = null
     @Volatile private var widgetSyncedLyrics: List<LyricLine> = emptyList()
     @Volatile private var widgetPlainLyrics: String? = null
     @Volatile private var lyricsWidgetInstalledCached = false
@@ -916,7 +916,7 @@ class AudioPlaybackService : MediaSessionService() {
     private var cacheAssetsSongId: Long? = null
     @Volatile private var activeVideoCacheVideoId: String? = null
     @Volatile private var activeVideoCacheUris: Set<String> = emptySet()
-    private var currentSongName = "Quantune"
+    private var currentSongName = "D.S Music"
     private var currentAlbumArt: Bitmap? = null
     private var currentAlbumArtSongId: String? = null
     @Volatile private var artworkRequestGeneration: Long = 0L
@@ -958,6 +958,8 @@ class AudioPlaybackService : MediaSessionService() {
     private lateinit var telemetryManager: com.dsann.music.data.innertube.YouTubeTelemetryManager
 
     private var audioManager: AudioManager? = null
+    private var systemOutputRouteMonitor: SystemOutputRouteMonitor? = null
+    private val mediaRouteNotificationRefreshRunnable = Runnable { refreshMediaNotification() }
     private var audioFocusRequest: AudioFocusRequest? = null
     private var isPausedByFocusLoss = false
     private var audioFocusEnabled = true
@@ -1070,8 +1072,10 @@ class AudioPlaybackService : MediaSessionService() {
                 viewModel?.setVideoModeState(false)
                 viewModel?.setLoading(true)
                 Log.w(TAG, "Video decoder/stream failed for $videoId; restoring audio-only playback", error)
-                com.dsann.music.ui.SnackbarController.showMessage(
-                    "This video format is not supported by this device. Switched back to audio."
+                showPlaybackFailure(
+                    error,
+                    context = "Video playback",
+                    action = "switching to audio"
                 )
                 loadAndPlay("innertube://$videoId".toUri(), videoPosition)
                 return
@@ -1083,12 +1087,12 @@ class AudioPlaybackService : MediaSessionService() {
                     playbackRecoveryStage = 1
                     forceWebRemixOnNextResolveVideoId = videoId
                     Log.w(TAG, "Playback recovery 1/2: retrying $videoId with a fresh WEB_REMIX URL")
-                    com.dsann.music.ui.SnackbarController.showMessage("Trying an alternate song stream…")
+                    showPlaybackFailure(error, action = "trying alternate stream (1/2)")
                 } else {
                     playbackRecoveryStage = 2
                     forceCompatibleFallbackOnNextResolveVideoId = videoId
                     Log.w(TAG, "Playback recovery 2/2: retrying $videoId with an AAC-compatible stream")
-                    com.dsann.music.ui.SnackbarController.showMessage("Trying a more compatible audio stream…")
+                    showPlaybackFailure(error, action = "trying compatible stream (2/2)")
                 }
 
                 val resumePosition = getStablePlaybackPositionMs()
@@ -1110,12 +1114,7 @@ class AudioPlaybackService : MediaSessionService() {
             }
 
             viewModel?.setLoading(false)
-            val message = if (videoId != null) {
-                "Playback failed after retry. Check your connection and try again."
-            } else {
-                "This audio file could not be played. Try another file."
-            }
-            com.dsann.music.ui.SnackbarController.showMessage(message)
+            showPlaybackFailure(error, action = "automatic recovery exhausted")
             // Keep the failed item selected so the user can retry or inspect the failure.
             // Silently skipping every errored track made a complete stream failure look like
             // the Play button was broken.
@@ -1192,6 +1191,24 @@ class AudioPlaybackService : MediaSessionService() {
                         val nextSong = songs.getOrNull(nextIdx)
                         cleanupEndedVideoCacheIfNeeded(vm.currentSong.value, nextSong)
                         vm.updateSongIndexOnly(nextIdx)
+                        // The native queue item has already been prepared by Media3. An
+                        // automatic media transition can remain STATE_READY without a fresh
+                        // state callback, so explicitly sync the ViewModel's loading state.
+                        if (player.playbackState == Player.STATE_READY) {
+                            vm.setLoading(false)
+                            vm.setPlaybackReady(true)
+                        } else {
+                            vm.setLoading(player.playbackState == Player.STATE_BUFFERING)
+                            vm.setPlaybackReady(false)
+                        }
+                        vm.postIsPlaying(player.isPlaying)
+                        vm.setCurrentPosition(
+                            getStablePlaybackPositionMs().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                        )
+                        vm.setDuration(
+                            player.duration.takeIf { it != C.TIME_UNSET && it > 0L }
+                                ?.coerceAtMost(Int.MAX_VALUE.toLong())?.toInt() ?: 0
+                        )
                         
                         songs.getOrNull(nextIdx)?.let { song ->
                             currentSongName = song.title
@@ -1273,6 +1290,7 @@ class AudioPlaybackService : MediaSessionService() {
         // No-op for behavior in older Media3 or if unresolved
         audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         handler = Handler(Looper.getMainLooper())
+        registerSystemOutputRouteMonitor()
         registerScreenWakeReceiver()
 
         telemetryManager = com.dsann.music.data.innertube.YouTubeTelemetryManager(
@@ -1447,6 +1465,9 @@ class AudioPlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        handler.removeCallbacks(mediaRouteNotificationRefreshRunnable)
+        systemOutputRouteMonitor?.stop()
+        systemOutputRouteMonitor = null
         prefListener?.let {
             getSharedPreferences(PREFS_NAME, MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(it)
         }
@@ -1540,8 +1561,16 @@ class AudioPlaybackService : MediaSessionService() {
             oldVm.cleanupBgScope()
         }
         this.viewModel = vm
-        hasLyricsWidgetInstalled(forceRefresh = true)
+        val lyricsWidgetPresent = hasLyricsWidgetInstalled(forceRefresh = true)
         if (player.isPlaying) startProgressFrameUpdates()
+
+        // Do not rely only on a future StateFlow emission: the first song may already
+        // be selected/restored before this service attaches to the Activity ViewModel.
+        if (lyricsWidgetPresent) {
+            vm.currentSong.value?.let { song ->
+                ensureWidgetLyricsForSong(vm, song, refreshWidgetDetection = false)
+            }
+        }
 
         // Retain the lyric timeline in the service so widgets stay live even after
         // the Activity is gone. The same sorted timeline drives full-screen lyric timing.
@@ -1591,19 +1620,12 @@ class AudioPlaybackService : MediaSessionService() {
                     widgetPlainLyrics = vm.plainLyrics.value?.takeIf { it.isNotBlank() }
                     cancelWidgetLyricRefresh()
 
-                    if (hasLyricsWidgetInstalled() && song != null) {
-                        val hasSyncedLyrics = !vm.syncedLyrics.value.isNullOrEmpty()
-                        val hasPlainLyrics = !vm.plainLyrics.value.isNullOrBlank()
-                        // Avoid restarting a fetch already started by the player UI.
-                        // The first non-null emission now also covers restored/current tracks.
-                        if (!hasSyncedLyrics && !hasPlainLyrics && !vm.isLyricsLoading.value) {
-                            Log.d(TAG, "Starting widget lyric fetch for current track: ${song.title}")
-                            vm.fetchLyricsForCurrentSong()
-                        } else {
-                            val position = player.currentPosition.coerceAtLeast(0L)
-                            updateWidgetProgress(position, player.duration.coerceAtLeast(0L))
-                            scheduleNextWidgetLyricRefresh(position)
-                        }
+                    if (song != null) {
+                        ensureWidgetLyricsForSong(
+                            vm = vm,
+                            song = song,
+                            refreshWidgetDetection = true
+                        )
                     }
                 }
             }
@@ -1809,6 +1831,10 @@ class AudioPlaybackService : MediaSessionService() {
             val videoId = uri.host
             if (videoId.isNullOrBlank()) {
                 viewModel?.setLoading(false)
+                showPlaybackFailure(
+                    IllegalArgumentException("Missing video ID in playback URI"),
+                    context = "Stream resolution"
+                )
                 return
             }
             val useWebRemixRetry = forceWebRemixOnNextResolveVideoId == videoId
@@ -1891,17 +1917,21 @@ class AudioPlaybackService : MediaSessionService() {
                 // dialog is a user decision, not an extraction error: don't auto-switch formats
                 // or immediately show the same request again.
                 var formatChoiceCancelled = false
+                var streamResolutionFailure: Throwable? = null
+                fun rememberStreamResult(result: Result<String>): String? {
+                    result.exceptionOrNull()?.let { streamResolutionFailure = it }
+                    return result.getOrNull()
+                }
+
                 var streamUrl = async(Dispatchers.IO) {
-                    when {
-                        useWebRemixRetry -> YouTubeMusic.getStreamUrlFromWebRemix(videoId).getOrNull()
-                        useCompatibleFallbackRetry -> YouTubeMusic.getCompatibleFallbackStreamUrl(videoId).getOrNull()
-                        else -> {
-                            val result = YouTubeMusic.getStreamUrl(videoId, promptForFormatChoice = true)
-                            formatChoiceCancelled =
-                                result.exceptionOrNull() is com.dsann.music.data.innertube.AudioFormatSelectionCancelledException
-                            result.getOrNull()
-                        }
+                    val result = when {
+                        useWebRemixRetry -> YouTubeMusic.getStreamUrlFromWebRemix(videoId)
+                        useCompatibleFallbackRetry -> YouTubeMusic.getCompatibleFallbackStreamUrl(videoId)
+                        else -> YouTubeMusic.getStreamUrl(videoId, promptForFormatChoice = true)
                     }
+                    formatChoiceCancelled =
+                        result.exceptionOrNull() is com.dsann.music.data.innertube.AudioFormatSelectionCancelledException
+                    rememberStreamResult(result)
                 }.await()
 
                 if (formatChoiceCancelled) {
@@ -1919,11 +1949,11 @@ class AudioPlaybackService : MediaSessionService() {
                         useWebRemixRetry -> {
                             Log.w(TAG, "WEB_REMIX recovery URL unavailable for $videoId; trying Android/iOS InnerTube")
                             streamUrl = async(Dispatchers.IO) {
-                                YouTubeMusic.getStreamUrlFromInnerTube(videoId).getOrNull()
+                                rememberStreamResult(YouTubeMusic.getStreamUrlFromInnerTube(videoId))
                             }.await()
                             if (streamUrl.isNullOrEmpty()) {
                                 streamUrl = async(Dispatchers.IO) {
-                                    YouTubeMusic.getStreamUrl(videoId).getOrNull()
+                                    rememberStreamResult(YouTubeMusic.getStreamUrl(videoId))
                                 }.await()
                             }
                         }
@@ -1935,7 +1965,7 @@ class AudioPlaybackService : MediaSessionService() {
                             withContext(Dispatchers.IO) { YouTubeMusic.invalidateStreamUrl(videoId) }
                             delay(250L)
                             streamUrl = async(Dispatchers.IO) {
-                                YouTubeMusic.getStreamUrl(videoId).getOrNull()
+                                rememberStreamResult(YouTubeMusic.getStreamUrl(videoId))
                             }.await()
                         }
                     }
@@ -1998,8 +2028,10 @@ class AudioPlaybackService : MediaSessionService() {
                     shouldAutoPlay = false
                     viewModel?.setIsPlaying(false)
                     viewModel?.setLoading(false)
-                    com.dsann.music.ui.SnackbarController.showMessage(
-                        "Couldn't load this song. Check your connection and tap Play to retry."
+                    showPlaybackFailure(
+                        streamResolutionFailure
+                            ?: IllegalStateException("No playable audio stream was returned"),
+                        context = "Stream resolution"
                     )
                 }
               } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -2016,9 +2048,7 @@ class AudioPlaybackService : MediaSessionService() {
                         shouldAutoPlay = false
                         viewModel?.setIsPlaying(false)
                         viewModel?.setLoading(false)
-                        com.dsann.music.ui.SnackbarController.showMessage(
-                            "Couldn't load this song. Check your connection and tap Play to retry."
-                        )
+                        showPlaybackFailure(error, context = "Stream resolution")
                     }
                 }
             }
@@ -2531,8 +2561,19 @@ class AudioPlaybackService : MediaSessionService() {
     }
 
     fun pause() {
+        // A remote pause can arrive while a new stream is still resolving. Clear the
+        // autoplay intent as well as the player's playWhenReady flag, otherwise the
+        // resolved stream can start after this pause has already been processed.
+        shouldAutoPlay = false
+        pendingPlaybackRequest = pendingPlaybackRequest?.copy(autoPlay = false)
+
         if (!isPlayerInitialized) {
-            pendingServiceActions.add(ACTION_PAUSE)
+            // A pause received during asynchronous service startup must supersede any
+            // queued Play action, while preserving a later explicit Play tap.
+            pendingServiceActions.removeAll { it == ACTION_PLAY }
+            if (pendingServiceActions.lastOrNull() != ACTION_PAUSE) {
+                pendingServiceActions.add(ACTION_PAUSE)
+            }
             return
         }
         if (player.currentMediaItem == null && viewModel == null) {
@@ -2543,13 +2584,13 @@ class AudioPlaybackService : MediaSessionService() {
             updateWidgetState(false)
             return
         }
-        if (player.isPlaying) {
+        if (player.isPlaying || player.playWhenReady) {
             player.pause()
-            if (isCrossfading) {
-                nextPlayer?.pause()
-                crossfadeAnimator?.pause()
-            }
             com.dsann.music.util.PlaybackStateManager.savePosition(applicationContext, player.currentPosition)
+        }
+        if (isCrossfading) {
+            nextPlayer?.pause()
+            crossfadeAnimator?.pause()
         }
     }
 
@@ -2832,6 +2873,148 @@ class AudioPlaybackService : MediaSessionService() {
             Log.d(TAG, "Current audio format is not available yet", error)
             null
         }
+    }
+
+    /**
+     * HyperOS and other Android 11+ System UI builds can keep the media notification's
+     * output chip on the phone speaker until the user opens the route picker. Observe the
+     * system routing controller so a Bluetooth/speaker transfer causes a fresh session
+     * notification without polling or touching the active audio stream.
+     *
+     * MediaRouter2 is API 30+. Older devices, including Android 6, never load this monitor.
+     */
+    private fun registerSystemOutputRouteMonitor() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        try {
+            systemOutputRouteMonitor = SystemOutputRouteMonitor().also { it.start() }
+        } catch (error: Exception) {
+            Log.w(TAG, "Unable to observe system audio output route changes", error)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private inner class SystemOutputRouteMonitor {
+        private val router = MediaRouter2.getInstance(this@AudioPlaybackService)
+        private var selectedRouteIds = emptyList<String>()
+
+        private val callback = object : MediaRouter2.ControllerCallback() {
+            override fun onControllerUpdated(controller: MediaRouter2.RoutingController) {
+                if (controller !== router.systemController) return
+
+                val latestRouteIds = controller.selectedRoutes.map { it.id }.sorted()
+                if (latestRouteIds == selectedRouteIds) return
+                selectedRouteIds = latestRouteIds
+
+                // Route updates can arrive in quick succession while System UI completes a
+                // transfer. Coalesce them into one notification refresh on the main thread.
+                handler.removeCallbacks(mediaRouteNotificationRefreshRunnable)
+                handler.postDelayed(mediaRouteNotificationRefreshRunnable, 180L)
+            }
+        }
+
+        fun start() {
+            selectedRouteIds = router.systemController.selectedRoutes.map { it.id }.sorted()
+            router.registerControllerCallback(
+                ContextCompat.getMainExecutor(this@AudioPlaybackService),
+                callback
+            )
+        }
+
+        fun stop() {
+            runCatching { router.unregisterControllerCallback(callback) }
+        }
+    }
+
+    /**
+     * Converts Media3's stable error code or the deepest useful resolver cause into a
+     * short type label suitable for the global snackbar. The exception message itself is
+     * intentionally omitted because it can contain long URLs or implementation details.
+     */
+    private fun playbackFailureType(error: Throwable?): String {
+        val causes = ArrayList<Throwable>(8)
+        var current = error
+        while (current != null && causes.size < 8) {
+            causes.add(current)
+            current = current.cause
+        }
+        if (causes.isEmpty()) return "Unknown"
+
+        val media3Error = causes.filterIsInstance<PlaybackException>().firstOrNull()
+        if (media3Error != null) {
+            val code = media3Error.errorCodeName
+            val label = when {
+                code.contains("NETWORK", ignoreCase = true) -> "Network error"
+                code.contains("BAD_HTTP_STATUS", ignoreCase = true) -> "HTTP response error"
+                code.contains("TIMEOUT", ignoreCase = true) -> "Timeout"
+                code.contains("FILE_NOT_FOUND", ignoreCase = true) -> "File not found"
+                code.contains("NO_PERMISSION", ignoreCase = true) -> "Permission denied"
+                code.contains("DECODER_INIT", ignoreCase = true) ||
+                    code.contains("DECODING", ignoreCase = true) -> "Decoder error"
+                code.contains("PARSING", ignoreCase = true) -> "Unsupported media format"
+                code.contains("AUDIO_TRACK", ignoreCase = true) -> "Audio output error"
+                else -> code.removePrefix("ERROR_CODE_")
+                    .lowercase()
+                    .split('_')
+                    .joinToString(" ") { part ->
+                        part.replaceFirstChar { char -> char.uppercase() }
+                    }
+            }
+            return if (code.isBlank() || code == "ERROR_CODE_UNSPECIFIED") {
+                "PlaybackException"
+            } else {
+                "$label ($code)"
+            }
+        }
+
+        val usefulCause = causes.firstOrNull { cause ->
+            cause.javaClass.simpleName in setOf(
+                "UnknownHostException",
+                "SocketTimeoutException",
+                "ConnectException",
+                "NoRouteToHostException",
+                "SSLHandshakeException",
+                "SSLException",
+                "InvalidResponseCodeException",
+                "FileNotFoundException",
+                "SecurityException"
+            )
+        } ?: causes.last()
+
+        val type = usefulCause.javaClass.simpleName.ifBlank { "Unknown" }
+        return when (type) {
+            "UnknownHostException", "NoRouteToHostException" -> "Network / DNS ($type)"
+            "SocketTimeoutException" -> "Network timeout ($type)"
+            "ConnectException" -> "Connection failed ($type)"
+            "SSLHandshakeException", "SSLException" -> "Secure connection failed ($type)"
+            "InvalidResponseCodeException" -> "HTTP response rejected ($type)"
+            "FileNotFoundException" -> "File not found ($type)"
+            "SecurityException" -> "Permission denied ($type)"
+            "IOException" -> "I/O error ($type)"
+            "IllegalStateException" -> {
+                val message = usefulCause.message.orEmpty().lowercase()
+                if (
+                    message.contains("stream extraction") ||
+                    message.contains("no usable audio stream") ||
+                    message.contains("no compatible fallback")
+                ) {
+                    "Stream unavailable"
+                } else {
+                    "Illegal state ($type)"
+                }
+            }
+            "IllegalArgumentException" -> "Invalid playback source ($type)"
+            else -> type
+        }
+    }
+
+    private fun showPlaybackFailure(
+        error: Throwable?,
+        context: String = "Playback",
+        action: String? = null
+    ) {
+        val type = playbackFailureType(error)
+        val actionSuffix = action?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+        com.dsann.music.ui.SnackbarController.showMessage("$context error: $type$actionSuffix")
     }
 
     @OptIn(UnstableApi::class)
@@ -3297,8 +3480,11 @@ class AudioPlaybackService : MediaSessionService() {
             // Proactively stack the next song for gapless transition
             scheduleQueuePreload(200L)
         } catch (e: Exception) {
+            shouldAutoPlay = false
+            viewModel?.setIsPlaying(false)
             viewModel?.setLoading(false)
-            Log.e(TAG, "Failed to load audio: ${e.message}")
+            Log.e(TAG, "Failed to load audio", e)
+            showPlaybackFailure(e)
         }
     }
 
@@ -3443,6 +3629,53 @@ class AudioPlaybackService : MediaSessionService() {
         handler.post(progressUpdateRunnable)
     }
 
+    /**
+     * Starts one widget lyric request for the active song, including the first song
+     * already selected when the service attaches. The request is deduplicated by song ID
+     * and never cancels a fetch that the player UI has already started.
+     */
+    private fun ensureWidgetLyricsForSong(
+        vm: PlayerSharedViewModel,
+        song: com.dsann.music.model.SongItem,
+        refreshWidgetDetection: Boolean,
+        allowRetry: Boolean = false
+    ) {
+        if (!hasLyricsWidgetInstalled(forceRefresh = refreshWidgetDetection)) return
+        if (vm.currentSong.value?.id != song.id) return
+
+        widgetSyncedLyrics = vm.syncedLyrics.value.orEmpty()
+            .sortedBy { widgetLyricStartMs(it) }
+        widgetPlainLyrics = vm.plainLyrics.value?.takeIf { it.isNotBlank() }
+
+        val hasLyrics = widgetSyncedLyrics.isNotEmpty() || !widgetPlainLyrics.isNullOrBlank()
+        val position = player.currentPosition.coerceAtLeast(0L)
+        val duration = player.duration.coerceAtLeast(0L)
+        if (hasLyrics) {
+            updateWidgetProgress(position, duration)
+            scheduleNextWidgetLyricRefresh(position)
+            return
+        }
+
+        if (vm.isLyricsLoading.value) {
+            // The main player may have started the same request before the service observer.
+            DsmusicWidgetProvider.updateAllWidgetsLyrics(
+                applicationContext,
+                "Searching for lyrics…"
+            )
+            return
+        }
+
+        if (widgetLyricsRequestedSongId == song.id && !allowRetry) return
+        widgetLyricsRequestedSongId = song.id
+        cancelWidgetLyricRefresh()
+        DsmusicWidgetProvider.updateAllWidgetsLyrics(
+            applicationContext,
+            "Searching for lyrics…"
+        )
+        Log.i(TAG, "Starting widget lyrics for '${song.title}' (songId=${song.id})")
+        vm.fetchLyricsForCurrentSong()
+    }
+
     private fun requestWidgetLyrics() {
         if (!hasLyricsWidgetInstalled(forceRefresh = true)) {
             cancelWidgetLyricRefresh()
@@ -3451,11 +3684,12 @@ class AudioPlaybackService : MediaSessionService() {
         val vm = viewModel
         val activeSong = vm?.currentSong?.value
         if (vm != null && activeSong != null) {
-            widgetSyncedLyrics = vm.syncedLyrics.value.orEmpty().sortedBy { widgetLyricStartMs(it) }
-            widgetPlainLyrics = vm.plainLyrics.value?.takeIf { it.isNotBlank() }
-            if (widgetSyncedLyrics.isEmpty() && widgetPlainLyrics.isNullOrBlank()) {
-                vm.fetchLyricsForCurrentSong()
-            }
+            ensureWidgetLyricsForSong(
+                vm = vm,
+                song = activeSong,
+                refreshWidgetDetection = false,
+                allowRetry = true
+            )
             updateWidgetState(player.isPlaying)
             scheduleNextWidgetLyricRefresh(player.currentPosition.coerceAtLeast(0L))
             return
@@ -3744,17 +3978,36 @@ class AudioPlaybackService : MediaSessionService() {
     private fun currentWidgetRepeatIconResource(): Int = when (
         viewModel?.repeatMode?.value ?: PlayerSharedViewModel.REPEAT_OFF
     ) {
-        PlayerSharedViewModel.REPEAT_ONCE -> R.drawable.widget_ic_repeat_one
-        PlayerSharedViewModel.REPEAT_INFINITY -> R.drawable.widget_ic_repeat_infinity
-        else -> R.drawable.widget_ic_repeat
+        PlayerSharedViewModel.REPEAT_ONCE -> R.drawable.ic_notification_repeat_one
+        PlayerSharedViewModel.REPEAT_INFINITY -> R.drawable.ic_notification_repeat_infinity
+        else -> R.drawable.ic_notification_repeat_off
     }
 
     fun updateWidgetState(isPlaying: Boolean) {
         // Playback notifications and song changes also arrive when the user has never
         // added a widget. Return before formatting lyrics or reading widget artwork state.
         if (!DsmusicWidgetProvider.hasAnyWidgets(applicationContext)) return
-        val activeSong = viewModel?.currentSong?.value ?: widgetRestoredSong
-        val playerHasItem = player.currentMediaItem != null
+        val item = player.currentMediaItem
+        val mediaId = item?.mediaId?.takeIf { it.isNotBlank() }
+
+        // During a Media3 transition, the active item can change before the Activity
+        // ViewModel publishes its new currentSong value. Resolve the widget track by the
+        // active mediaId first so its title and artwork cannot lag one track behind.
+        val queuedSong = mediaId?.let { activeMediaId ->
+            viewModel?.songList?.value?.firstOrNull {
+                it.id.toString() == activeMediaId
+            }
+        }
+        val viewModelSong = viewModel?.currentSong?.value
+        val activeSong = if (item != null) {
+            queuedSong
+                ?: viewModelSong?.takeIf { it.id.toString() == mediaId }
+                ?: widgetRestoredSong?.takeIf { it.id.toString() == mediaId }
+        } else {
+            viewModelSong ?: widgetRestoredSong
+        }
+
+        val playerHasItem = item != null
         val position = if (playerHasItem) {
             player.currentPosition.coerceAtLeast(0L)
         } else {
@@ -3763,15 +4016,15 @@ class AudioPlaybackService : MediaSessionService() {
         val duration = player.duration.takeIf {
             playerHasItem && it > 0L && it != androidx.media3.common.C.TIME_UNSET
         } ?: activeSong?.duration?.coerceAtLeast(0L) ?: 0L
-        val item = player.currentMediaItem
         val song = activeSong ?: item?.let { mediaItem ->
             val uri = mediaItem.localConfiguration?.uri
-            val id = mediaItem.mediaId.toLongOrNull()
+            val id = mediaId?.toLongOrNull()
                 ?: uri?.toString()?.hashCode()?.toLong()
+                ?: mediaId?.hashCode()?.toLong()
                 ?: return@let null
             com.dsann.music.model.SongItem(
                 id,
-                mediaItem.mediaMetadata.title?.toString()?.ifBlank { "Quantune" } ?: "Quantune",
+                mediaItem.mediaMetadata.title?.toString()?.ifBlank { "D.S Music" } ?: "D.S Music",
                 mediaItem.mediaMetadata.artist?.toString()?.ifBlank { "Unknown Artist" } ?: "Unknown Artist",
                 -1L,
                 uri?.toString(),
@@ -3780,6 +4033,7 @@ class AudioPlaybackService : MediaSessionService() {
             ).apply {
                 if (uri != null) contentUri = uri
                 thumbnailUrl = mediaItem.mediaMetadata.artworkUri?.toString()
+                albumName = mediaItem.mediaMetadata.albumTitle?.toString()
             }
         }
         DsmusicWidgetProvider.updateAllWidgets(
@@ -4164,6 +4418,11 @@ class AudioPlaybackService : MediaSessionService() {
     private fun handlePlaybackCompleted() {
         if (isCrossfading && crossfadeNextSongStarted) return
         viewModel?.let { vm ->
+            // Clear the finished track's transient loading state. The next explicit
+            // selection sets loading again while its stream is being resolved.
+            vm.setLoading(false)
+            vm.setPlaybackReady(false)
+            vm.setIsPlaying(false)
             val endedSong = vm.currentSong.value
             val nextSong = vm.getNextSongIndex().let { index ->
                 vm.songList.value.getOrNull(index)
@@ -4495,8 +4754,10 @@ class AudioPlaybackService : MediaSessionService() {
                     vm.setVideoPlaybackMetadata(null)
                     vm.setLoading(false)
                     if (wasPlaying) player.play()
-                    com.dsann.music.ui.SnackbarController.showMessage(
-                        "No video available for this track. Switched to audio."
+                    showPlaybackFailure(
+                        IllegalStateException("No video stream is available for this track"),
+                        context = "Video playback",
+                        action = "staying in audio mode"
                     )
                     return@launch
                 }
@@ -4563,8 +4824,10 @@ class AudioPlaybackService : MediaSessionService() {
                     vm.setVideoPlaybackMetadata(null)
                     if (wasPlaying) player.play()
                     Log.w(TAG, "Video mode switch failed for $videoId", error)
-                    com.dsann.music.ui.SnackbarController.showMessage(
-                        "Could not load this video. Switched to audio."
+                    showPlaybackFailure(
+                        error,
+                        context = "Video playback",
+                        action = "switching to audio"
                     )
                 }
             } finally {
@@ -4676,7 +4939,7 @@ class AudioPlaybackService : MediaSessionService() {
             }
             notificationBuilder.setContentTitle(notificationTitle)
             notificationBuilder.setContentText(notificationArtist)
-            notificationBuilder.setSubText("Quantune")
+            notificationBuilder.setSubText("D.S Music")
             notificationBuilder.setChannelId("audio_playback_channel")
             notificationBuilder.setOngoing(isPlaying)
             notificationBuilder.setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)

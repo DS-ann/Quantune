@@ -145,11 +145,15 @@ fun LocalMusicScreen(viewModel: PlayerSharedViewModel) {
     }
 
     val rootTabActive = LocalRootTabActive.current
-    LaunchedEffect(rootTabActive, localSongs.isEmpty()) {
-        if (!rootTabActive || localSongs.isNotEmpty()) return@LaunchedEffect
+    LaunchedEffect(rootTabActive) {
+        if (!rootTabActive) {
+            cancelLocalMusicScan(viewModel, owner = "local_music")
+            return@LaunchedEffect
+        }
+        if (localSongs.isNotEmpty()) return@LaunchedEffect
         isScanning = true
         try {
-            scanLocalFiles(context, viewModel)
+            scanLocalFiles(context, viewModel, forceRefresh = false, owner = "local_music")
         } finally {
             isScanning = false
         }
@@ -283,7 +287,7 @@ fun LocalMusicScreen(viewModel: PlayerSharedViewModel) {
                     scope.launch {
                         isScanning = true
                         try {
-                            scanLocalFiles(context, viewModel)
+                            scanLocalFiles(context, viewModel, owner = "local_music")
                         } finally {
                             isScanning = false
                         }
@@ -299,7 +303,7 @@ fun LocalMusicScreen(viewModel: PlayerSharedViewModel) {
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(bottom = 160.dp),
+            contentPadding = PaddingValues(bottom = 176.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             item(key = "local_music_search", contentType = "search") {
@@ -441,7 +445,7 @@ fun LocalMusicScreen(viewModel: PlayerSharedViewModel) {
                                         scope.launch {
                                             isScanning = true
                                             try {
-                                                scanLocalFiles(context, viewModel)
+                                                scanLocalFiles(context, viewModel, owner = "local_music")
                                             } finally {
                                                 isScanning = false
                                             }
@@ -571,7 +575,7 @@ fun LocalMusicScreen(viewModel: PlayerSharedViewModel) {
                             }
                         }
                     }
-                    scanLocalFiles(context, viewModel)
+                    scanLocalFiles(context, viewModel, owner = "local_music")
                     com.dsann.music.ui.SnackbarController.showMessage(
                         if (deleted) "Deleted: ${localSong.title}"
                         else "Could not delete ${localSong.title}. The file may require storage permission."

@@ -139,29 +139,56 @@ import com.dsann.music.applyDsmusicNightMode
         var audioGranted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED) }
         var notifGranted by remember { mutableStateOf(notifPermission?.let { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED } ?: true) }
         
-        val allPermissionsGranted = audioGranted && notifGranted
-    
         val permissionLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.RequestMultiplePermissions()
-        ) { permissions ->
-            audioGranted = permissions[audioPermission] ?: audioGranted
-            if (notifPermission != null) {
-                notifGranted = permissions[notifPermission] ?: notifGranted
-            }
+        ) { _ ->
+            // Re-check actual permission state after the system dialog returns.
+            audioGranted = ContextCompat.checkSelfPermission(
+                context,
+                audioPermission
+            ) == PackageManager.PERMISSION_GRANTED
+            notifGranted = notifPermission?.let {
+                ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+            } ?: true
         }
     
         Scaffold(
             bottomBar = {
-                val isNextEnabled = if (pagerState.currentPage == 4) allPermissionsGranted else true
+                // Keep Continue tappable on the permissions page. If access is missing,
+                // the click below launches the corresponding Android permission prompt.
+                val isNextEnabled = true
                 SetupBottomBar(
                     pagerState = pagerState,
                     isNextEnabled = isNextEnabled,
                     onNextClicked = {
-                        if (isNextEnabled && pagerState.currentPage < pagerState.pageCount - 1) {
+                        if (pagerState.currentPage == 4) {
+                            val missingPermissions = mutableListOf<String>()
+                            if (!audioGranted) missingPermissions.add(audioPermission)
+                            if (notifPermission != null && !notifGranted) {
+                                missingPermissions.add(notifPermission)
+                            }
+
+                            if (missingPermissions.isNotEmpty()) {
+                                permissionLauncher.launch(missingPermissions.toTypedArray())
+                            } else if (pagerState.currentPage < pagerState.pageCount - 1) {
+                                scope.launch {
+                                    pagerState.animateScrollToPage(
+                                        page = pagerState.currentPage + 1,
+                                        animationSpec = spring(
+                                            dampingRatio = 0.8f,
+                                            stiffness = Spring.StiffnessLow
+                                        )
+                                    )
+                                }
+                            }
+                        } else if (pagerState.currentPage < pagerState.pageCount - 1) {
                             scope.launch {
                                 pagerState.animateScrollToPage(
                                     page = pagerState.currentPage + 1,
-                                    animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessLow)
+                                    animationSpec = spring(
+                                        dampingRatio = 0.8f,
+                                        stiffness = Spring.StiffnessLow
+                                    )
                                 )
                             }
                         }
@@ -287,7 +314,7 @@ import com.dsann.music.applyDsmusicNightMode
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "QUANTUNE",
+                    text = "D.S MUSIC",
                     style = DsmusicTheme.typography.labelMedium,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 1.8.sp,
@@ -547,7 +574,13 @@ import com.dsann.music.applyDsmusicNightMode
                                 shape = RoundedCornerShape(34.dp),
                                 color = colors.primaryContainer
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
+                                // Surface content does not guarantee that this child Box
+                                // expands to the tile bounds. Fill the tile before centring
+                                // the icon so it cannot sit at the top-start corner.
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
                                     if (imageUrl != null) {
                                         coil.compose.AsyncImage(
                                             model = imageUrl,
@@ -577,7 +610,7 @@ import com.dsann.music.applyDsmusicNightMode
                         color = colors.surfaceContainerHighest.copy(alpha = 0.96f)
                     ) {
                         Text(
-                            text = "QUANTUNE",
+                            text = "D.S MUSIC",
                             modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
                             style = DsmusicTheme.typography.labelSmall,
                             fontWeight = FontWeight.ExtraBold,
@@ -659,7 +692,7 @@ import com.dsann.music.applyDsmusicNightMode
             heroTag = "A FRESH WAY TO LISTEN"
         ) {
             Text(
-                text = "Welcome\nto Quantune.",
+                text = "Welcome\nto D.S Music.",
                 style = DsmusicTheme.typography.displayMedium,
                 fontWeight = FontWeight.Black,
                 fontSize = 36.sp,
@@ -913,13 +946,13 @@ import com.dsann.music.applyDsmusicNightMode
                 lineHeight = 42.sp,
                 letterSpacing = (-0.5).sp,
                 color = DsmusicTheme.colorScheme.onBackground,
-                modifier = Modifier.graphicsLayer {
+                modifier = Modifier.graphicsLayer { 
                     val offset = pageOffsetProvider()
                     translationY = offset * -30f
                     alpha = 1f - kotlin.math.abs(offset * 1.5f)
                 }
             )
-
+    
             Spacer(modifier = Modifier.height(28.dp))
 
             Surface(
@@ -982,7 +1015,7 @@ import com.dsann.music.applyDsmusicNightMode
                     }
                 }
             }
-
+    
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1020,10 +1053,11 @@ import com.dsann.music.applyDsmusicNightMode
                     Switch(checked = hideNavLabels, onCheckedChange = onHideNavLabelsChanged)
                 }
             }
+
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
-
+    
     @Composable
     fun PermissionsPage(
         pageOffsetProvider: () -> Float,
@@ -1483,7 +1517,10 @@ import com.dsann.music.applyDsmusicNightMode
                             shape = CircleShape,
                             color = colors.primaryContainer
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Icon(
                                     imageVector = Icons.Rounded.MusicNote,
                                     contentDescription = null,
@@ -1495,7 +1532,7 @@ import com.dsann.music.applyDsmusicNightMode
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "QUANTUNE",
+                                text = "D.S MUSIC",
                                 style = DsmusicTheme.typography.labelMedium,
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 1.3.sp,

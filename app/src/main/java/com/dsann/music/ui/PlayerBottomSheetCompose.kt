@@ -15,6 +15,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -50,6 +51,7 @@ import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.KeyboardDoubleArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardDoubleArrowRight
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import com.dsann.music.ui.theme.AlertDialog
@@ -367,6 +369,7 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
     context: Context,
     playerContentExpansionFraction: Animatable<Float, AnimationVector1D>,
     isSheetExpanded: Boolean,
+    onNavigateToListenTogether: () -> Unit,
     onFullPlayerLayoutReady: () -> Unit,
     containerHeight: Dp,
     onCollapse: () -> Unit,
@@ -376,6 +379,7 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
     miniPlayerWidthFraction: Float,
     miniPlayerHorizontalOffset: Dp,
     miniPlayerBackgroundColor: Color,
+    miniPlayerSurfaceAlpha: Float,
     miniPlayerShape: Shape,
     miniPlayerElevation: Dp,
     miniSwipeModifier: Modifier
@@ -442,7 +446,10 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                 .padding(horizontal = 24.dp)
                 .shadow(miniPlayerElevation, miniPlayerShape)
                 .clip(miniPlayerShape)
-                .background(miniPlayerBackgroundColor, miniPlayerShape)
+                .background(
+                    miniPlayerBackgroundColor.copy(alpha = miniPlayerSurfaceAlpha.coerceIn(0f, 1f)),
+                    miniPlayerShape
+                )
         ) {
             MiniPlayerContentInternal(
                 viewModel = viewModel,
@@ -493,6 +500,7 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                     accentColor = baseAccentColor,
                     context = context,
                     onCollapse = onCollapse,
+                    onNavigateToListenTogether = onNavigateToListenTogether,
                     dragModifier = dragModifier,
                     isPlayerVisible = isFullPlayerVisible,
                     modifier = Modifier.fillMaxSize()
@@ -882,6 +890,9 @@ fun PlayerBottomSheetCompose(
     viewModel: PlayerSharedViewModel,
     bottomNavigationVisible: Boolean = false,
     navigationRailInset: Dp = 0.dp,
+    onNavigateToListenTogether: () -> Unit,
+    onNavigateToSongRecognizer: () -> Unit,
+    showSongRecognizerShortcut: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -1062,13 +1073,13 @@ fun PlayerBottomSheetCompose(
                 }
             }
         }
-        // Dark mode uses the midpoint between the current light (0.88) and dark (0.10) values.
+        // Dark mode mini-player lightness is reduced by 20% from its previous 0.49 value.
         // Light mode retains its existing bright artwork-tinted surface.
         val miniPlayerBackgroundColor = remember(dynamicBgColor, isDark) {
             if (isDark) {
                 val hsl = FloatArray(3)
                 androidx.core.graphics.ColorUtils.colorToHSL(dynamicBgColor.toArgb(), hsl)
-                hsl[2] = 0.49f
+                hsl[2] = 0.49f * 0.8f
                 Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
             } else {
                 val hsl = FloatArray(3)
@@ -1170,14 +1181,13 @@ fun PlayerBottomSheetCompose(
         val bottomNavVisible = bottomNavigationVisible
         val dynamicBottomNavHeightState = viewModel.bottomNavHeight.collectAsStateWithLifecycle()
         val navBarSize by playerPreferences.observeKey("nav_bar_size", "Standard")
-        val dynamicNavStyle by playerPreferences.observeKey("dynamic_nav_style", false)
         val configuredBottomNavHeight = when (navBarSize) {
             "Compact" -> 56.dp
             "Tall" -> 76.dp
             else -> 68.dp
         }
         val fallbackBottomNavHeightPx = with(density) {
-            (if (dynamicNavStyle) 64.dp else configuredBottomNavHeight).toPx() +
+            configuredBottomNavHeight.toPx() +
                 systemNavigationBottomPx
         }
         // The dock is now an overlay and no longer reduces Scaffold's content height.
@@ -1732,6 +1742,7 @@ fun PlayerBottomSheetCompose(
                                 context = context,
                                 playerContentExpansionFraction = playerContentExpansionFraction,
                                 isSheetExpanded = currentSheetContentState == PlayerSheetState.EXPANDED,
+                                onNavigateToListenTogether = onNavigateToListenTogether,
                                 onFullPlayerLayoutReady = { fullPlayerLayoutReady = true },
                                 containerHeight = containerHeight,
                                 onCollapse = { collapsePlayerFully() },
@@ -1741,6 +1752,7 @@ fun PlayerBottomSheetCompose(
                                 miniPlayerWidthFraction = miniPlayerWidthFraction,
                                 miniPlayerHorizontalOffset = miniPlayerHorizontalOffset,
                                 miniPlayerBackgroundColor = miniPlayerBackgroundColor,
+                                miniPlayerSurfaceAlpha = 1f,
                                 miniPlayerShape = miniPlayerShape,
                                 miniPlayerElevation = miniPlayerElevation,
                                 miniSwipeModifier = miniSwipeGestureModifier
@@ -2211,99 +2223,37 @@ fun PlayerBottomSheetCompose(
             }
         }
 
-        // Global Dynamic Snackbar
-        val snackbarHostState = remember { com.dsann.music.ui.theme.SnackbarHostState() }
-        
-        LaunchedEffect(Unit) {
-            com.dsann.music.ui.SnackbarController.events.collect { event ->
-                snackbarHostState.showSnackbar(
-                    com.dsann.music.ui.CustomSnackbarVisuals(
-                        message = event.message,
-                        duration = event.duration,
-                        iconResId = event.iconResId,
-                        iconVector = event.iconVector
-                    )
-                )
-            }
-        }
-        
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .zIndex(100f) // Keep Snackbar always on top
+        // Keep the Search song-recognizer shortcut visible even when playback is empty.
+        // Its bottom anchor always reserves the collapsed mini-player slot, so its position
+        // stays identical before and after a song starts.
+        if (showSongRecognizerShortcut &&
+            playerContentExpansionFraction.value < 0.05f
         ) {
-            com.dsann.music.ui.theme.SnackbarHost(
-                hostState = snackbarHostState,
+            val collapsedPlayerLift = with(density) {
+                (screenHeightPx - sheetCollapsedTargetYState.value).toDp()
+            }
+            val recognizerBottomInset = (collapsedPlayerLift - 1.dp).coerceAtLeast(0.dp)
+            DsmusicIconButton(
+                onClick = onNavigateToSongRecognizer,
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .offset {
-                        val bottomNavHeightPx = if (dynamicBottomNavHeightState.value > 0f) {
-                            dynamicBottomNavHeightState.value
-                        } else {
-                            with(density) { 75.dp.toPx() }
-                        }
-                        val bottomNavVisibilityFraction = if (useNavigationRail || !bottomNavVisible) 1f else 0f
-                        val currentBottomGapPx = with(density) { 
-                            androidx.compose.ui.unit.lerp(12.dp, 8.dp, bottomNavVisibilityFraction).toPx() 
-                        }
-                        
-                        val effectiveBottomNavHeight = if (useNavigationRail || !bottomNavVisible) 0f else bottomNavHeightPx
-                        
-                        var bottomOffsetPx = effectiveBottomNavHeight + with(density) { 16.dp.toPx() }
-                        
-                        if (showPlayerContentArea) {
-                            if (currentSheetContentState == PlayerSheetState.EXPANDED) {
-                                // The expanded sheet starts at (or very near) the top of the screen.
-                                // Anchoring the snackbar to that top edge can move it off-screen.
-                                // Keep download/playback messages inside the visible player instead.
-                                bottomOffsetPx = with(density) { 96.dp.toPx() }
-                            } else {
-                                val miniPlayerHeightPx = with(density) { miniPlayerHeight.toPx() }
-                                bottomOffsetPx = effectiveBottomNavHeight + currentBottomGapPx + miniPlayerHeightPx + with(density) { 8.dp.toPx() }
-
-                                val topOfPlayerSheetY = sheetVisualState.visualSheetTranslationYProvider()
-                                bottomOffsetPx = screenHeightPx - topOfPlayerSheetY + with(density) { 8.dp.toPx() }
-                            }
-                        }
-                        
-                        IntOffset(0, -bottomOffsetPx.roundToInt())
-                    }
-            ) { data ->
-                com.dsann.music.ui.theme.Snackbar(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    containerColor = DsmusicTheme.colorScheme.inverseSurface,
-                    contentColor = DsmusicTheme.colorScheme.inverseOnSurface,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    val customVisuals = data.visuals as? com.dsann.music.ui.CustomSnackbarVisuals
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    ) {
-                        if (customVisuals?.iconVector != null) {
-                            Icon(
-                                imageVector = customVisuals.iconVector,
-                                contentDescription = null,
-                                modifier = Modifier.size(22.dp),
-                                tint = DsmusicTheme.colorScheme.inversePrimary
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                        } else if (customVisuals?.iconResId != null) {
-                            Icon(
-                                painter = painterResource(id = customVisuals.iconResId),
-                                contentDescription = null,
-                                modifier = Modifier.size(22.dp),
-                                tint = DsmusicTheme.colorScheme.inversePrimary
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                        }
-                        Text(
-                            text = data.visuals.message,
-                            style = DsmusicTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 12.dp, bottom = recognizerBottomInset)
+                    .size(42.dp)
+                    .shadow(8.dp, CircleShape)
+                    .background(DsmusicTheme.colorScheme.primary, CircleShape)
+                    .border(
+                        width = 1.dp,
+                        color = DsmusicTheme.colorScheme.onPrimary.copy(alpha = 0.24f),
+                        shape = CircleShape
+                    ),
+                shape = CircleShape
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Mic,
+                    contentDescription = "Recognize a song",
+                    tint = DsmusicTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
             }
         }
 

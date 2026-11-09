@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Keep the complete Quantune wordmark artwork inside the adaptive-icon safe zone. -->
+    <!-- Keep the complete square artwork inside the adaptive-icon mask. -->
     <item
         android:left="18dp"
         android:top="18dp"

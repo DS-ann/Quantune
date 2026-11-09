@@ -316,7 +316,7 @@ class LyricsFetchManager private constructor(context: Context) {
                 if (result != null && result.hasLyrics()) {
                     callback.onLyricsFound(result)
                 } else {
-                    callback.onLyricsNotFound("No lyrics found from $sourceName")
+                    callback.onLyricsNotFound("$sourceName returned no usable lyrics. It may have no match or its service may be unavailable; check the connection and retry.")
                 }
             }
         }

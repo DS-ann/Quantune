@@ -112,7 +112,7 @@ object AdvancedLyricsParser {
             @Suppress("UNUSED_VARIABLE")
             val ignoredLineDuration = lineDuration
         }
-        return addInterludes(lines)
+        return lines.sortedBy { it.startTimeMs }
     }
 
     private fun parseLyricsPlus(json: String): List<LyricLine> {
@@ -166,7 +166,7 @@ object AdvancedLyricsParser {
             @Suppress("UNUSED_VARIABLE")
             val ignoredLineDuration = duration
         }
-        return addInterludes(lines)
+        return lines.sortedBy { it.startTimeMs }
     }
 
     /** Preserve timed segments even when a lyric line contains no spaces. */
@@ -235,26 +235,6 @@ object AdvancedLyricsParser {
         return out.takeIf { lineText.indices.all { index ->
             lineText[index].isWhitespace() || covered[index]
         } }.orEmpty()
-    }
-
-    private fun addInterludes(input: List<LyricLine>): List<LyricLine> {
-        if (input.isEmpty()) return input
-        val sorted = input.sortedBy { it.startTimeMs }
-        val output = mutableListOf<LyricLine>()
-        val first = sorted.first()
-        if (first.startTimeMs > 3000L) output += LyricLine(0L, "♪", isInterlude = true)
-        sorted.forEachIndexed { index, line ->
-            val previous = sorted.getOrNull(index - 1)
-            if (previous != null) {
-                val gap = line.startTimeMs - previous.startTimeMs
-                if (gap > 5000L) {
-                    val point = previous.startTimeMs + (gap / 3).coerceAtMost(3500L)
-                    if (output.lastOrNull()?.isInterlude != true) output += LyricLine(point, "♪", isInterlude = true)
-                }
-            }
-            output += line
-        }
-        return output
     }
 
     private fun isCreditLine(text: String): Boolean =

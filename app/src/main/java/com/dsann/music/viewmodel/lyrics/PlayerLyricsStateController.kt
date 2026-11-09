@@ -1,7 +1,10 @@
 package com.dsann.music.viewmodel.lyrics
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.util.LruCache
 import com.dsann.music.data.lyrics.LrcParser
 import com.dsann.music.data.lyrics.LyricLine
 import com.dsann.music.data.lyrics.LyricsRepository
@@ -11,6 +14,7 @@ import com.dsann.music.model.SongItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.Executors
 
 /**
  * Handles lyrics state, fetch, and retry flows for player view models.
@@ -19,10 +23,37 @@ import kotlinx.coroutines.flow.asStateFlow
 class PlayerLyricsStateController(private val logTag: String) {
     private companion object {
         const val DEFAULT_PROVIDER = "KuGou"
+
+        // Parsing stays off the UI thread. A single daemon worker avoids spawning
+        // competing CPU-heavy parser threads on memory-constrained devices.
+        val LYRICS_PARSE_EXECUTOR = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "DSMusicLyricsParser").apply { isDaemon = true }
+        }
     }
 
     private var activeLyricsSongId: Long? = null
     private var providerSelectionGeneration: Long = 0L
+    private var lyricsRequestGeneration: Long = 0L
+    private val pendingParseCallbacks =
+        HashMap<String, MutableList<(List<LyricLine>?) -> Unit>>()
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val parsedLyricsCache = object : LruCache<String, List<LyricLine>>(512 * 1024) {
+        override fun sizeOf(key: String, value: List<LyricLine>): Int {
+            val lineBytes = value.sumOf { line ->
+                96L + line.content.length * 2L + line.words.size * 48L
+            }
+            return (key.length * 2L + lineBytes)
+                .coerceAtMost(Int.MAX_VALUE.toLong())
+                .toInt()
+                .coerceAtLeast(1)
+        }
+    }
+
+    private fun beginLyricsRequest(): Long {
+        lyricsRequestGeneration += 1L
+        return lyricsRequestGeneration
+    }
 
     private val _syncedLyrics = MutableStateFlow<List<LyricLine>?>(null)
     val syncedLyrics: StateFlow<List<LyricLine>?> = _syncedLyrics.asStateFlow()
@@ -57,6 +88,7 @@ class PlayerLyricsStateController(private val logTag: String) {
     }
 
     fun clearForSongChange(song: SongItem? = null) {
+        beginLyricsRequest()
         activeLyricsSongId = song?.id
         providerSelectionGeneration += 1L
         _syncedLyrics.value = null
@@ -73,6 +105,7 @@ class PlayerLyricsStateController(private val logTag: String) {
         if (song == null) return
 
         val repository = LyricsRepository.getInstance(context)
+        val requestGeneration = beginLyricsRequest()
         activeLyricsSongId = song.id
         providerSelectionGeneration += 1L
         repository.cancelCurrent()
@@ -98,7 +131,8 @@ class PlayerLyricsStateController(private val logTag: String) {
                 requestSongId = song.id,
                 keepExistingLyricsOnNotFound = true,
                 instrumentalMessage = "Instrumental track - no vocals",
-                logUpgrades = true
+                logUpgrades = true,
+                requestGeneration = requestGeneration
             ),
             song.videoId
         )
@@ -107,6 +141,7 @@ class PlayerLyricsStateController(private val logTag: String) {
     fun retryLyrics(context: Context, song: SongItem?) {
         if (song == null) return
 
+        val requestGeneration = beginLyricsRequest()
         activeLyricsSongId = song.id
         providerSelectionGeneration += 1L
         LyricsRepository.getInstance(context).cancelProviderFetch()
@@ -132,7 +167,8 @@ class PlayerLyricsStateController(private val logTag: String) {
                 requestSongId = song.id,
                 keepExistingLyricsOnNotFound = false,
                 instrumentalMessage = "Instrumental track",
-                logUpgrades = false
+                logUpgrades = false,
+                requestGeneration = requestGeneration
             ),
             song.videoId
         )
@@ -146,7 +182,10 @@ class PlayerLyricsStateController(private val logTag: String) {
         // Reuse an in-memory result only when its payload is still present. Results marked as
         // payloadClearedForMemory deliberately go through the single-provider fetch below.
         if (result != null && result.hasLyrics() && !result.payloadClearedForMemory) {
+            val requestGeneration = beginLyricsRequest()
+            activeLyricsSongId = song.id
             providerSelectionGeneration += 1L
+            val selectionRequestGeneration = providerSelectionGeneration
             repository.cancelProviderFetch()
             val compacted = _providerResults.value.toMutableMap()
             clearInactiveProviderPayloads(compacted, providerName)
@@ -155,17 +194,25 @@ class PlayerLyricsStateController(private val logTag: String) {
             _syncedLyrics.value = null
             _plainLyrics.value = null
             _selectedProvider.value = providerName
-            applyLyricsResult(result)
-            _lyricsState.value = LyricsState.SUCCESS
-            _isLoading.value = false
-            _error.value = null
-            _statusMessage.value = "Lyrics from ${result.providerName ?: providerName}"
+            applyLyricsResult(
+                result = result,
+                requestSongId = song.id,
+                selectionRequestGeneration = selectionRequestGeneration,
+                requestGeneration = requestGeneration
+            ) {
+                _lyricsState.value = LyricsState.SUCCESS
+                _isLoading.value = false
+                _error.value = null
+                _statusMessage.value = "Lyrics from ${result.providerName ?: providerName}"
+            }
             return
         }
 
         // A null result is selectable too: a row may not have completed during the initial sweep.
         // Fetch only this source and invalidate any older selection request.
         if (_selectedProvider.value == providerName && _isLoading.value) return
+        val requestGeneration = beginLyricsRequest()
+        activeLyricsSongId = song.id
         providerSelectionGeneration += 1L
         val selectionRequestGeneration = providerSelectionGeneration
         repository.cancelProviderFetch()
@@ -190,7 +237,8 @@ class PlayerLyricsStateController(private val logTag: String) {
                 keepExistingLyricsOnNotFound = false,
                 instrumentalMessage = "Instrumental track",
                 logUpgrades = false,
-                selectionRequestGeneration = selectionRequestGeneration
+                selectionRequestGeneration = selectionRequestGeneration,
+                requestGeneration = requestGeneration
             ),
             song.videoId
         )
@@ -260,42 +308,56 @@ class PlayerLyricsStateController(private val logTag: String) {
         keepExistingLyricsOnNotFound: Boolean,
         instrumentalMessage: String,
         logUpgrades: Boolean,
-        selectionRequestGeneration: Long? = null
+        selectionRequestGeneration: Long? = null,
+        requestGeneration: Long = lyricsRequestGeneration
     ): LyricsRepository.ExtendedLyricsCallback {
         return object : LyricsRepository.ExtendedLyricsCallback {
             override fun onLyricsFound(result: LyricsResult) {
-                if (!isActiveCallback(requestSongId, selectionRequestGeneration)) return
+                if (!isActiveCallback(requestSongId, selectionRequestGeneration, requestGeneration)) return
 
                 if (_selectedProvider.value == null) {
-                    applyLyricsResult(result)
-                    _lyricsState.value = LyricsState.SUCCESS
-                    _isLoading.value = false
-                    _error.value = null
-                    _statusMessage.value = "Lyrics from ${result.providerName}"
+                    applyLyricsResult(
+                        result = result,
+                        requestSongId = requestSongId,
+                        selectionRequestGeneration = selectionRequestGeneration,
+                        requestGeneration = requestGeneration
+                    ) {
+                        _lyricsState.value = LyricsState.SUCCESS
+                        _isLoading.value = false
+                        _error.value = null
+                        _statusMessage.value = "Lyrics from ${result.providerName}"
+                    }
                 }
             }
 
             override fun onLyricsUpgraded(betterResult: LyricsResult) {
-                if (!isActiveCallback(requestSongId, selectionRequestGeneration)) return
+                if (!isActiveCallback(requestSongId, selectionRequestGeneration, requestGeneration)) return
 
-                if (_selectedProvider.value == null && !betterResult.syncedLyrics.isNullOrEmpty()) {
-                    val lines = LrcParser.parse(betterResult.syncedLyrics)
-                    if (lines.isNotEmpty()) {
-                        _syncedLyrics.value = lines
-                        _plainLyrics.value = null
-                        _lyricsState.value = LyricsState.SUCCESS
-                        if (logUpgrades) {
-                            _statusMessage.value = "Upgraded to synced lyrics from ${betterResult.providerName}"
-                            Log.d(logTag, "Lyrics upgraded to synced from ${betterResult.providerName}")
+                val syncedPayload = betterResult.syncedLyrics
+                if (_selectedProvider.value == null && !syncedPayload.isNullOrEmpty()) {
+                    parseLyricsCandidatesAsync(
+                        candidates = listOf(syncedPayload),
+                        requestSongId = requestSongId,
+                        selectionRequestGeneration = selectionRequestGeneration,
+                        requestGeneration = requestGeneration
+                    ) { lines ->
+                        if (!lines.isNullOrEmpty()) {
+                            _syncedLyrics.value = lines
+                            _plainLyrics.value = null
+                            _lyricsState.value = LyricsState.SUCCESS
+                            if (logUpgrades) {
+                                _statusMessage.value = "Upgraded to synced lyrics from ${betterResult.providerName}"
+                                Log.d(logTag, "Lyrics upgraded to synced from ${betterResult.providerName}")
+                            }
+                        } else {
+                            Log.w(logTag, "Ignoring unparseable synced lyrics from ${betterResult.providerName}")
                         }
-                    } else {
-                        Log.w(logTag, "Ignoring unparseable synced lyrics from ${betterResult.providerName}")
                     }
                 }
             }
 
             override fun onLyricsNotFound(reason: String) {
-                if (!isActiveCallback(requestSongId, selectionRequestGeneration)) return
+                if (!isActiveCallback(requestSongId, selectionRequestGeneration, requestGeneration)) return
                 if (selectionRequestGeneration == null && _selectedProvider.value != null && _isLoading.value) return
 
                 if (keepExistingLyricsOnNotFound && hasLyricsData()) return
@@ -309,7 +371,7 @@ class PlayerLyricsStateController(private val logTag: String) {
             }
 
             override fun onInstrumental() {
-                if (!isActiveCallback(requestSongId, selectionRequestGeneration)) return
+                if (!isActiveCallback(requestSongId, selectionRequestGeneration, requestGeneration)) return
                 if (selectionRequestGeneration == null && _selectedProvider.value != null && _isLoading.value) return
 
                 if (_syncedLyrics.value.isNullOrEmpty() && _plainLyrics.value.isNullOrEmpty()) {
@@ -321,14 +383,14 @@ class PlayerLyricsStateController(private val logTag: String) {
             }
 
             override fun onSearchStatus(message: String) {
-                if (!isActiveCallback(requestSongId, selectionRequestGeneration)) return
+                if (!isActiveCallback(requestSongId, selectionRequestGeneration, requestGeneration)) return
                 if (selectionRequestGeneration == null && _selectedProvider.value != null && _isLoading.value) return
 
                 _statusMessage.value = message
             }
 
             override fun onProviderResult(providerName: String, result: LyricsResult?) {
-                if (!isActiveCallback(requestSongId, selectionRequestGeneration)) return
+                if (!isActiveCallback(requestSongId, selectionRequestGeneration, requestGeneration)) return
 
                 val selectedBeforeCallback = _selectedProvider.value
                 val currentMap = _providerResults.value.toMutableMap()
@@ -360,10 +422,16 @@ class PlayerLyricsStateController(private val logTag: String) {
                         _providerResults.value = currentMap
                         _syncedLyrics.value = null
                         _plainLyrics.value = null
-                        applyLyricsResult(result)
-                        _lyricsState.value = LyricsState.SUCCESS
-                        _isLoading.value = false
-                        _error.value = null
+                        applyLyricsResult(
+                            result = result,
+                            requestSongId = requestSongId,
+                            selectionRequestGeneration = selectionRequestGeneration,
+                            requestGeneration = requestGeneration
+                        ) {
+                            _lyricsState.value = LyricsState.SUCCESS
+                            _isLoading.value = false
+                            _error.value = null
+                        }
                     }
                 } else {
                     val best = determineBestResult(currentMap)
@@ -393,10 +461,16 @@ class PlayerLyricsStateController(private val logTag: String) {
                         }
                         _syncedLyrics.value = null
                         _plainLyrics.value = null
-                        applyLyricsResult(best)
-                        _lyricsState.value = LyricsState.SUCCESS
-                        _isLoading.value = false
-                        _error.value = null
+                        applyLyricsResult(
+                            result = best,
+                            requestSongId = requestSongId,
+                            selectionRequestGeneration = selectionRequestGeneration,
+                            requestGeneration = requestGeneration
+                        ) {
+                            _lyricsState.value = LyricsState.SUCCESS
+                            _isLoading.value = false
+                            _error.value = null
+                        }
                     } else if (best != null && best.isInstrumental) {
                         _syncedLyrics.value = null
                         _plainLyrics.value = null
@@ -409,46 +483,142 @@ class PlayerLyricsStateController(private val logTag: String) {
         }
     }
 
-    private fun isActiveCallback(requestSongId: Long, selectionRequestGeneration: Long?): Boolean {
+    private fun isActiveCallback(
+        requestSongId: Long,
+        selectionRequestGeneration: Long?,
+        requestGeneration: Long? = null
+    ): Boolean {
         return activeLyricsSongId == requestSongId &&
-            (selectionRequestGeneration == null || selectionRequestGeneration == providerSelectionGeneration)
+            (selectionRequestGeneration == null || selectionRequestGeneration == providerSelectionGeneration) &&
+            (requestGeneration == null || requestGeneration == lyricsRequestGeneration)
     }
 
-    private fun applyLyricsResult(result: LyricsResult) {
-        val synced = result.syncedLyrics
-        if (!synced.isNullOrEmpty()) {
-            val lines = LrcParser.parse(synced)
-            if (lines.isNotEmpty()) {
-                _syncedLyrics.value = lines
-                _plainLyrics.value = null
-                return
-            }
-            Log.w(logTag, "Synced lyrics could not be parsed; trying plain lyrics fallback")
-        }
-
-        val plain = result.plainLyrics
-        if (!plain.isNullOrBlank()) {
-            val rawPlain = plain.trim()
-            val looksLikeTtml = rawPlain.contains("<tt", ignoreCase = true) ||
+    private fun applyLyricsResult(
+        result: LyricsResult,
+        requestSongId: Long,
+        selectionRequestGeneration: Long?,
+        requestGeneration: Long,
+        onApplied: () -> Unit
+    ) {
+        val synced = result.syncedLyrics?.takeIf { it.isNotBlank() }
+        val plain = result.plainLyrics?.takeIf { it.isNotBlank() }
+        val rawPlain = plain?.trim()
+        val plainIsTtml = rawPlain != null && (
+            rawPlain.contains("<tt", ignoreCase = true) ||
                 rawPlain.contains("<?xml", ignoreCase = true) ||
                 rawPlain.contains("<p begin=", ignoreCase = true)
-            if (looksLikeTtml) {
-                // Parse the raw provider payload before stripping tags so TTML timing/word
-                // metadata is preserved rather than downgraded to unsynchronized text.
-                val ttmlLines = LrcParser.parse(rawPlain)
-                if (ttmlLines.isNotEmpty()) {
-                    _syncedLyrics.value = ttmlLines
-                    _plainLyrics.value = null
-                    return
-                }
-            }
+            )
 
-            val normalized = sanitizePlainLyrics(rawPlain)
+        val parseCandidates = buildList {
+            synced?.let(::add)
+            if (plainIsTtml && rawPlain != synced) rawPlain?.let(::add)
+        }
+
+        if (parseCandidates.isEmpty()) {
+            applyPlainLyrics(plain)
+            onApplied()
+            return
+        }
+
+        _isLoading.value = true
+        parseLyricsCandidatesAsync(
+            candidates = parseCandidates,
+            requestSongId = requestSongId,
+            selectionRequestGeneration = selectionRequestGeneration,
+            requestGeneration = requestGeneration
+        ) { lines ->
+            if (!lines.isNullOrEmpty()) {
+                _syncedLyrics.value = lines
+                _plainLyrics.value = null
+            } else {
+                if (synced != null) {
+                    Log.w(logTag, "Synced lyrics could not be parsed; trying plain lyrics fallback")
+                }
+                applyPlainLyrics(plain)
+            }
+            onApplied()
+        }
+    }
+
+    private fun applyPlainLyrics(plain: String?) {
+        if (!plain.isNullOrBlank()) {
+            val normalized = sanitizePlainLyrics(plain.trim())
             _syncedLyrics.value = null
             _plainLyrics.value = normalized.takeIf { it.isNotBlank() }
         } else {
             _syncedLyrics.value = null
             _plainLyrics.value = null
+        }
+    }
+
+    /**
+     * Parse provider payloads off the main thread. A size-bounded LRU retains recent
+     * parsed results, and identical in-flight payloads share one parse operation.
+     */
+    private fun parseLyricsCandidatesAsync(
+        candidates: List<String>,
+        requestSongId: Long,
+        selectionRequestGeneration: Long?,
+        requestGeneration: Long,
+        onParsed: (List<LyricLine>?) -> Unit
+    ) {
+        val guardedCallback: (List<LyricLine>?) -> Unit = { parsed ->
+            if (isActiveCallback(
+                    requestSongId,
+                    selectionRequestGeneration,
+                    requestGeneration
+                )
+            ) {
+                onParsed(parsed)
+            }
+        }
+
+        val uncached = ArrayList<String>(candidates.size)
+        for (candidate in candidates) {
+            val cached = parsedLyricsCache.get(candidate)
+            if (cached != null) {
+                if (cached.isNotEmpty()) {
+                    guardedCallback(cached)
+                    return
+                }
+            } else {
+                uncached.add(candidate)
+            }
+        }
+
+        if (uncached.isEmpty()) {
+            guardedCallback(null)
+            return
+        }
+
+        val workKey = uncached.joinToString("|") { "${it.length}:$it" }
+        val waitingCallbacks = pendingParseCallbacks[workKey]
+        if (waitingCallbacks != null) {
+            waitingCallbacks.add(guardedCallback)
+            return
+        }
+        pendingParseCallbacks[workKey] = mutableListOf(guardedCallback)
+
+        LYRICS_PARSE_EXECUTOR.execute {
+            val parsedCandidates = ArrayList<Pair<String, List<LyricLine>>>(uncached.size)
+            var bestLines: List<LyricLine>? = null
+            for (candidate in uncached) {
+                val parsed = runCatching { LrcParser.parse(candidate) }
+                    .getOrDefault(emptyList())
+                parsedCandidates.add(candidate to parsed)
+                if (bestLines.isNullOrEmpty() && parsed.isNotEmpty()) {
+                    bestLines = parsed
+                }
+                if (!bestLines.isNullOrEmpty()) break
+            }
+
+            mainHandler.post {
+                parsedCandidates.forEach { (raw, lines) ->
+                    parsedLyricsCache.put(raw, lines)
+                }
+                val callbacks = pendingParseCallbacks.remove(workKey).orEmpty()
+                callbacks.forEach { callback -> callback(bestLines) }
+            }
         }
     }
 

@@ -15,6 +15,7 @@ import com.dsann.music.ui.theme.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
@@ -488,6 +489,7 @@ internal fun LyricsMetadataFooter(
     // Resolve album from the active provider's matched result
     val activeResult = selectedProvider?.let { providerResults[it] }
     val albumName = activeResult?.matchedAlbum
+    val uriHandler = LocalUriHandler.current
 
     val mutedColor = contentColor.copy(alpha = 0.35f)
     val metaStyle = DsmusicTheme.typography.labelSmall.copy(
@@ -523,6 +525,35 @@ internal fun LyricsMetadataFooter(
                 text = "Lyrics by $selectedProvider",
                 style = metaStyle,
                 maxLines = 1
+            )
+        }
+        // Unison requires visible links to both its lyric entry and the contributor.
+        val sourceCredit = activeResult?.sourceCreditText
+        val sourceCreditUrl = activeResult?.sourceCreditUrl
+        if (!sourceCredit.isNullOrBlank()) {
+            Text(
+                text = sourceCredit,
+                style = metaStyle,
+                maxLines = 1,
+                modifier = if (!sourceCreditUrl.isNullOrBlank()) {
+                    Modifier.clickable {
+                        runCatching { uriHandler.openUri(sourceCreditUrl) }
+                    }
+                } else Modifier
+            )
+        }
+        val submitterCredit = activeResult?.sourceSubmitterText
+        val submitterUrl = activeResult?.sourceSubmitterUrl
+        if (!submitterCredit.isNullOrBlank()) {
+            Text(
+                text = submitterCredit,
+                style = metaStyle,
+                maxLines = 1,
+                modifier = if (!submitterUrl.isNullOrBlank()) {
+                    Modifier.clickable {
+                        runCatching { uriHandler.openUri(submitterUrl) }
+                    }
+                } else Modifier
             )
         }
     }

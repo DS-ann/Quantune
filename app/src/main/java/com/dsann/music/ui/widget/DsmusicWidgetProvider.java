@@ -188,7 +188,7 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
             providerClass = WidgetLargeProvider.class;
         }
         for (int appWidgetId : appWidgetIds) {
-            updateWidget(context, appWidgetManager, appWidgetId, null, false, 0, 0, null, R.drawable.ic_repeat, layoutId, providerClass);
+            updateWidget(context, appWidgetManager, appWidgetId, null, false, 0, 0, null, R.drawable.ic_notification_repeat_off, layoutId, providerClass);
         }
 
         // onUpdate has no access to the current playback item itself. Ask the running playback
@@ -222,7 +222,7 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
 
     public static void updateAllWidgets(Context context, SongItem currentSong, boolean isPlaying, int position,
             int duration, CharSequence currentLyric) {
-        updateAllWidgets(context, currentSong, isPlaying, position, duration, currentLyric, R.drawable.ic_repeat);
+        updateAllWidgets(context, currentSong, isPlaying, position, duration, currentLyric, R.drawable.ic_notification_repeat_off);
     }
 
     public static void updateAllWidgets(Context context, SongItem currentSong, boolean isPlaying, int position,
@@ -543,7 +543,7 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
             if (layoutId != R.layout.widget_small) {
                 views.setTextViewText(
                         R.id.widget_song_title,
-                        song != null && song.title != null ? song.title : "Quantune"
+                        song != null && song.title != null ? song.title : "D.S Music"
                 );
                 views.setTextViewText(
                         R.id.widget_artist_name,
@@ -660,7 +660,7 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
                 if (layoutId != R.layout.widget_small) {
                     fallback.setTextViewText(
                             R.id.widget_song_title,
-                            song != null && song.title != null ? song.title : "Quantune"
+                            song != null && song.title != null ? song.title : "D.S Music"
                     );
                     fallback.setTextViewText(
                             R.id.widget_artist_name,

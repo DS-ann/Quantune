@@ -319,10 +319,12 @@ object YouTubeMusic {
                 currentRequest.deferred
             } else {
                 val newDeferred = appScope.async(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                var extractionFailure: Throwable? = null
                 try {
                     var bestUrl: String? = try {
                         NewPipeStreamExtractor.getStreamUrl(id, allowFormatChoice = promptForFormatChoice)
                     } catch (extractorEx: Exception) {
+                        extractionFailure = extractorEx
                         if (extractorEx is AudioFormatSelectionCancelledException) throw extractorEx
                         // A missing Opus/M4A NewPipe result should still try the native InnerTube
                         // client, which may expose the M4A fallback even when NewPipe does not.
@@ -344,6 +346,7 @@ object YouTubeMusic {
                                 Log.d(TAG, "Successfully resolved fallback stream via InnerTube player for $id")
                             }
                         } catch (fallbackEx: Exception) {
+                            extractionFailure = fallbackEx
                             if (fallbackEx is AudioFormatSelectionCancelledException ||
                                 fallbackEx is RequestedAudioFormatUnavailableException
                             ) throw fallbackEx
@@ -358,7 +361,10 @@ object YouTubeMusic {
                         }
                         Result.success(bestUrl)
                     } else {
-                        Result.failure(IllegalStateException("Stream extraction total exhaustion"))
+                        Result.failure(
+                            extractionFailure
+                                ?: IllegalStateException("Stream extraction total exhaustion")
+                        )
                     }
                 } catch (e: Exception) {
                     Result.failure(e)
