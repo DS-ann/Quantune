@@ -95,6 +95,7 @@ import com.dsann.music.util.EncryptedFeatureSecretStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.hypot
@@ -388,6 +389,19 @@ internal fun FullScreenLyricsOverlay(
     val consumeClicks = remember { MutableInteractionSource() }
     var showProvidersSheet by remember { mutableStateOf(false) }
     var syncOffsetMs by remember(currentSong?.id) { mutableStateOf(0L) }
+    var lyricsRevealDelayComplete by remember { mutableStateOf(false) }
+
+    // Keep lyric words hidden until the overlay has fully opened, then leave a short
+    // 200 ms visual pause before revealing the lyrics. Reset this on close so every
+    // opening gets the same timing; loading indicators and header controls stay usable.
+    LaunchedEffect(contentReady) {
+        if (!contentReady) {
+            lyricsRevealDelayComplete = false
+        } else {
+            delay(200L)
+            lyricsRevealDelayComplete = true
+        }
+    }
 
     val context = LocalContext.current
     val useLowCostReveal = remember(context) {
@@ -777,7 +791,7 @@ internal fun FullScreenLyricsOverlay(
                 lyricsError = lyricsError,
                 currentPositionProvider = effectivePositionProvider,
                 playbackSpeedProvider = playbackSpeedProvider,
-                contentReady = contentReady,
+                contentReady = contentReady && lyricsRevealDelayComplete,
                 contentColor = contentColor,
                 dynamicAccentColor = dynamicAccentColor,
                 lyricsColorStyle = lyricsColorStyle,
