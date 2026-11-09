@@ -44,7 +44,7 @@ internal object CrashDiagnostics {
     private const val REPORT_FILE_NAME = "latest-report.txt"
     private const val REPORT_TEMP_NAME = "latest-report.tmp"
     private const val ANR_TIMEOUT_MS = 5_000L
-    private const val HEARTBEAT_INTERVAL_MS = 250L
+    private const val HEARTBEAT_INTERVAL_MS = 500L
     private const val WATCHDOG_POLL_INTERVAL_MS = 500L
     private const val MAX_REPORT_CHARS = 160_000
 
