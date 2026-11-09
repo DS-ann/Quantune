@@ -1114,6 +1114,9 @@ fun ExploreScreen(
                                             onSuggestionItemClick = { item ->
                                                 activateSearchItem(item)
                                             },
+                                            onSongMenuClick = { song ->
+                                                selectedSongForMenu = song
+                                            },
                                             onCollectionMenuClick = { item ->
                                                 selectedCollectionForMenu = item
                                                 selectedCollectionMenuSongs = null
@@ -2797,6 +2800,7 @@ private fun ExploreCustomizerDialog(
         suggestionItems: List<SearchItem>,
         onSuggestionClick: (String) -> Unit,
         onSuggestionItemClick: (SearchItem) -> Unit,
+        onSongMenuClick: (OnlineSong) -> Unit,
         onCollectionMenuClick: (SearchItem) -> Unit,
         onAccountVisibleChange: (Boolean) -> Unit,
         onCustomizeExplore: () -> Unit,
@@ -3155,6 +3159,10 @@ private fun ExploreCustomizerDialog(
                                 item = item,
                                 isCurrentlyPlaying = false,
                                 isLoading = false,
+                                onSongMenuClick = { song ->
+                                    keyboardController?.hide()
+                                    onSongMenuClick(song)
+                                },
                                 onCollectionMenuClick = onCollectionMenuClick,
                                 onClick = { onSuggestionItemClick(item) }
                             )
