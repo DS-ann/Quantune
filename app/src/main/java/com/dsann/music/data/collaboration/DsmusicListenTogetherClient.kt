@@ -858,7 +858,7 @@ class DsmusicListenTogetherClient {
         if (reconnectJob?.isActive == true) return
 
         reconnectJob = scope.launch {
-            val backoffMs = longArrayOf(1_000L, 2_000L, 4_000L, 8_000L, 15_000L, 30_000L, 60_000L)
+            val backoffMs = longArrayOf(1_000L, 2_000L, 4_000L, 8_000L, 15_000L, 15_000L, 15_000L)
             while (isActive &&
                 generation == connectionGeneration &&
                 !manualDisconnect &&
@@ -972,7 +972,7 @@ class DsmusicListenTogetherClient {
         val driftValid = fields.firstVarint(5) == 1L
         val driftMs = fields.firstVarint(6) ?: 0L
         val stateMismatch = fields.firstVarint(7) == 1L
-        if (stateMismatch || (driftValid && kotlin.math.abs(driftMs) > 1_000L)) {
+        if (!stateMismatch && driftValid && kotlin.math.abs(driftMs) > 1_000L) {
             val now = SystemClock.elapsedRealtime()
             if (now - lastSyncRequestElapsedMs >= 4_000L) {
                 lastSyncRequestElapsedMs = now
@@ -1335,7 +1335,11 @@ class DsmusicListenTogetherClient {
                     reconnectHandshakePending = false
                     reconnectJob?.cancel()
                     reconnectJob = null
+                    manualDisconnect = true
+                    activeServerUrl = null
                     socket?.close(1000, "Session cannot be restored")
+                    socket = null
+                    clearRoomState()
                     _connectionState.value = "Connection error"
                     _message.value = "Automatic reconnect is no longer available. Join the room again. $description"
                 } else {
@@ -1349,9 +1353,12 @@ class DsmusicListenTogetherClient {
                 reconnectHandshakePending = false
                 reconnectJob?.cancel()
                 reconnectJob = null
-                _roomCode.value = null
-                _role.value = "NONE"
-                ownUserId = null
+                manualDisconnect = true
+                activeServerUrl = null
+                stopPingJob()
+                socket?.close(1000, "Room session ended")
+                socket = null
+                clearRoomState()
                 _connectionState.value = "Disconnected"
             }
             "host_changed" -> {
