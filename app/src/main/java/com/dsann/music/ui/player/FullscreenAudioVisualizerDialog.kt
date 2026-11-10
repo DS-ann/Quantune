@@ -129,7 +129,7 @@ fun FullscreenAudioVisualizerDialog(
                 // The spectrum baseline stays close to the bottom edge, as before.
                 val baselineY = size.height - 6.dp.toPx()
                 val blockHeight = 9.dp.toPx()
-                val blockGap = 4.dp.toPx()
+                val blockGap = 1.5.dp.toPx()
                 val blockPitch = blockHeight + blockGap
                 val usableHeight = (baselineY - 28.dp.toPx()).coerceAtLeast(blockHeight)
                 val maxBlocks = ((usableHeight + blockGap) / blockPitch)
