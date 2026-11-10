@@ -15,9 +15,12 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.DonutLarge
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextAlign
@@ -26,6 +29,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -44,6 +48,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dsann.music.service.AudioPlaybackService
 import com.dsann.music.service.PlaybackVisualizerController
 import com.dsann.music.ui.theme.DsmusicTheme
+import com.dsann.music.ui.theme.DropdownMenu
+import com.dsann.music.ui.theme.DropdownMenuItem
 import com.dsann.music.ui.theme.Icon
 import com.dsann.music.ui.theme.dsmusicHomeStudioGradientBrush
 import com.dsann.music.ui.theme.Text
@@ -59,17 +65,13 @@ fun FullscreenAudioVisualizerDialog(
     lyricsTextColor: Color,
     visualizerColorStyle: String,
     onVisualizerStyleChange: (String) -> Unit,
+    onVisualizerColorStyleChange: (String) -> Unit,
     onDismissRequest: () -> Unit
 ) {
     val emptyLevels = remember { MutableStateFlow(FloatArray(PlaybackVisualizerController.BAR_COUNT) { 0f }) }
     val levelsFlow = audioService?.playbackVisualizerLevels ?: emptyLevels
     val levels by levelsFlow.collectAsStateWithLifecycle()
-    val themePrimary = DsmusicTheme.colorScheme.primary
-    val themeSecondary = DsmusicTheme.colorScheme.secondary
-    val themeTertiary = DsmusicTheme.colorScheme.tertiary
-    val themeMatchingColors = remember(themePrimary, themeTertiary, themeSecondary) {
-        listOf(themePrimary, themeTertiary, themeSecondary)
-    }
+    var showColorMenu by remember { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = onDismissRequest,
@@ -130,18 +132,25 @@ fun FullscreenAudioVisualizerDialog(
                         ).coerceIn(0f, 1f)
                 }
 
+                val homeStudioGradientColors = listOf(
+                    Color(0xFF53F6FF),
+                    Color(0xFF699DFF),
+                    Color(0xFFAE7EFF),
+                    Color(0xFFFF70CD),
+                    Color(0xFFFFCF7F)
+                )
                 val activeBrush: Brush = when (visualizerColorStyle) {
-                    "Gradient" -> dsmusicHomeStudioGradientBrush(
+                    "Gradient (Horizontal)" -> dsmusicHomeStudioGradientBrush(
                         startX = 0f,
                         endX = size.width
                     )
+                    "White" -> SolidColor(Color.White)
                     "UI Matching" -> SolidColor(lyricsAccentColor)
-                    "Theme Matching" -> Brush.verticalGradient(
-                        colors = themeMatchingColors,
+                    else -> Brush.verticalGradient(
+                        colors = homeStudioGradientColors,
                         startY = 0f,
                         endY = size.height
                     )
-                    else -> SolidColor(lyricsTextColor)
                 }
 
                 when (visualizerStyle) {
@@ -299,10 +308,55 @@ fun FullscreenAudioVisualizerDialog(
                 }
             }
 
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 10.dp, end = 10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .background(Color(0xAA03050A), CircleShape)
+                        .clickable { showColorMenu = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.MoreVert,
+                        contentDescription = "Visualizer colour options",
+                        tint = Color.White,
+                        modifier = Modifier.size(21.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = showColorMenu,
+                    onDismissRequest = { showColorMenu = false }
+                ) {
+                    listOf(
+                        "Gradient (Vertical)",
+                        "Gradient (Horizontal)",
+                        "White",
+                        "UI Matching"
+                    ).forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option, color = DsmusicTheme.colorScheme.onSurface) },
+                            trailingIcon = {
+                                if (visualizerColorStyle == option) {
+                                    Text("✓", color = DsmusicTheme.colorScheme.primary)
+                                }
+                            },
+                            onClick = {
+                                onVisualizerColorStyleChange(option)
+                                showColorMenu = false
+                            }
+                        )
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 12.dp, end = 12.dp)
+                    .padding(top = 58.dp, end = 12.dp)
                     .background(Color(0xAA03050A), RoundedCornerShape(24.dp))
                     .padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
