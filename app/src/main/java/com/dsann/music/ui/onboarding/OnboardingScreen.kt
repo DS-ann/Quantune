@@ -4,9 +4,13 @@ package com.dsann.music.ui.onboarding
     
     import android.Manifest
     import android.annotation.SuppressLint
+    import android.app.Activity
     import android.content.Context
+    import android.content.Intent
     import android.content.pm.PackageManager
+    import android.net.Uri
     import android.os.Build
+    import android.provider.Settings
     import androidx.activity.compose.rememberLauncherForActivityResult
     import androidx.activity.result.contract.ActivityResultContracts
     import androidx.compose.animation.AnimatedContent
@@ -79,6 +83,7 @@ import com.dsann.music.ui.player.rememberAppAnimationFrameTimeNanos
     import com.dsann.music.ui.theme.Switch
     import com.dsann.music.ui.theme.Text
     import androidx.compose.runtime.Composable
+    import androidx.compose.runtime.DisposableEffect
     import androidx.compose.runtime.LaunchedEffect
     import androidx.compose.runtime.getValue
     import androidx.compose.runtime.mutableStateOf
@@ -103,6 +108,9 @@ import com.dsann.music.ui.player.rememberAppAnimationFrameTimeNanos
     import androidx.compose.ui.unit.dp
     import androidx.compose.ui.unit.sp
     import androidx.core.content.ContextCompat
+    import androidx.lifecycle.Lifecycle
+    import androidx.lifecycle.LifecycleEventObserver
+    import androidx.lifecycle.compose.LocalLifecycleOwner
     import com.dsann.music.R
 import com.dsann.music.applyDsmusicNightMode
     import kotlinx.coroutines.launch
@@ -135,14 +143,30 @@ import com.dsann.music.applyDsmusicNightMode
     
         val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
         val notifPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.POST_NOTIFICATIONS else null
-    
+        val activity = context as? Activity
+        val lifecycleOwner = LocalLifecycleOwner.current
+
+        val audioPermissionRequestedKey = "onboarding_audio_permission_requested"
+        val notifPermissionRequestedKey = "onboarding_notification_permission_requested"
+
         var audioGranted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED) }
         var notifGranted by remember { mutableStateOf(notifPermission?.let { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED } ?: true) }
-        
-        val permissionLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestMultiplePermissions()
-        ) { _ ->
-            // Re-check actual permission state after the system dialog returns.
+        var audioNeedsSettings by remember { mutableStateOf(false) }
+        var notifNeedsSettings by remember { mutableStateOf(false) }
+
+        fun permissionNeedsSettings(permission: String, requestedKey: String): Boolean {
+            if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) {
+                return false
+            }
+            if (!prefs.getBoolean(requestedKey, false)) return false
+
+            // Android stops showing the permission dialog after repeated denials or an
+            // explicit "don't ask again" choice. In that state, the only valid retry is
+            // through this app's system settings page.
+            return activity?.shouldShowRequestPermissionRationale(permission) == false
+        }
+
+        fun refreshPermissionState() {
             audioGranted = ContextCompat.checkSelfPermission(
                 context,
                 audioPermission
@@ -150,6 +174,63 @@ import com.dsann.music.applyDsmusicNightMode
             notifGranted = notifPermission?.let {
                 ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
             } ?: true
+            audioNeedsSettings = permissionNeedsSettings(audioPermission, audioPermissionRequestedKey)
+            notifNeedsSettings = notifPermission?.let {
+                permissionNeedsSettings(it, notifPermissionRequestedKey)
+            } ?: false
+        }
+
+        fun openAppPermissionSettings() {
+            context.startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", context.packageName, null)
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+
+        fun requestMissingPermissions(requests: List<Pair<String, String>>) {
+            val missing = requests.filter { (permission, _) ->
+                ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
+            }
+            if (missing.isEmpty()) {
+                refreshPermissionState()
+                return
+            }
+
+            if (missing.any { (permission, key) -> permissionNeedsSettings(permission, key) }) {
+                openAppPermissionSettings()
+                return
+            }
+
+            // Record that a request was attempted before opening Android's dialog so the
+            // next denial can be distinguished from the first request.
+            prefs.edit {
+                missing.forEach { (_, key) -> putBoolean(key, true) }
+            }
+            permissionLauncher.launch(missing.map { it.first }.toTypedArray())
+        }
+
+        val permissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestMultiplePermissions()
+        ) {
+            // Do not trust the result map alone; re-read the platform permission state.
+            refreshPermissionState()
+        }
+
+        LaunchedEffect(Unit) {
+            refreshPermissionState()
+        }
+
+        DisposableEffect(lifecycleOwner, activity) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    // Settings changes are applied when the user returns to onboarding.
+                    refreshPermissionState()
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
     
         Scaffold(
@@ -162,14 +243,16 @@ import com.dsann.music.applyDsmusicNightMode
                     isNextEnabled = isNextEnabled,
                     onNextClicked = {
                         if (pagerState.currentPage == 4) {
-                            val missingPermissions = mutableListOf<String>()
-                            if (!audioGranted) missingPermissions.add(audioPermission)
+                            val missingPermissions = mutableListOf<Pair<String, String>>()
+                            if (!audioGranted) {
+                                missingPermissions.add(audioPermission to audioPermissionRequestedKey)
+                            }
                             if (notifPermission != null && !notifGranted) {
-                                missingPermissions.add(notifPermission)
+                                missingPermissions.add(notifPermission to notifPermissionRequestedKey)
                             }
 
                             if (missingPermissions.isNotEmpty()) {
-                                permissionLauncher.launch(missingPermissions.toTypedArray())
+                                requestMissingPermissions(missingPermissions)
                             } else if (pagerState.currentPage < pagerState.pageCount - 1) {
                                 scope.launch {
                                     pagerState.animateScrollToPage(
@@ -247,8 +330,16 @@ import com.dsann.music.applyDsmusicNightMode
                             pageOffsetProvider = pageOffsetProvider,
                             audioGranted = audioGranted,
                             notifGranted = notifGranted,
-                            onRequestAudio = { permissionLauncher.launch(arrayOf(audioPermission)) },
-                            onRequestNotif = { notifPermission?.let { permissionLauncher.launch(arrayOf(it)) } }
+                            audioNeedsSettings = audioNeedsSettings,
+                            notifNeedsSettings = notifNeedsSettings,
+                            onRequestAudio = {
+                                requestMissingPermissions(listOf(audioPermission to audioPermissionRequestedKey))
+                            },
+                            onRequestNotif = {
+                                notifPermission?.let {
+                                    requestMissingPermissions(listOf(it to notifPermissionRequestedKey))
+                                }
+                            }
                         )
                         5 -> ThemeSelectionPage(
                             pageOffsetProvider = pageOffsetProvider,
@@ -1063,6 +1154,8 @@ import com.dsann.music.applyDsmusicNightMode
         pageOffsetProvider: () -> Float,
         audioGranted: Boolean,
         notifGranted: Boolean,
+        audioNeedsSettings: Boolean,
+        notifNeedsSettings: Boolean,
         onRequestAudio: () -> Unit,
         onRequestNotif: () -> Unit
     ) {
@@ -1095,6 +1188,7 @@ import com.dsann.music.applyDsmusicNightMode
                 description = "Access local audio files for offline playback.",
                 icon = Icons.Rounded.LibraryMusic,
                 isGranted = audioGranted,
+                requiresSettings = audioNeedsSettings,
                 pageOffsetProvider = pageOffsetProvider,
                 offsetMultiplier = 200f,
                 onRequest = onRequestAudio
@@ -1109,6 +1203,7 @@ import com.dsann.music.applyDsmusicNightMode
                     description = "Control music from your lock screen.",
                     icon = Icons.Rounded.Notifications,
                     isGranted = notifGranted,
+                    requiresSettings = notifNeedsSettings,
                     pageOffsetProvider = pageOffsetProvider,
                     offsetMultiplier = 300f,
                     onRequest = onRequestNotif
@@ -1126,6 +1221,7 @@ import com.dsann.music.applyDsmusicNightMode
         description: String,
         icon: androidx.compose.ui.graphics.vector.ImageVector,
         isGranted: Boolean,
+        requiresSettings: Boolean = false,
         pageOffsetProvider: () -> Float,
         offsetMultiplier: Float,
         onRequest: () -> Unit
@@ -1183,7 +1279,11 @@ import com.dsann.music.applyDsmusicNightMode
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = description,
+                        text = if (requiresSettings) {
+                            "Permission is blocked. Open app settings to enable access."
+                        } else {
+                            description
+                        },
                         style = DsmusicTheme.typography.bodySmall,
                         color = DsmusicTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                         maxLines = 2,
@@ -1192,12 +1292,25 @@ import com.dsann.music.applyDsmusicNightMode
                 }
                 if (!isGranted) {
                     Spacer(modifier = Modifier.width(12.dp))
-                    Icon(
-                        imageVector = Icons.Rounded.ArrowForward,
-                        contentDescription = "Grant $title permission",
-                        modifier = Modifier.size(20.dp),
-                        tint = DsmusicTheme.colorScheme.primary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (requiresSettings) "SETTINGS" else "ALLOW",
+                            style = DsmusicTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = DsmusicTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Icon(
+                            imageVector = Icons.Rounded.ArrowForward,
+                            contentDescription = if (requiresSettings) {
+                                "Open app settings for $title"
+                            } else {
+                                "Grant $title permission"
+                            },
+                            modifier = Modifier.size(20.dp),
+                            tint = DsmusicTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }
