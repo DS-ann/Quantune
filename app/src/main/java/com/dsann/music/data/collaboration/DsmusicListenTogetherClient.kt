@@ -709,71 +709,273 @@ class DsmusicListenTogetherClient {
             "Server address must start with wss:// or ws://."
         }
         require(normalized.length <= 300) { "Server address is too long." }
+
         leaveRoom()
+        connectionGeneration += 1L
+        manualDisconnect = false
+        activeServerUrl = normalized
+        initialHandshakeType = type
         pendingMessage = encodeEnvelope(type, payload)
         _connectionState.value = "Connecting"
         _message.value = "Connecting to Listen Together server…"
-        val request = Request.Builder()
-            .url(normalized)
-            .header("User-Agent", "Quantune")
-            .build()
-        try {
-        socket = httpClient.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                if (socket !== webSocket) {
-                    webSocket.close(1000, "Superseded connection")
-                    return
-                }
-                _connectionState.value = "Connected"
-                _message.value = "Connected. Waiting for room response…"
-                startPingJob()
-                pendingMessage?.let { webSocket.send(ByteString.of(*it)) }
-                pendingMessage = null
-            }
+        openInternetSocket(connectionGeneration)
+    }
 
-            override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                if (socket !== webSocket) return
-                try {
-                    handleEnvelope(bytes.toByteArray())
-                } catch (error: Exception) {
-                    Log.w(TAG, "Could not decode room message", error)
-                    _message.value = "Received a message that could not be read."
-                }
-            }
-
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                if (socket !== webSocket) return
-                _connectionState.value = "Closing"
-                webSocket.close(1000, null)
-            }
-
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (socket !== webSocket) return
-                socket = null
-                pingJob?.cancel()
-                pingJob = null
-                clearRoomState()
-                _connectionState.value = "Disconnected"
-                _message.value = "Room connection closed."
-            }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                if (socket !== webSocket) return
-                socket = null
-                pingJob?.cancel()
-                pingJob = null
-                Log.w(TAG, "Listen Together connection failed", t)
-                clearRoomState()
-                _connectionState.value = "Connection error"
-                _message.value = t.message ?: "Could not connect to the room server."
-                pendingMessage = null
-            }
-        })
+    private fun openInternetSocket(generation: Long) {
+        if (manualDisconnect || generation != connectionGeneration) return
+        val normalized = activeServerUrl ?: return
+        val request = try {
+            Request.Builder()
+                .url(normalized)
+                .header("User-Agent", "Quantune")
+                .build()
         } catch (error: Exception) {
-            pendingMessage = null
-            _connectionState.value = "Connection error"
-            _message.value = error.message ?: "Could not open the Listen Together connection."
-            throw error
+            if (sessionToken.isNullOrBlank()) {
+                _connectionState.value = "Connection error"
+                _message.value = error.message ?: "The room server address is invalid."
+            } else {
+                _connectionState.value = "Reconnecting"
+                _message.value = "Could not open the connection. Retrying…"
+            }
+            return
+        }
+
+        try {
+            val newSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
+                override fun onOpen(webSocket: WebSocket, response: Response) {
+                    if (generation != connectionGeneration || manualDisconnect || socket !== webSocket) {
+                        webSocket.close(1000, "Superseded connection")
+                        return
+                    }
+
+                    startPingJob()
+                    val token = sessionToken
+                    if (!token.isNullOrBlank()) {
+                        reconnectHandshakePending = true
+                        _connectionState.value = "Reconnecting"
+                        _message.value = "Connection restored. Rejoining your listening room…"
+                        val reconnect = encodeEnvelope(
+                            "reconnect",
+                            ProtoWriter().string(1, token).toByteArray()
+                        )
+                        if (!webSocket.send(ByteString.of(*reconnect))) {
+                            webSocket.cancel()
+                        }
+                    } else {
+                        _connectionState.value = "Connected"
+                        val handshake = pendingMessage
+                        if (handshake != null) {
+                            if (webSocket.send(ByteString.of(*handshake))) {
+                                pendingMessage = null
+                                _message.value = if (initialHandshakeType == "join_room") {
+                                    "Join request sent. Waiting for the host to approve…"
+                                } else {
+                                    "Connected. Setting up your room…"
+                                }
+                            } else {
+                                _message.value = "The room request could not be sent. Please retry."
+                                webSocket.cancel()
+                            }
+                        }
+                    }
+                }
+
+                override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+                    if (generation != connectionGeneration || socket !== webSocket) return
+                    try {
+                        handleEnvelope(bytes.toByteArray())
+                    } catch (error: Exception) {
+                        Log.w(TAG, "Could not decode room message", error)
+                        _message.value = "Received a room update that could not be read."
+                    }
+                }
+
+                override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                    if (generation != connectionGeneration || socket !== webSocket) return
+                    if (!sessionToken.isNullOrBlank() && !manualDisconnect) {
+                        _connectionState.value = "Reconnecting"
+                        _message.value = "The room connection is closing. Restoring it…"
+                    }
+                    webSocket.close(1000, null)
+                }
+
+                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    if (generation != connectionGeneration || socket !== webSocket) return
+                    socket = null
+                    stopPingJob()
+                    if (manualDisconnect) return
+                    if (!sessionToken.isNullOrBlank()) {
+                        reconnectHandshakePending = false
+                        _connectionState.value = "Reconnecting"
+                        _message.value = "Connection interrupted. Reconnecting to the room…"
+                        scheduleReconnect(generation)
+                    } else {
+                        clearRoomState()
+                        _connectionState.value = "Disconnected"
+                        _message.value = "The room connection closed before the session was confirmed. Rejoin to continue."
+                    }
+                }
+
+                override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    if (generation != connectionGeneration || socket !== webSocket) return
+                    socket = null
+                    stopPingJob()
+                    Log.w(TAG, "Listen Together connection failed", t)
+                    if (manualDisconnect) return
+                    if (!sessionToken.isNullOrBlank()) {
+                        reconnectHandshakePending = false
+                        _connectionState.value = "Reconnecting"
+                        _message.value = "Connection lost. Quantune will keep trying to restore the room."
+                        scheduleReconnect(generation)
+                    } else {
+                        clearRoomState()
+                        pendingMessage = null
+                        _connectionState.value = "Connection error"
+                        _message.value = t.message
+                            ?: "Could not connect to the room server. Please retry."
+                    }
+                }
+            })
+            socket = newSocket
+        } catch (error: Exception) {
+            Log.w(TAG, "Could not create Listen Together WebSocket", error)
+            if (!sessionToken.isNullOrBlank()) {
+                _connectionState.value = "Reconnecting"
+                _message.value = "Could not open the connection. Retrying…"
+                scheduleReconnect(generation)
+            } else {
+                pendingMessage = null
+                _connectionState.value = "Connection error"
+                _message.value = error.message ?: "Could not open the Listen Together connection."
+            }
+        }
+    }
+
+    private fun scheduleReconnect(generation: Long) {
+        if (manualDisconnect || sessionToken.isNullOrBlank() || activeServerUrl.isNullOrBlank()) return
+        if (reconnectJob?.isActive == true) return
+
+        reconnectJob = scope.launch {
+            val backoffMs = longArrayOf(1_000L, 2_000L, 4_000L, 8_000L, 15_000L, 30_000L, 60_000L)
+            while (isActive &&
+                generation == connectionGeneration &&
+                !manualDisconnect &&
+                !sessionToken.isNullOrBlank()
+            ) {
+                if (socket != null) {
+                    if (_connectionState.value == "Connected" &&
+                        !reconnectHandshakePending &&
+                        _roomCode.value != null
+                    ) break
+                    delay(300L)
+                    continue
+                }
+
+                val baseDelay = backoffMs[reconnectAttempt.coerceIn(0, backoffMs.lastIndex)]
+                val jitter = SystemClock.elapsedRealtime() % 450L
+                reconnectAttempt += 1
+                _connectionState.value = "Reconnecting"
+                _message.value = "Connection interrupted. Retrying shortly…"
+                delay(baseDelay + jitter)
+
+                if (!isActive || generation != connectionGeneration || manualDisconnect ||
+                    sessionToken.isNullOrBlank()
+                ) break
+
+                openInternetSocket(generation)
+                var waitedMs = 0L
+                while (isActive && generation == connectionGeneration &&
+                    !manualDisconnect && socket != null &&
+                    reconnectHandshakePending && waitedMs < 25_000L
+                ) {
+                    delay(250L)
+                    waitedMs += 250L
+                }
+
+                if (_connectionState.value == "Connected" &&
+                    !reconnectHandshakePending && _roomCode.value != null
+                ) break
+
+                if (reconnectHandshakePending) {
+                    socket?.cancel()
+                }
+            }
+            reconnectJob = null
+        }
+    }
+
+    private fun stopPingJob() {
+        pingJob?.cancel()
+        pingJob = null
+        pendingPingSamples.clear()
+    }
+
+    private fun updateRoomStateFromSnapshot(stateBytes: ByteArray, action: String = "sync_state") {
+        val fields = ProtoReader(stateBytes).fields()
+        val track = fields.firstBytes(4)?.let(::decodeTrack)
+        val playing = fields.firstVarint(5) == 1L
+        val rawPosition = fields.firstVarint(6) ?: 0L
+        val lastUpdate = fields.firstVarint(7) ?: 0L
+        val queue = fields.allBytes(9).mapNotNull(::decodeTrack)
+        val queueTitle = fields.firstString(11)
+
+        if (track != null) lastTrack = track
+        lastSharedQueue = queue
+        val position = compensateRemotePosition(rawPosition, playing, lastUpdate, track?.durationMs ?: 0L)
+        publishRemote(action, track ?: lastTrack, position, playing, queue, queueTitle)
+
+        _roomUsers.value = fields.allBytes(3).mapNotNull { userBytes ->
+            val user = ProtoReader(userBytes).fields()
+            val name = user.firstString(2).orEmpty()
+            if (name.isBlank()) null
+            else if (user.firstVarint(3) == 1L) "$name (host)" else name
+        }.distinct()
+    }
+
+    private fun compensateRemotePosition(
+        positionMs: Long,
+        playing: Boolean,
+        serverTimestampMs: Long,
+        durationMs: Long
+    ): Long {
+        if (!playing || !hasServerClockOffset || serverTimestampMs <= 0L) {
+            return positionMs.coerceAtLeast(0L)
+        }
+        val transitMs = (serverNowMs() - serverTimestampMs).coerceIn(0L, 8_000L)
+        val adjusted = positionMs.coerceAtLeast(0L) + transitMs
+        return if (durationMs > 0L) adjusted.coerceAtMost(durationMs) else adjusted
+    }
+
+    private fun serverNowMs(): Long = System.currentTimeMillis() + serverClockOffsetMs
+
+    private fun handlePong(fields: List<ProtoField>) {
+        val sequence = fields.firstVarint(4) ?: return
+        val sample = pendingPingSamples.remove(sequence) ?: return
+        val serverReceive = fields.firstVarint(2) ?: return
+        val serverSend = fields.firstVarint(3) ?: return
+        if (serverReceive <= 0L || serverSend < serverReceive) return
+
+        val roundTripMs = (SystemClock.elapsedRealtime() - sample.second).coerceAtLeast(0L)
+        if (roundTripMs > 12_000L) return
+        val localMidpoint = sample.first + roundTripMs / 2L
+        val serverMidpoint = serverReceive + (serverSend - serverReceive) / 2L
+        val observedOffset = serverMidpoint - localMidpoint
+        serverClockOffsetMs = if (hasServerClockOffset) {
+            (serverClockOffsetMs * 3L + observedOffset) / 4L
+        } else {
+            observedOffset
+        }
+        hasServerClockOffset = true
+
+        val driftValid = fields.firstVarint(5) == 1L
+        val driftMs = fields.firstVarint(6) ?: 0L
+        val stateMismatch = fields.firstVarint(7) == 1L
+        if (stateMismatch || (driftValid && kotlin.math.abs(driftMs) > 1_000L)) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastSyncRequestElapsedMs >= 4_000L) {
+                lastSyncRequestElapsedMs = now
+                send("request_sync", byteArrayOf())
+            }
         }
     }
 
