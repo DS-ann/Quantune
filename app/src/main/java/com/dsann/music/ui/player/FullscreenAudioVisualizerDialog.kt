@@ -71,6 +71,15 @@ fun FullscreenAudioVisualizerDialog(
     val emptyLevels = remember { MutableStateFlow(FloatArray(PlaybackVisualizerController.BAR_COUNT) { 0f }) }
     val levelsFlow = audioService?.playbackVisualizerLevels ?: emptyLevels
     val levels by levelsFlow.collectAsStateWithLifecycle()
+    val homeStudioGradientColors = remember {
+        listOf(
+            Color(0xFF53F6FF),
+            Color(0xFF699DFF),
+            Color(0xFFAE7EFF),
+            Color(0xFFFF70CD),
+            Color(0xFFFFCF7F)
+        )
+    }
     var showColorMenu by remember { mutableStateOf(false) }
 
     Dialog(
@@ -132,13 +141,6 @@ fun FullscreenAudioVisualizerDialog(
                         ).coerceIn(0f, 1f)
                 }
 
-                val homeStudioGradientColors = listOf(
-                    Color(0xFF53F6FF),
-                    Color(0xFF699DFF),
-                    Color(0xFFAE7EFF),
-                    Color(0xFFFF70CD),
-                    Color(0xFFFFCF7F)
-                )
                 val activeBrush: Brush = when (visualizerColorStyle) {
                     "Gradient (Horizontal)" -> dsmusicHomeStudioGradientBrush(
                         startX = 0f,
