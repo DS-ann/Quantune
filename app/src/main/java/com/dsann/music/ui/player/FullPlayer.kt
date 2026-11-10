@@ -124,116 +124,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 
-@Composable
-private fun AudioReactivePlayerVisualizer(
-    style: String,
-    levels: FloatArray,
-    color: Color,
-    colorMode: String
-) {
-    androidx.compose.foundation.Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(if (style == "Circular Spectrum") 54.dp else 28.dp)
-    ) {
-        val center = Offset(size.width / 2f, size.height / 2f)
-        val safeLevels = levels.takeIf { it.isNotEmpty() } ?: FloatArray(16)
-
-        fun levelAt(position: Float): Float {
-            val scaled = position.coerceIn(0f, 1f) * (safeLevels.size - 1)
-            val lower = scaled.toInt().coerceIn(0, safeLevels.lastIndex)
-            val upper = (lower + 1).coerceAtMost(safeLevels.lastIndex)
-            val fraction = scaled - lower
-            return (safeLevels[lower] * (1f - fraction) + safeLevels[upper] * fraction)
-                .coerceIn(0f, 1f)
-        }
-
-        fun visualizerColor(position: Float): Color =
-            if (colorMode == "Spectrum") {
-                Color.hsv(position.coerceIn(0f, 1f) * 300f, 0.78f, 0.96f)
-            } else {
-                color
-            }
-
-        when (style) {
-            // Classic bar visualizer: retain the original compact bar appearance,
-            // but drive its height from the real playback FFT levels.
-            "Bars" -> {
-                val count = if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.M) 8 else 32
-                val gap = 3.dp.toPx()
-                val barWidth = ((size.width - gap * (count - 1)) / count).coerceAtLeast(1f)
-                repeat(count) { index ->
-                    val position = if (count <= 1) 0f else index / (count - 1f)
-                    val level = levelAt(position)
-                    val barHeight = (size.height * (0.18f + level * 0.78f))
-                        .coerceIn(2.dp.toPx(), size.height)
-                    val x = index * (barWidth + gap)
-                    drawRoundRect(
-                        color = visualizerColor(position).copy(alpha = 0.35f + level * 0.55f),
-                        topLeft = Offset(x, center.y - barHeight / 2f),
-                        size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(
-                            x = barWidth / 2f,
-                            y = barWidth / 2f
-                        )
-                    )
-                }
-            }
-
-            "Spectrum Bars" -> {
-                val count = 32
-                val gap = 2.dp.toPx()
-                val barWidth = ((size.width - gap * (count - 1)) / count).coerceAtLeast(1f)
-                val minHeight = 2.dp.toPx()
-                repeat(count) { index ->
-                    val position = index / (count - 1f)
-                    val level = levelAt(position)
-                    val barHeight = (size.height * (0.04f + level * 0.94f))
-                        .coerceIn(minHeight, size.height)
-                    val x = index * (barWidth + gap)
-                    drawRoundRect(
-                        color = visualizerColor(position).copy(alpha = 0.42f + level * 0.58f),
-                        topLeft = Offset(x, center.y - barHeight / 2f),
-                        size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(
-                            x = barWidth * 0.45f,
-                            y = barWidth * 0.45f
-                        )
-                    )
-                }
-            }
-
-            "Circular Spectrum" -> {
-                val count = 48
-                val minDimension = minOf(size.width, size.height)
-                val innerRadius = minDimension * 0.22f
-                val maxLength = minDimension * 0.27f
-                repeat(count) { index ->
-                    val position = index / (count - 1f)
-                    val level = levelAt(position)
-                    val angle = -1.5707963f + index * (6.2831855f / count)
-                    val direction = Offset(kotlin.math.cos(angle), kotlin.math.sin(angle))
-                    val start = center + direction * innerRadius
-                    val end = center + direction * (innerRadius + maxLength * (0.05f + level * 0.95f))
-                    drawLine(
-                        color = visualizerColor(position).copy(alpha = 0.38f + level * 0.62f),
-                        start = start,
-                        end = end,
-                        strokeWidth = 2.dp.toPx(),
-                        cap = androidx.compose.ui.graphics.StrokeCap.Round
-                    )
-                }
-                drawCircle(
-                    color = color.copy(alpha = 0.18f),
-                    radius = innerRadius * 0.68f,
-                    center = center,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
-                )
-            }
-        }
-    }
-}
-
 /**
  * Compact one-line lyric preview for the portrait full player.
  *
@@ -750,8 +640,6 @@ fun FullPlayerScreen(
     val playerButtonStyle by customizeViewModel.playerButtonStyle.collectAsStateWithLifecycle()
     val scrubberThickness by customizeViewModel.scrubberThickness.collectAsStateWithLifecycle()
     val scrubberThumbStyle by customizeViewModel.scrubberThumbStyle.collectAsStateWithLifecycle()
-    val visualizerColor by customizeViewModel.visualizerColor.collectAsStateWithLifecycle()
-    val fullscreenVisualizerEnabled by customizeViewModel.fullscreenVisualizerEnabled.collectAsStateWithLifecycle()
     val lyricsColorStyle by customizeViewModel.lyricsColorStyle.collectAsStateWithLifecycle()
     val showSyncedLyricsInPlayer by customizeViewModel.showSyncedLyricsInPlayer.collectAsStateWithLifecycle()
 
@@ -792,8 +680,6 @@ fun FullPlayerScreen(
         lyricsColorStyle = lyricsColorStyle,
         scrubberThickness = scrubberThickness,
         scrubberThumbStyle = scrubberThumbStyle,
-        visualizerColor = visualizerColor,
-        fullscreenVisualizerEnabled = fullscreenVisualizerEnabled,
         showSyncedLyricsInPlayer = showSyncedLyricsInPlayer,
         onProviderSelected = { viewModel.selectLyricsProvider(it) },
         currentPositionProvider = currentPositionProvider,
@@ -885,14 +771,12 @@ fun FullPlayer(
     playerTimes: String = "Both",
     scrubberStyle: String = "Waveform",
     scrubberColor: String = "Accent",
-    visualizerStyle: String = "Off",
+    visualizerStyle: String = "Bars (16)",
     playerBackgroundStyle: String = "Artwork",
     playerButtonStyle: String = "Pill",
     lyricsColorStyle: String = "Home Studio Gradient",
     scrubberThickness: Float = 1.5f,
     scrubberThumbStyle: String = "Auto",
-    visualizerColor: String = "Accent",
-    fullscreenVisualizerEnabled: Boolean = true,
     showSyncedLyricsInPlayer: Boolean = true,
     onProviderSelected: (String) -> Unit,
     onArtistClick: (String?, String) -> Unit = { _, _ -> },
@@ -1015,11 +899,6 @@ fun FullPlayer(
     val hasLyrics = !syncedLyrics.isNullOrEmpty() || !plainLyrics.isNullOrBlank()
     val currentSongId = uiState.currentSong?.id
     val audioService by viewModel.audioServiceState.collectAsStateWithLifecycle()
-    val emptyVisualizerLevels = remember {
-        MutableStateFlow(FloatArray(16) { 0f })
-    }
-    val visualizerLevelsFlow = audioService?.playbackVisualizerLevels ?: emptyVisualizerLevels
-    val playbackVisualizerLevels by visualizerLevelsFlow.collectAsStateWithLifecycle()
     val isVideoMode by viewModel.isVideoMode.collectAsStateWithLifecycle()
     val videoPlaybackMetadata by viewModel.videoPlaybackMetadata.collectAsStateWithLifecycle()
     var showSongInfoDialog by remember { mutableStateOf(false) }
@@ -1035,9 +914,8 @@ fun FullPlayer(
             audioService?.startPlaybackVisualizer()
         }
     }
-    val needsPlaybackVisualizer = (
-        visualizerStyle != "Off" && isPlayerVisible && uiState.isPlaying
-    ) || showFullScreenVisualizer
+    // FFT capture is allocated only while the dedicated full-screen visualizer is open.
+    val needsPlaybackVisualizer = showFullScreenVisualizer
 
     LaunchedEffect(audioService, needsPlaybackVisualizer) {
         visualizerCaptureRequested = needsPlaybackVisualizer
@@ -1537,19 +1415,6 @@ fun FullPlayer(
 
             Spacer(modifier = Modifier.height(if (compactLandscape) 8.dp else 16.dp))
 
-            if (visualizerStyle != "Off") {
-                AudioReactivePlayerVisualizer(
-                    style = visualizerStyle,
-                    levels = playbackVisualizerLevels,
-                    color = when (visualizerColor) {
-                        "White" -> Color.White
-                        "Cover" -> Color(uiState.playerBackgroundColor)
-                        else -> dynamicAccentColor
-                    },
-                    colorMode = visualizerColor
-                )
-                Spacer(modifier = Modifier.height(if (compactLandscape) 4.dp else 10.dp))
-            }
 
             // Keep the action row at its existing vertical anchor. In portrait mode,
             // use this free gap for one active synced lyric line. Karaoke lines advance
@@ -1654,11 +1519,12 @@ fun FullPlayer(
                 val playerButtonsWithVideo = if (
                     showVideoSwitch && "video" !in orderedButtons
                 ) orderedButtons + "video" else orderedButtons
-                val playerButtonsForDisplay = if (
-                    fullscreenVisualizerEnabled && "visualizer" !in playerButtonsWithVideo
-                ) playerButtonsWithVideo + "visualizer"
-                else if (fullscreenVisualizerEnabled) playerButtonsWithVideo
-                else playerButtonsWithVideo.filterNot { it == "visualizer" }
+                // The visualizer button is always available; its renderer is selected in Settings.
+                val playerButtonsForDisplay = if ("visualizer" !in playerButtonsWithVideo) {
+                    playerButtonsWithVideo + "visualizer"
+                } else {
+                    playerButtonsWithVideo
+                }
                 playerButtonsForDisplay.forEach { action ->
                     when (action) {
                         "lyrics" -> PillChip(
@@ -2394,6 +2260,7 @@ fun FullPlayer(
     if (showFullScreenVisualizer) {
         FullscreenAudioVisualizerDialog(
             audioService = audioService,
+            visualizerStyle = visualizerStyle,
             lyricsAccentColor = lyricsAccentColor,
             lyricsTextColor = lyricsTextColor,
             lyricsColorStyle = lyricsColorStyle,
