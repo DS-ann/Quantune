@@ -22,7 +22,7 @@ internal object FreshInstallAppSettings {
         "amoled_black" to false,
         "mini_swipe_up" to "OPEN",
         "player_visualizer" to "Bars (16)",
-        "player_visualizer_color_style" to "Gradient (Vertical)",
+        "player_visualizer_color_style" to "Gradient (Horizontal)",
         "ui_font_weight" to "Lighter",
         "download_bitrate" to "128 kbps",
         "nav_bar_style" to "Floating",
