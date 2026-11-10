@@ -67,6 +67,8 @@ import com.dsann.music.service.AudioPlaybackService
 import com.dsann.music.ui.player.WavyMusicSlider
 import com.dsann.music.ui.player.rememberAppAnimationFrameTimeNanos
 import com.dsann.music.ui.theme.DsmusicAppTheme
+import com.dsann.music.ui.theme.SolidSystemNavigationBarBackground
+import com.dsann.music.ui.theme.applySolidSystemNavigationBarColor
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -124,6 +126,7 @@ class ExternalPlayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        applySolidSystemNavigationBarColor()
 
         // Resolve incoming Intent data Uri
         val intentData = intent.data
@@ -147,28 +150,31 @@ class ExternalPlayerActivity : ComponentActivity() {
 
         setContent {
             DsmusicAppTheme(darkTheme = true) { // Sleek immersive popup palette
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(DsmusicTheme.colorScheme.scrim.copy(alpha = 0.45f)) // Standard M3 Scrim token
-                        .clickable {
-                            // Tapping backdrop exits popup (which calls onDestroy automatically)
-                            finish()
-                        },
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    PopupPlayerContent(
-                        uri = currentUri,
-                        title = songTitle.value,
-                        artist = songArtist.value,
-                        album = songAlbum.value,
-                        artBitmap = thumbnailBitmap.value,
-                        service = audioService.value, // Observed state updates layout when bound!
-                        onOpenFullPlayer = {
-                            openFullApp(currentUri)
-                        },
-                        modifier = Modifier.clickable(enabled = false) {} // Absorb internal taps
-                    )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(DsmusicTheme.colorScheme.scrim.copy(alpha = 0.45f)) // Standard M3 Scrim token
+                            .clickable {
+                                // Tapping backdrop exits popup (which calls onDestroy automatically)
+                                finish()
+                            },
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        PopupPlayerContent(
+                            uri = currentUri,
+                            title = songTitle.value,
+                            artist = songArtist.value,
+                            album = songAlbum.value,
+                            artBitmap = thumbnailBitmap.value,
+                            service = audioService.value, // Observed state updates layout when bound!
+                            onOpenFullPlayer = {
+                                openFullApp(currentUri)
+                            },
+                            modifier = Modifier.clickable(enabled = false) {} // Absorb internal taps
+                        )
+                    }
+                    SolidSystemNavigationBarBackground()
                 }
             }
         }

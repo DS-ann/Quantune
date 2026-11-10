@@ -52,6 +52,8 @@ import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.dsann.music.ui.theme.DsmusicAppThemeFromPreferences
+import com.dsann.music.ui.theme.SolidSystemNavigationBarBackground
+import com.dsann.music.ui.theme.applySolidSystemNavigationBarColor
 import com.dsann.music.ui.theme.DsmusicTheme
 import com.dsann.music.ui.theme.Icon
 import com.dsann.music.ui.theme.Text
@@ -64,7 +66,7 @@ class CrashReportActivity : AppCompatActivity() {
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
-        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        applySolidSystemNavigationBarColor()
         val selectedTheme = getSharedPreferences("AppSettings", MODE_PRIVATE)
             .getString("theme_mode", "system")
         val isDarkTheme = when (selectedTheme) {
@@ -93,12 +95,15 @@ class CrashReportActivity : AppCompatActivity() {
 
         setContent {
             DsmusicAppThemeFromPreferences {
-                CrashReportScreen(
-                    report = report,
-                    onCopy = { copyReport(report) },
-                    onShare = { shareReport(report) },
-                    onContinue = { returnToQuantune() }
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    CrashReportScreen(
+                        report = report,
+                        onCopy = { copyReport(report) },
+                        onShare = { shareReport(report) },
+                        onContinue = { returnToQuantune() }
+                    )
+                    SolidSystemNavigationBarBackground()
+                }
             }
         }
     }

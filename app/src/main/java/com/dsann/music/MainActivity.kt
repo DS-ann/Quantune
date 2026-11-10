@@ -121,6 +121,8 @@ import com.dsann.music.ui.library.scanLocalFiles
 import com.dsann.music.ui.theme.DsmusicNavigationBar
 import com.dsann.music.ui.theme.DsmusicNavigationDestination
 import com.dsann.music.ui.theme.DsmusicAppTheme
+import com.dsann.music.ui.theme.SolidSystemNavigationBarBackground
+import com.dsann.music.ui.theme.applySolidSystemNavigationBarColor
 import com.dsann.music.ui.theme.rememberDsmusicDarkTheme
 import com.dsann.music.ui.onboarding.OnboardingScreen
 import android.content.Context
@@ -1195,6 +1197,9 @@ onNavigateToLibrary = {
                             )
                         }
                     }
+
+                    // Keep the platform navigation area opaque on gesture and button navigation.
+                    SolidSystemNavigationBarBackground()
                 }
             }
         }
@@ -1439,7 +1444,7 @@ onNavigateToLibrary = {
     fun setupSystemBars() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
-        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        applySolidSystemNavigationBarColor()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isStatusBarContrastEnforced = false
