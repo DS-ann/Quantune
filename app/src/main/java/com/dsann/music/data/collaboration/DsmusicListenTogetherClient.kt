@@ -108,6 +108,7 @@ class DsmusicListenTogetherClient {
     private var reconnectJob: Job? = null
     private var reconnectAttempt = 0
     private var initialHandshakeType: String? = null
+    @Volatile private var initialHandshakeSent = false
     private val pendingPingSamples = ConcurrentHashMap<Long, Pair<Long, Long>>()
     @Volatile private var serverClockOffsetMs = 0L
     @Volatile private var hasServerClockOffset = false
@@ -717,6 +718,7 @@ class DsmusicListenTogetherClient {
         manualDisconnect = false
         activeServerUrl = normalized
         initialHandshakeType = type
+        initialHandshakeSent = false
         pendingMessage = encodeEnvelope(type, payload)
         _connectionState.value = "Connecting"
         _message.value = "Connecting to Listen Together server…"
@@ -769,6 +771,7 @@ class DsmusicListenTogetherClient {
                         if (handshake != null) {
                             if (webSocket.send(ByteString.of(*handshake))) {
                                 pendingMessage = null
+                                initialHandshakeSent = true
                                 _message.value = if (initialHandshakeType == "join_room") {
                                     "Join request sent. Waiting for the host to approve…"
                                 } else {
@@ -811,6 +814,10 @@ class DsmusicListenTogetherClient {
                         _connectionState.value = "Reconnecting"
                         _message.value = "Connection interrupted. Reconnecting to the room…"
                         scheduleReconnect(generation)
+                    } else if (!initialHandshakeSent && pendingMessage != null) {
+                        _connectionState.value = "Connecting"
+                        _message.value = "The server connection closed before the room request was sent. Retrying…"
+                        scheduleReconnect(generation)
                     } else {
                         clearRoomState()
                         _connectionState.value = "Disconnected"
@@ -828,6 +835,10 @@ class DsmusicListenTogetherClient {
                         reconnectHandshakePending = false
                         _connectionState.value = "Reconnecting"
                         _message.value = "Connection lost. Quantune will keep trying to restore the room."
+                        scheduleReconnect(generation)
+                    } else if (!initialHandshakeSent && pendingMessage != null) {
+                        _connectionState.value = "Connecting"
+                        _message.value = "Could not reach the server yet. Retrying the connection…"
                         scheduleReconnect(generation)
                     } else {
                         clearRoomState()
@@ -854,7 +865,9 @@ class DsmusicListenTogetherClient {
     }
 
     private fun scheduleReconnect(generation: Long) {
-        if (manualDisconnect || sessionToken.isNullOrBlank() || activeServerUrl.isNullOrBlank()) return
+        val canResumeSession = !sessionToken.isNullOrBlank()
+        val canRetryInitialConnection = !initialHandshakeSent && pendingMessage != null
+        if (manualDisconnect || (!canResumeSession && !canRetryInitialConnection) || activeServerUrl.isNullOrBlank()) return
         if (reconnectJob?.isActive == true) return
 
         reconnectJob = scope.launch {
@@ -862,7 +875,7 @@ class DsmusicListenTogetherClient {
             while (isActive &&
                 generation == connectionGeneration &&
                 !manualDisconnect &&
-                !sessionToken.isNullOrBlank()
+                (!sessionToken.isNullOrBlank() || (!initialHandshakeSent && pendingMessage != null))
             ) {
                 if (socket != null) {
                     if (_connectionState.value == "Connected" &&
@@ -881,7 +894,7 @@ class DsmusicListenTogetherClient {
                 delay(baseDelay + jitter)
 
                 if (!isActive || generation != connectionGeneration || manualDisconnect ||
-                    sessionToken.isNullOrBlank()
+                    (sessionToken.isNullOrBlank() && (initialHandshakeSent || pendingMessage == null))
                 ) break
 
                 openInternetSocket(generation)
@@ -1046,6 +1059,7 @@ class DsmusicListenTogetherClient {
         activeServerUrl = null
         sessionToken = null
         initialHandshakeType = null
+        initialHandshakeSent = false
         stopPingJob()
         hasServerClockOffset = false
         serverClockOffsetMs = 0L
@@ -1275,6 +1289,7 @@ class DsmusicListenTogetherClient {
                 pendingMessage = null
                 reconnectHandshakePending = false
                 reconnectAttempt = 0
+                initialHandshakeSent = true
                 _role.value = "HOST"
                 _roomUsers.value = listOf("You (host)")
                 _connectionState.value = "Connected"
@@ -1288,6 +1303,7 @@ class DsmusicListenTogetherClient {
                 pendingMessage = null
                 reconnectHandshakePending = false
                 reconnectAttempt = 0
+                initialHandshakeSent = true
                 _role.value = "GUEST"
                 fields.firstBytes(4)?.let { updateRoomStateFromSnapshot(it, "sync_state") }
                 _connectionState.value = "Connected"
