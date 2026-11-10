@@ -2554,6 +2554,7 @@ fun FullPlayer(
                 audioService = audioService,
                 lyricsAccentColor = lyricsAccentColor,
                 lyricsTextColor = lyricsTextColor,
+                lyricsColorStyle = lyricsColorStyle,
                 onDismissRequest = { showFullScreenVisualizer = false }
             )
         } else {
