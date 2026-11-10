@@ -1352,8 +1352,13 @@ class DsmusicListenTogetherClient {
             }
             "user_joined" -> {
                 val name = fields.firstString(2) ?: "Listener"
-                _roomUsers.value = _roomUsers.value + name
+                _roomUsers.value = (_roomUsers.value + name).distinct()
                 _message.value = "$name joined the room."
+            }
+            "user_reconnected" -> {
+                val name = fields.firstString(2) ?: "Listener"
+                _roomUsers.value = (_roomUsers.value + name).distinct()
+                _message.value = "$name reconnected."
             }
             "user_left", "user_disconnected" -> {
                 val name = fields.firstString(2) ?: "Listener"
