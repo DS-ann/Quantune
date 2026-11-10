@@ -950,6 +950,28 @@ class DsmusicListenTogetherClient {
 
     private fun serverNowMs(): Long = System.currentTimeMillis() + serverClockOffsetMs
 
+    private fun resendHostStateAfterReconnect() {
+        if (_role.value != "HOST") return
+        val track = lastTrack ?: return
+        val queue = lastSharedQueue
+        val position = lastPlaybackPositionMs
+        val wasPlaying = lastPlaybackIsPlaying
+
+        sendPlayback(
+            action = "change_track",
+            track = track,
+            positionMs = position,
+            queue = queue,
+            queueTitle = "Listen Together",
+            replaceQueue = true
+        )
+        sendPlayback(
+            action = if (wasPlaying) "play" else "pause",
+            track = track,
+            positionMs = position
+        )
+    }
+
     private fun handlePong(fields: List<ProtoField>) {
         val sequence = fields.firstVarint(4) ?: return
         val sample = pendingPingSamples.remove(sequence) ?: return
@@ -1275,11 +1297,23 @@ class DsmusicListenTogetherClient {
                 val code = fields.firstString(1) ?: return
                 _roomCode.value = code
                 ownUserId = fields.firstString(2) ?: ownUserId
-                _role.value = if (fields.firstVarint(4) == 1L) "HOST" else "GUEST"
+                val reconnectedAsHost = fields.firstVarint(4) == 1L
+                val localHostTrack = if (reconnectedAsHost) lastTrack else null
+                val localHostQueue = if (reconnectedAsHost) lastSharedQueue else emptyList()
+                val localHostPosition = lastPlaybackPositionMs
+                val localHostWasPlaying = lastPlaybackIsPlaying
+                _role.value = if (reconnectedAsHost) "HOST" else "GUEST"
                 reconnectHandshakePending = false
                 reconnectAttempt = 0
                 pendingMessage = null
                 fields.firstBytes(3)?.let { updateRoomStateFromSnapshot(it, "sync_state") }
+                if (reconnectedAsHost && localHostTrack != null) {
+                    lastTrack = localHostTrack
+                    lastSharedQueue = localHostQueue
+                    lastPlaybackPositionMs = localHostPosition
+                    lastPlaybackIsPlaying = localHostWasPlaying
+                    resendHostStateAfterReconnect()
+                }
                 _connectionState.value = "Connected"
                 _message.value = "Connection restored. Your listening room is synchronized."
             }
