@@ -880,7 +880,7 @@ class DsmusicListenTogetherClient {
                 if (socket != null) {
                     if (_connectionState.value == "Connected" &&
                         !reconnectHandshakePending &&
-                        _roomCode.value != null
+                        (_roomCode.value != null || (sessionToken.isNullOrBlank() && initialHandshakeSent))
                     ) break
                     delay(300L)
                     continue
@@ -908,7 +908,8 @@ class DsmusicListenTogetherClient {
                 }
 
                 if (_connectionState.value == "Connected" &&
-                    !reconnectHandshakePending && _roomCode.value != null
+                    !reconnectHandshakePending &&
+                    (_roomCode.value != null || (sessionToken.isNullOrBlank() && initialHandshakeSent))
                 ) break
 
                 if (reconnectHandshakePending) {
