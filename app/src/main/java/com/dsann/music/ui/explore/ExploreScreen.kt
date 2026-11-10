@@ -25,9 +25,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -585,12 +587,8 @@ fun ExploreScreen(
     // Active query entry must take priority over the non-active results back handler.
     // Otherwise the first back press only clears the query while leaving the query page open.
     androidx.activity.compose.BackHandler(enabled = isSearchActive && !isPlayerBackActive) {
-        if (isSearchDestination) {
-            onLeaveSearchDestination()
-        } else {
-            isSearchActive = false
-            viewModel.clearSearch()
-        }
+        isSearchActive = false
+        viewModel.clearSearch()
     }
 
     // Query cleanup belongs to the root/results page only. A populated query can remain
@@ -603,6 +601,7 @@ fun ExploreScreen(
             showCreditsForSong == null &&
             !isPlayerBackActive
     ) {
+        isSearchActive = false
         viewModel.clearSearch()
     }
 
@@ -1589,9 +1588,18 @@ fun ExploreScreen(
                                                                         modifier = Modifier
                                                                             .fillMaxWidth()
                                                                             .clip(RoundedCornerShape(12.dp))
-                                                                            .clickable {
-                                                                                viewModel.playOnlineSongWithQueue(song, recentAccountHistory, index)
-                                                                            }
+                                                                            .combinedClickable(
+                                                                                onClick = {
+                                                                                    viewModel.playOnlineSongWithQueue(
+                                                                                        song,
+                                                                                        recentAccountHistory,
+                                                                                        index
+                                                                                    )
+                                                                                },
+                                                                                onLongClick = {
+                                                                                    selectedSongForMenu = song
+                                                                                }
+                                                                            )
                                                                             .padding(vertical = 7.dp, horizontal = 4.dp),
                                                                         verticalAlignment = Alignment.CenterVertically
                                                                     ) {
@@ -2807,6 +2815,7 @@ private fun ExploreCustomizerDialog(
     }
 
     
+    @OptIn(ExperimentalFoundationApi::class)
     @Composable
     fun SearchHeader(
         searchQuery: String,
@@ -2885,12 +2894,8 @@ private fun ExploreCustomizerDialog(
                     DsmusicIconButton(
                         onClick = {
                             keyboardController?.hide()
-                            if (isSearchDestination) {
-                                onLeaveSearchDestination()
-                            } else {
-                                onSearchActiveChange(false)
-                                onClearSearch()
-                            }
+                            onSearchActiveChange(false)
+                            onClearSearch()
                         },
                         modifier = Modifier
                             .size(44.dp)
@@ -3092,10 +3097,16 @@ private fun ExploreCustomizerDialog(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(12.dp))
-                                            .clickable {
-                                                onSearchActiveChange(false)
-                                                onAccountHistorySongClick(song, recentAccountHistory, idx)
-                                            }
+                                            .combinedClickable(
+                                                onClick = {
+                                                    onSearchActiveChange(false)
+                                                    onAccountHistorySongClick(song, recentAccountHistory, idx)
+                                                },
+                                                onLongClick = {
+                                                    keyboardController?.hide()
+                                                    onSongMenuClick(song)
+                                                }
+                                            )
                                             .padding(horizontal = 18.dp, vertical = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
