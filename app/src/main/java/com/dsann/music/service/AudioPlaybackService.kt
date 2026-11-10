@@ -3921,7 +3921,7 @@ class AudioPlaybackService : MediaSessionService() {
     }
 
     private fun hasLyricsWidgetInstalled(forceRefresh: Boolean = false): Boolean {
-        val now = SystemClock.elapsedRealtime()
+        val now = android.os.SystemClock.elapsedRealtime()
         if (forceRefresh) {
             // This only schedules background Binder work; it never waits for the launcher.
             DsmusicWidgetProvider.refreshInstalledWidgetCache(applicationContext, true)
