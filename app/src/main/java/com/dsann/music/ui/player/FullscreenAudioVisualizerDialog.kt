@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.DonutLarge
+import androidx.compose.material.icons.rounded.Equalizer
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -306,10 +309,10 @@ fun FullscreenAudioVisualizerDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 listOf(
-                    "Bars (16)" to "BAR",
-                    "Spectrum" to "SPECTRUM",
-                    "Circular Spectrum" to "RING"
-                ).forEach { (style, label) ->
+                    Triple("Bars (16)", Icons.Rounded.Equalizer, "16-bar visualizer"),
+                    Triple("Spectrum", Icons.Rounded.GraphicEq, "Spectrum visualizer"),
+                    Triple("Circular Spectrum", Icons.Rounded.DonutLarge, "Circular spectrum visualizer")
+                ).forEach { (style, icon, description) ->
                     Box(
                         modifier = Modifier
                             .background(
@@ -321,14 +324,14 @@ fun FullscreenAudioVisualizerDialog(
                                 shape = RoundedCornerShape(18.dp)
                             )
                             .clickable { onVisualizerStyleChange(style) }
-                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                            .padding(10.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = label,
-                            color = Color.White,
-                            fontSize = 11.sp,
-                            maxLines = 1
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = description,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
