@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.ln
 import kotlin.math.max
-import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
@@ -347,14 +346,13 @@ class PlaybackVisualizerController(
                 if (magnitude > peak) peak = magnitude
             }
 
-            // Use a deliberately wide, fixed amplitude range instead of normalizing
-            // against each frame. This keeps quiet and loud passages visually distinct:
-            // low-level audio occupies only a few blocks, while peaks approach the top.
+            // Use a linear fixed range so loud playback can reach the top without
+            // compressing the upper half of the meter. The floor suppresses FFT noise;
+            // values around 64 and above fill the bar, while quieter levels remain distinct.
             val noiseFloor = 4f
-            val nearFullScale = 160f
-            val normalizedMagnitude = ((peak - noiseFloor) / (nearFullScale - noiseFloor))
+            val nearFullScale = 64f
+            val target = ((peak - noiseFloor) / (nearFullScale - noiseFloor))
                 .coerceIn(0f, 1f)
-            val target = normalizedMagnitude.pow(1.55f)
             val previous = oldLevels.getOrElse(bar) { 0f }
             newLevels[bar] = if (target >= previous) {
                 previous * 0.22f + target * 0.78f
