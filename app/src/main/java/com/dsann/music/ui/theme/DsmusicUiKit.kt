@@ -77,14 +77,19 @@ import kotlinx.coroutines.launch
  * The fixed D.S Launcher Home Studio text gradient.
  * Keep these stops in sync with BlankActivity.FixedGradientTextView in D.S-Apps.
  */
-fun dsmusicHomeStudioGradientBrush(): Brush = Brush.horizontalGradient(
+fun dsmusicHomeStudioGradientBrush(
+    startX: Float = 0f,
+    endX: Float = Float.POSITIVE_INFINITY
+): Brush = Brush.horizontalGradient(
     colors = listOf(
         Color(0xFF53F6FF),
         Color(0xFF699DFF),
         Color(0xFFAE7EFF),
         Color(0xFFFF70CD),
         Color(0xFFFFCF7F)
-    )
+    ),
+    startX = startX,
+    endX = endX
 )
 
 @Immutable
