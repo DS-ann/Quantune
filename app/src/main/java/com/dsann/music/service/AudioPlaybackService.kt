@@ -1299,6 +1299,9 @@ class AudioPlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         activeService = this
+        // Populate the widget snapshot asynchronously. Widget-presence checks below are
+        // served from atomics and never call AppWidgetManager on the main looper.
+        DsmusicWidgetProvider.refreshInstalledWidgetCache(applicationContext, true)
         // No-op for behavior in older Media3 or if unresolved
         audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         handler = Handler(Looper.getMainLooper())
@@ -3918,7 +3921,11 @@ class AudioPlaybackService : MediaSessionService() {
     }
 
     private fun hasLyricsWidgetInstalled(forceRefresh: Boolean = false): Boolean {
-        val now = System.currentTimeMillis()
+        val now = SystemClock.elapsedRealtime()
+        if (forceRefresh) {
+            // This only schedules background Binder work; it never waits for the launcher.
+            DsmusicWidgetProvider.refreshInstalledWidgetCache(applicationContext, true)
+        }
         if (forceRefresh || now - lastLyricsWidgetInstalledCheckAtMs >= 1_200L) {
             lyricsWidgetInstalledCached =
                 DsmusicWidgetProvider.hasLyricsWidgetInstalled(applicationContext)
