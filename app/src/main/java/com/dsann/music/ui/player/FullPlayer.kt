@@ -678,6 +678,7 @@ fun FullPlayerScreen(
         visualizerStyle = visualizerStyle,
         visualizerColorStyle = visualizerColorStyle,
         onVisualizerStyleChange = { customizeViewModel.setVisualizerStyle(it) },
+        onVisualizerColorStyleChange = { customizeViewModel.setVisualizerColorStyle(it) },
         playerBackgroundStyle = playerBackgroundStyle,
         playerButtonStyle = playerButtonStyle,
         lyricsColorStyle = lyricsColorStyle,
@@ -766,7 +767,7 @@ fun FullPlayer(
     playerArtworkScale: Float = 1f,
     playerButtonsPill: Boolean = true,
     playerButtons: List<String> = listOf(
-        "lyrics", "video", "queue", "share", "download", "listen_together", "repeat"
+        "lyrics", "video", "queue", "share", "download", "listen_together", "repeat", "visualizer"
     ),
     playerTitleAlign: String = "Left",
     playerTitleSize: String = "Medium",
@@ -778,6 +779,7 @@ fun FullPlayer(
     visualizerStyle: String = "Bars (16)",
     visualizerColorStyle: String = "Gradient",
     onVisualizerStyleChange: (String) -> Unit = {},
+    onVisualizerColorStyleChange: (String) -> Unit = {},
     playerBackgroundStyle: String = "Artwork",
     playerButtonStyle: String = "Pill",
     lyricsColorStyle: String = "Home Studio Gradient",
@@ -2289,6 +2291,7 @@ fun FullPlayer(
             lyricsTextColor = lyricsTextColor,
             visualizerColorStyle = visualizerColorStyle,
             onVisualizerStyleChange = onVisualizerStyleChange,
+            onVisualizerColorStyleChange = onVisualizerColorStyleChange,
             onDismissRequest = { showFullScreenVisualizer = false }
         )
     }
