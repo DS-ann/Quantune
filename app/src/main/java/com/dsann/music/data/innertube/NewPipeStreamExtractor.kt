@@ -895,7 +895,14 @@ object NewPipeStreamExtractor {
                         synchronized(cacheLock) {
                             playerResultCache.put(videoId, result)
                             // Only this strict, preference-matching path can seed playback URLs.
-                            bestStream?.let { streamUrlCache.put(videoId, it.content) }
+                            // Keep the same expiry rules as the foreground extractor path.
+                            bestStream?.content?.let { url ->
+                                val cachedAtMs = System.currentTimeMillis()
+                                val expiresAtMs = streamUrlCacheExpiry(url, cachedAtMs)
+                                if (expiresAtMs > cachedAtMs) {
+                                    streamUrlCache.put(videoId, CachedStreamUrl(url, expiresAtMs))
+                                }
+                            }
                         }
                     }
                     result
