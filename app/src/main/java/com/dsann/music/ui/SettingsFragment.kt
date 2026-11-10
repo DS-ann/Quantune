@@ -677,18 +677,19 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     private val _visualizerStyle = MutableStateFlow(
-        (prefs.getString("player_visualizer", "Off") ?: "Off").let { stored ->
+        (prefs.getString("player_visualizer", "Bars (16)") ?: "Bars (16)").let { stored ->
             when (stored) {
-                "Bars" -> "Bars"
-                "Spectrum Bars" -> "Spectrum Bars"
+                "Bars", "Bars (16)" -> "Bars (16)"
+                "Spectrum", "Spectrum Bars" -> "Spectrum"
                 "Ring", "Oval", "Circular Spectrum" -> "Circular Spectrum"
-                else -> "Off"
+                else -> "Bars (16)"
             }
         }
     )
     val visualizerStyle: StateFlow<String> = _visualizerStyle.asStateFlow()
     fun setVisualizerStyle(value: String) {
-        val safe = value.takeIf { it in listOf("Off", "Bars", "Spectrum Bars", "Circular Spectrum") } ?: "Off"
+        val safe = value.takeIf { it in listOf("Bars (16)", "Spectrum", "Circular Spectrum") }
+            ?: "Bars (16)"
         _visualizerStyle.value = safe
         prefs.edit { putString("player_visualizer", safe) }
     }
@@ -730,25 +731,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         val safe = value.takeIf { it in listOf("Auto", "Dot", "Line", "Ring", "None") } ?: "Auto"
         _scrubberThumbStyle.value = safe
         prefs.edit { putString("scrubber_thumb_style", safe) }
-    }
-
-    private val _visualizerColor = MutableStateFlow(prefs.getString("visualizer_color", "Accent") ?: "Accent")
-    val visualizerColor: StateFlow<String> = _visualizerColor.asStateFlow()
-    fun setVisualizerColor(value: String) {
-        val safe = value.takeIf { it in listOf("Accent", "White", "Cover", "Spectrum") } ?: "Accent"
-        _visualizerColor.value = safe
-        prefs.edit { putString("visualizer_color", safe) }
-    }
-
-    private val _fullscreenVisualizerEnabled = MutableStateFlow(
-        prefs.getBoolean("fullscreen_visualizer_enabled", true)
-    )
-    val fullscreenVisualizerEnabled: StateFlow<Boolean> =
-        _fullscreenVisualizerEnabled.asStateFlow()
-
-    fun setFullscreenVisualizerEnabled(enabled: Boolean) {
-        _fullscreenVisualizerEnabled.value = enabled
-        prefs.edit { putBoolean("fullscreen_visualizer_enabled", enabled) }
     }
 
     private val _lyricsTextSize = MutableStateFlow(
@@ -960,7 +942,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         setPlayerButtonStyle(look.optString("player_button_style", _playerButtonStyle.value))
         setScrubberThickness(look.optDouble("scrubber_thickness", _scrubberThickness.value.toDouble()).toFloat())
         setScrubberThumbStyle(look.optString("scrubber_thumb_style", _scrubberThumbStyle.value))
-        setVisualizerColor(look.optString("visualizer_color", _visualizerColor.value))
         setLyricsTextSize(look.optString("lyrics_text_size", _lyricsTextSize.value))
         setShowSyncedLyricsInPlayer(
             look.optBoolean("show_synced_lyrics_in_player", _showSyncedLyricsInPlayer.value)
@@ -1357,13 +1338,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
             ?.takeIf { it in listOf("Hairline", "Bold", "Medium", "Waveform") } ?: "Waveform"
         _scrubberColor.value = prefs.getString("scrubber_color", "Accent") ?: "Accent"
-        _visualizerStyle.value = (prefs.getString("player_visualizer", "Off") ?: "Off")
+        _visualizerStyle.value = (prefs.getString("player_visualizer", "Bars (16)") ?: "Bars (16)")
             .let { stored ->
                 when (stored) {
-                    "Bars" -> "Bars"
-                "Spectrum Bars" -> "Spectrum Bars"
+                    "Bars", "Bars (16)" -> "Bars (16)"
+                    "Spectrum", "Spectrum Bars" -> "Spectrum"
                     "Ring", "Oval", "Circular Spectrum" -> "Circular Spectrum"
-                    else -> "Off"
+                    else -> "Bars (16)"
                 }
             }
         _playerButtonsPill.value = prefs.getBoolean("player_buttons_pill", true)
@@ -1375,8 +1356,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
         _scrubberThickness.value = 1.5f
         _scrubberThumbStyle.value = prefs.getString("scrubber_thumb_style", "Auto") ?: "Auto"
-        _visualizerColor.value = prefs.getString("visualizer_color", "Accent") ?: "Accent"
-        _fullscreenVisualizerEnabled.value = prefs.getBoolean("fullscreen_visualizer_enabled", true)
         _lyricsTextSize.value = prefs.getString("lyrics_text_size", "Standard") ?: "Standard"
         _showSyncedLyricsInPlayer.value = prefs.getBoolean("show_synced_lyrics_in_player", true)
         _lyricsAlignment.value = prefs.getString("lyrics_alignment", "Original") ?: "Original"
@@ -1806,8 +1785,6 @@ fun SettingsScreenContent(
     val visualizerStyle by viewModel.visualizerStyle.collectAsStateWithLifecycle()
     val playerButtonStyle by viewModel.playerButtonStyle.collectAsStateWithLifecycle()
     val scrubberThumbStyle by viewModel.scrubberThumbStyle.collectAsStateWithLifecycle()
-    val visualizerColor by viewModel.visualizerColor.collectAsStateWithLifecycle()
-    val fullscreenVisualizerEnabled by viewModel.fullscreenVisualizerEnabled.collectAsStateWithLifecycle()
     val lyricsTextSize by viewModel.lyricsTextSize.collectAsStateWithLifecycle()
     val showSyncedLyricsInPlayer by viewModel.showSyncedLyricsInPlayer.collectAsStateWithLifecycle()
     val lyricsAlignment by viewModel.lyricsAlignment.collectAsStateWithLifecycle()
@@ -2208,9 +2185,7 @@ fun SettingsScreenContent(
                 playerButtonStyle = playerButtonStyle,
                 onPlayerButtonStyleChange = { viewModel.setPlayerButtonStyle(it) },
                 scrubberThumbStyle = scrubberThumbStyle,
-                onScrubberThumbStyleChange = { viewModel.setScrubberThumbStyle(it) },
-                visualizerColor = visualizerColor,
-                onVisualizerColorChange = { viewModel.setVisualizerColor(it) }
+                onScrubberThumbStyleChange = { viewModel.setScrubberThumbStyle(it) }
             )
         }
         composable(SettingsRoute.Controls.route) {
@@ -2249,8 +2224,6 @@ fun SettingsScreenContent(
                 onDownloadBitrateChange = { viewModel.setDownloadBitrate(it) },
                 playerFrameRate = playerFrameRate,
                 onPlayerFrameRateChange = { viewModel.setPlayerFrameRate(it) },
-                fullscreenVisualizerEnabled = fullscreenVisualizerEnabled,
-                onFullscreenVisualizerToggle = { viewModel.setFullscreenVisualizerEnabled(it) },
                 pageTransitionSpeed = pageTransitionSpeed,
                 onPageTransitionSpeedChange = { viewModel.setPageTransitionSpeed(it) },
             )
@@ -3569,9 +3542,7 @@ private fun AppearanceScreen(
     playerButtonStyle: String,
     onPlayerButtonStyleChange: (String) -> Unit,
     scrubberThumbStyle: String,
-    onScrubberThumbStyleChange: (String) -> Unit,
-    visualizerColor: String,
-    onVisualizerColorChange: (String) -> Unit
+    onScrubberThumbStyleChange: (String) -> Unit
 ) {
     Scaffold(
         topBar = { SettingsDetailTopBar("Customize") { navController.popBackStack() } }
@@ -3870,25 +3841,15 @@ SettingsGroupCard(listOf(
             }
 
             SettingsAccordionSection("Visualizer") {
-
-            SettingsGroupCard(listOf {
-                SettingsChoiceRow(
-                    title = "Player visualizer",
-                    description = "Choose Off, the classic bar style, or either real-time FFT visualizer. Audio analysis runs only while the player visualizer is active.",
-                    selected = visualizerStyle,
-                    options = listOf("Off", "Bars", "Spectrum Bars", "Circular Spectrum"),
-                    onSelected = onVisualizerStyleChange
-                )
-            })
-            SettingsGroupCard(listOf {
-                SettingsChoiceRow(
-                    title = "Visualizer color",
-                    description = "Use the app's main colour, white, a colour from the album cover, or changing colours.",
-                    selected = visualizerColor,
-                    options = listOf("Accent", "White", "Cover", "Spectrum"),
-                    onSelected = onVisualizerColorChange
-                )
-            })
+                SettingsGroupCard(listOf {
+                    SettingsChoiceRow(
+                        title = "Visualizer type",
+                        description = "Choose the full-screen visualizer opened by the Visualizer button. Audio analysis runs only while that screen is open.",
+                        selected = visualizerStyle,
+                        options = listOf("Bars (16)", "Spectrum", "Circular Spectrum"),
+                        onSelected = onVisualizerStyleChange
+                    )
+                })
             }
 
             SettingsAccordionSection("Notification") {
@@ -4717,8 +4678,6 @@ private fun PlaybackScreen(
     onDownloadBitrateChange: (String) -> Unit,
     playerFrameRate: Int,
     onPlayerFrameRateChange: (Int) -> Unit,
-    fullscreenVisualizerEnabled: Boolean,
-    onFullscreenVisualizerToggle: (Boolean) -> Unit,
     pageTransitionSpeed: Float,
     onPageTransitionSpeedChange: (Float) -> Unit,
 ) {
@@ -4814,16 +4773,6 @@ private fun PlaybackScreen(
             })
 
             
-            }
-            SettingsAccordionSection("Full-screen visualizer") {
-                SettingsGroupCard(listOf({
-                    ToggleSettingRow(
-                        title = "Enable full-screen visualizer",
-                        description = "Show a real-time 16-bar playback visualizer in landscape. Audio analysis starts only while that screen is open.",
-                        checked = fullscreenVisualizerEnabled,
-                        onCheckedChange = onFullscreenVisualizerToggle
-                    )
-                }))
             }
             SettingsAccordionSection("Playback quality") {
             SettingsGroupCard(listOf(
