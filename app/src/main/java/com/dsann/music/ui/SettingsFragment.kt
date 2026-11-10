@@ -679,7 +679,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _visualizerStyle = MutableStateFlow(
         (prefs.getString("player_visualizer", "Off") ?: "Off").let { stored ->
             when (stored) {
-                "Bars", "Spectrum Bars" -> "Spectrum Bars"
+                "Bars" -> "Bars"
+                "Spectrum Bars" -> "Spectrum Bars"
                 "Ring", "Oval", "Circular Spectrum" -> "Circular Spectrum"
                 else -> "Off"
             }
@@ -687,7 +688,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     )
     val visualizerStyle: StateFlow<String> = _visualizerStyle.asStateFlow()
     fun setVisualizerStyle(value: String) {
-        val safe = value.takeIf { it in listOf("Off", "Spectrum Bars", "Circular Spectrum") } ?: "Off"
+        val safe = value.takeIf { it in listOf("Off", "Bars", "Spectrum Bars", "Circular Spectrum") } ?: "Off"
         _visualizerStyle.value = safe
         prefs.edit { putString("player_visualizer", safe) }
     }
@@ -1359,7 +1360,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _visualizerStyle.value = (prefs.getString("player_visualizer", "Off") ?: "Off")
             .let { stored ->
                 when (stored) {
-                    "Bars", "Spectrum Bars" -> "Spectrum Bars"
+                    "Bars" -> "Bars"
+                "Spectrum Bars" -> "Spectrum Bars"
                     "Ring", "Oval", "Circular Spectrum" -> "Circular Spectrum"
                     else -> "Off"
                 }
@@ -3872,9 +3874,9 @@ SettingsGroupCard(listOf(
             SettingsGroupCard(listOf {
                 SettingsChoiceRow(
                     title = "Player visualizer",
-                    description = "Choose a real-time audio visualizer. Both styles respond to the music's frequency data; analysis runs only while the player visualizer is active.",
+                    description = "Choose Off, the classic bar style, or either real-time FFT visualizer. Audio analysis runs only while the player visualizer is active.",
                     selected = visualizerStyle,
-                    options = listOf("Off", "Spectrum Bars", "Circular Spectrum"),
+                    options = listOf("Off", "Bars", "Spectrum Bars", "Circular Spectrum"),
                     onSelected = onVisualizerStyleChange
                 )
             })
