@@ -1032,6 +1032,10 @@ fun FullPlayer(
         }
     }
 
+    DisposableEffect(audioService) {
+        onDispose { audioService?.stopPlaybackVisualizer() }
+    }
+
     // The player may be hosted in a resizable split-screen/freeform window on tablets.
     // Re-evaluate this with the window constraints so the compact layout follows resizing.
     val isMultiWindowMode = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N &&
