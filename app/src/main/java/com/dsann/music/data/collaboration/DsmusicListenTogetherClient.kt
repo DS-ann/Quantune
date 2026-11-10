@@ -1014,6 +1014,19 @@ class DsmusicListenTogetherClient {
     }
 
     fun leaveRoom() {
+        manualDisconnect = true
+        connectionGeneration += 1L
+        reconnectJob?.cancel()
+        reconnectJob = null
+        reconnectHandshakePending = false
+        activeServerUrl = null
+        sessionToken = null
+        initialHandshakeType = null
+        stopPingJob()
+        hasServerClockOffset = false
+        serverClockOffsetMs = 0L
+        lastSyncRequestElapsedMs = 0L
+        pendingMessage = null
         stopLocalRoomDiscovery()
         stopLocalRoomAdvertisement()
         if (localMode) {
@@ -1044,9 +1057,6 @@ class DsmusicListenTogetherClient {
             } catch (_: Exception) {
             }
         }
-        pendingMessage = null
-        pingJob?.cancel()
-        pingJob = null
         socket?.close(1000, "Leaving room")
         socket = null
         _roomCode.value = null
@@ -1139,6 +1149,9 @@ class DsmusicListenTogetherClient {
         val writer = ProtoWriter()
             .string(1, action)
             .varint(3, positionMs.coerceAtLeast(0L))
+        if (hasServerClockOffset) {
+            writer.varint(11, serverNowMs())
+        }
         if (track != null) {
             writer.string(2, track.id)
             writer.bytes(4, encodeTrack(track))
@@ -1154,28 +1167,69 @@ class DsmusicListenTogetherClient {
         pingJob = scope.launch {
             repeat(3) {
                 sendTimeSyncPing()
-                delay(5_000)
+                delay(5_000L)
             }
             while (isActive) {
                 sendTimeSyncPing()
-                delay(15_000)
+                delay(15_000L)
             }
         }
     }
 
     private fun sendTimeSyncPing() {
         pingSequence += 1L
-        val payload = ProtoWriter()
-            .varint(1, SystemClock.elapsedRealtime())
-            .varint(2, pingSequence)
-            .toByteArray()
-        send("ping", payload)
+        val sequence = pingSequence
+        val sentWallClock = System.currentTimeMillis()
+        pendingPingSamples[sequence] = sentWallClock to SystemClock.elapsedRealtime()
+        pendingPingSamples.entries
+            .filter { SystemClock.elapsedRealtime() - it.value.second > 60_000L }
+            .forEach { pendingPingSamples.remove(it.key) }
+
+        val writer = ProtoWriter()
+            .varint(1, sentWallClock)
+            .varint(2, sequence)
+        val playback = _remotePlayback.value
+        val track = playback?.track
+        if (playback != null && track != null && role.value == "GUEST" && hasServerClockOffset) {
+            val elapsed = if (playback.isPlaying) {
+                (SystemClock.elapsedRealtime() - remotePlaybackReceivedAtElapsedMs).coerceAtLeast(0L)
+            } else 0L
+            val position = (playback.positionMs + elapsed)
+                .coerceAtLeast(0L)
+                .let { value ->
+                    if (track.durationMs > 0L) value.coerceAtMost(track.durationMs) else value
+                }
+            writer
+                .varint(3, 1L)
+                .string(4, track.id)
+                .varint(5, position)
+                .varint(6, serverNowMs())
+        }
+
+        val stateHash = CRC32().apply {
+            val state = buildString {
+                track?.let { append(it.id) }
+                append('\n')
+                lastSharedQueue.forEach { append(it.id).append('\n') }
+            }
+            update(state.toByteArray(Charsets.UTF_8))
+        }.value
+        writer.varint(7, 1L).varint(8, stateHash)
+        send("ping", writer.toByteArray())
     }
 
     private fun send(type: String, payload: ByteArray) {
         val encoded = encodeEnvelope(type, payload)
-        val accepted = socket?.send(ByteString.of(*encoded)) ?: false
-        if (!accepted) _message.value = "Message could not be sent. Check the connection."
+        val current = socket
+        val accepted = current?.send(ByteString.of(*encoded)) ?: false
+        if (!accepted) {
+            if (_connectionState.value != "Reconnecting") {
+                _message.value = "Message could not be sent. Checking the room connection…"
+            }
+            if (current != null && !sessionToken.isNullOrBlank() && !manualDisconnect) {
+                current.cancel()
+            }
+        }
     }
 
     private fun handleEnvelope(data: ByteArray) {
