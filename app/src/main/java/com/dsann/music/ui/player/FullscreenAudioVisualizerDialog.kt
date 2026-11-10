@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -43,6 +44,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dsann.music.service.AudioPlaybackService
 import com.dsann.music.ui.theme.Icon
+import com.dsann.music.ui.theme.dsmusicHomeStudioGradientBrush
 import com.dsann.music.ui.theme.Text
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,6 +55,7 @@ fun FullscreenAudioVisualizerDialog(
     audioService: AudioPlaybackService?,
     lyricsAccentColor: Color,
     lyricsTextColor: Color,
+    lyricsColorStyle: String,
     onDismissRequest: () -> Unit
 ) {
     val context = LocalContext.current
@@ -136,17 +139,18 @@ fun FullscreenAudioVisualizerDialog(
                     .toInt()
                     .coerceAtLeast(1)
 
-                // Use exactly the lyrics palette: accent at the top, lyric text tone below.
-                val activeGradient = Brush.verticalGradient(
-                    colors = listOf(
-                        lyricsAccentColor.copy(alpha = 0.72f),
-                        lyricsAccentColor,
-                        lyricsTextColor.copy(alpha = 0.98f)
-                    ),
-                    startY = 0f,
-                    endY = baselineY
-                )
-                val inactiveBlockColor = lyricsAccentColor.copy(alpha = 0.13f)
+                // Reuse the exact brush used by the lyric renderer. The explicit
+                // screen-wide endpoints prevent the gradient from restarting inside
+                // every small rectangular segment.
+                val activeBrush = when (lyricsColorStyle) {
+                    "Home Studio Gradient" -> dsmusicHomeStudioGradientBrush(
+                        startX = 0f,
+                        endX = size.width
+                    )
+                    "White" -> SolidColor(Color.White)
+                    "UI Matching" -> SolidColor(lyricsAccentColor)
+                    else -> SolidColor(lyricsTextColor)
+                }
                 val blockCorner = androidx.compose.ui.geometry.CornerRadius(
                     x = 2.dp.toPx(),
                     y = 2.dp.toPx()
@@ -168,19 +172,18 @@ fun FullscreenAudioVisualizerDialog(
                             val blockOffset = androidx.compose.ui.geometry.Offset(x, top)
                             if (blockIndex < litBlocks) {
                                 drawRoundRect(
-                                    brush = activeGradient,
+                                    brush = activeBrush,
                                     topLeft = blockOffset,
                                     size = blockSize,
                                     cornerRadius = blockCorner
                                 )
                             } else {
                                 drawRoundRect(
-                                    color = inactiveBlockColor.copy(
-                                        alpha = if (blockIndex % 3 == 0) 0.17f else 0.09f
-                                    ),
+                                    brush = activeBrush,
                                     topLeft = blockOffset,
                                     size = blockSize,
-                                    cornerRadius = blockCorner
+                                    cornerRadius = blockCorner,
+                                    alpha = if (blockIndex % 3 == 0) 0.17f else 0.09f
                                 )
                             }
                         }
