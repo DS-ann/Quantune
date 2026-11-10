@@ -3,7 +3,6 @@ package com.dsann.music.service
 import android.media.audiofx.Visualizer
 import android.os.Handler
 import android.os.HandlerThread
-import android.os.Looper
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,9 +14,8 @@ import kotlin.math.sqrt
 /**
  * Lazy playback-session FFT capture for the full-screen visualizer.
  *
- * Prefer the platform capture callback. On OEM builds where the callback is accepted but
- * never dispatched, poll Visualizer.getFft() on a dedicated worker thread instead. This
- * avoids depending on vendor callback scheduling and never performs FFT reads on the UI thread.
+ * Visualizer creation, enabling, FFT polling, fallback switching and release all run on
+ * a dedicated worker looper. This keeps vendor audio-effect calls off the UI thread.
  */
 @Suppress("DEPRECATION")
 class PlaybackVisualizerController(
@@ -29,91 +27,136 @@ class PlaybackVisualizerController(
         const val BAR_COUNT = 16
         private const val TARGET_CAPTURE_RATE_MILLI_HZ = 30_000
         private const val CALLBACK_GRACE_PERIOD_MS = 450L
-        private const val OUTPUT_MIX_FALLBACK_DELAY_MS = 1_600L
+        // The UI already waits 250 ms before requesting capture. If the player session
+        // still has no usable signal after this window, try output mix instead of waiting
+        // the previous 1.6 seconds. Devices with working player-session capture never switch.
+        private const val OUTPUT_MIX_FALLBACK_DELAY_MS = 850L
         private const val POLL_INTERVAL_MS = 33L
     }
 
     private val _levels = MutableStateFlow(FloatArray(BAR_COUNT) { 0f })
     val levels: StateFlow<FloatArray> = _levels.asStateFlow()
 
-    private val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile
+    private var activeRun: CaptureRun? = null
 
-    @Volatile
-    private var running = false
-    @Volatile
-    private var fftCallbackCount = 0
-    @Volatile
-    private var fftSignalFrameCount = 0
-    @Volatile
-    private var fftPollFrameCount = 0
-    @Volatile
-    private var fftPollSignalFrameCount = 0
-    private var capture: Visualizer? = null
-    private var activeSessionId = 0
-    private var outputMixFallback: Runnable? = null
-    private var pollingFallback: Runnable? = null
-    private var pollingThread: HandlerThread? = null
-    private var pollingHandler: Handler? = null
-    private var pollingTask: Runnable? = null
+    private class CaptureRun(
+        val thread: HandlerThread,
+        val handler: Handler
+    ) {
+        @Volatile
+        var active = true
 
+        var capture: Visualizer? = null
+        var activeSessionId = 0
+        var fftCallbackCount = 0
+        var fftSignalFrameCount = 0
+        var fftPollFrameCount = 0
+        var fftPollSignalFrameCount = 0
+        var pollErrorLogged = false
+        var pollingFallbackTask: Runnable? = null
+        var outputMixFallbackTask: Runnable? = null
+        var pollingTask: Runnable? = null
+    }
+
+    /**
+     * Schedules capture on a dedicated HandlerThread and returns immediately.
+     * The Boolean reports whether the request was accepted, not whether the native
+     * Visualizer has finished initializing.
+     */
     @Synchronized
     fun start(audioSessionId: Int): Boolean {
-        stop()
         if (audioSessionId < 0) return false
 
-        // Attach to the player's own session first. Some devices accept the effect but
-        // never dispatch capture callbacks; poll getFft() as a fallback before switching
-        // to the system output mix.
-        val preferredSession = audioSessionId
-        val started = startOnSession(preferredSession)
-        if (!started) {
-            if (preferredSession == 0) return false
-            Log.w(TAG, "Player-session capture failed; trying output-mix session 0")
-            return startOnSession(0)
-        }
+        stop()
 
-        val pollingFallbackTask = Runnable {
-            val shouldPoll = synchronized(this) {
-                running &&
-                    activeSessionId == preferredSession &&
-                    fftSignalFrameCount == 0 &&
-                    pollingThread == null
-            }
-            if (shouldPoll) {
-                val activeCapture = synchronized(this) {
-                    capture?.takeIf { running && activeSessionId == preferredSession }
-                }
-                if (activeCapture != null) {
-                    Log.w(TAG, "No callback FFT frames from session $preferredSession; enabling getFft() polling")
-                    startPolling(activeCapture, preferredSession)
-                }
-            }
+        val thread = try {
+            HandlerThread("QuantuneVisualizerCapture").apply { start() }
+        } catch (error: Exception) {
+            Log.w(TAG, "Unable to start visualizer capture thread", error)
+            return false
         }
-        pollingFallback = pollingFallbackTask
-        mainHandler.postDelayed(pollingFallbackTask, CALLBACK_GRACE_PERIOD_MS)
+        val handler = Handler(thread.looper)
+        val run = CaptureRun(thread, handler)
+        activeRun = run
 
-        if (preferredSession != 0) {
-            val fallback = Runnable {
-                val shouldFallback = synchronized(this) {
-                    running &&
-                        activeSessionId == preferredSession &&
-                        fftSignalFrameCount == 0 &&
-                        fftPollSignalFrameCount == 0
-                }
-                if (shouldFallback) {
-                    Log.w(TAG, "No FFT frames on player session $preferredSession; switching to output mix")
-                    start(0)
-                }
-            }
-            outputMixFallback = fallback
-            mainHandler.postDelayed(fallback, OUTPUT_MIX_FALLBACK_DELAY_MS)
+        if (!handler.post { startCapture(run, audioSessionId) }) {
+            activeRun = null
+            run.active = false
+            thread.quitSafely()
+            return false
         }
         return true
     }
 
+    /**
+     * Stop is non-blocking: native effect teardown is serialized on the capture looper,
+     * never on the screen's main thread.
+     */
     @Synchronized
-    private fun startOnSession(audioSessionId: Int): Boolean {
-        if (audioSessionId < 0) return false
+    fun stop() {
+        val run = activeRun
+        activeRun = null
+
+        if (run != null) {
+            run.active = false
+            run.handler.removeCallbacksAndMessages(null)
+            val cleanupPosted = run.handler.post {
+                releaseCurrentCapture(run)
+                run.thread.quitSafely()
+            }
+            if (!cleanupPosted) {
+                run.thread.quitSafely()
+            }
+        }
+
+        publishEmptyLevels()
+    }
+
+    /** Rebind to the new primary player after a crossfade handoff, if capture is active. */
+    @Synchronized
+    fun switchSession(audioSessionId: Int) {
+        if (activeRun?.active != true || audioSessionId <= 0) return
+        start(audioSessionId)
+    }
+
+    private fun isCurrent(run: CaptureRun): Boolean =
+        run.active && activeRun === run
+
+    private fun startCapture(run: CaptureRun, preferredSessionId: Int) {
+        if (!isCurrent(run)) return
+
+        if (!startOnSession(run, preferredSessionId)) {
+            if (preferredSessionId == 0) return
+            Log.w(TAG, "Player-session capture failed; trying output-mix session 0")
+            if (startOnSession(run, 0)) {
+                schedulePollingFallback(run, 0)
+            }
+            return
+        }
+
+        schedulePollingFallback(run, preferredSessionId)
+        if (preferredSessionId != 0) {
+            val fallback = Runnable {
+                if (!isCurrent(run) || run.activeSessionId != preferredSessionId) return@Runnable
+                run.outputMixFallbackTask = null
+                if (run.fftSignalFrameCount == 0 && run.fftPollSignalFrameCount == 0) {
+                    Log.w(
+                        TAG,
+                        "No usable FFT signal from player session $preferredSessionId " +
+                            "after ${OUTPUT_MIX_FALLBACK_DELAY_MS}ms; switching to output mix"
+                    )
+                    switchToOutputMix(run)
+                }
+            }
+            run.outputMixFallbackTask = fallback
+            run.handler.postDelayed(fallback, OUTPUT_MIX_FALLBACK_DELAY_MS)
+        }
+    }
+
+    private fun startOnSession(run: CaptureRun, audioSessionId: Int): Boolean {
+        if (!isCurrent(run) || audioSessionId < 0) return false
+
         val candidate = try {
             Visualizer(audioSessionId)
         } catch (error: Exception) {
@@ -155,17 +198,25 @@ class PlaybackVisualizerController(
                     fft: ByteArray?,
                     samplingRate: Int
                 ) {
-                    if (!running || capture !== candidate || fft == null || fft.isEmpty()) return
-                    fftCallbackCount++
+                    if (!isCurrent(run) || run.capture !== candidate || fft == null || fft.isEmpty()) {
+                        return
+                    }
+
+                    run.fftCallbackCount++
                     if (containsAudioSignal(fft)) {
-                        fftSignalFrameCount++
-                        if (fftSignalFrameCount == 1) {
-                            Log.d(TAG, "Received first non-silent callback FFT frame from session $audioSessionId (${fft.size} bytes)")
+                        run.fftSignalFrameCount++
+                        if (run.fftSignalFrameCount == 1) {
+                            Log.d(
+                                TAG,
+                                "Received first non-silent callback FFT frame from " +
+                                    "session $audioSessionId (${fft.size} bytes)"
+                            )
                         }
-                    } else if (fftCallbackCount == 1) {
+                        cancelOutputMixFallback(run)
+                    } else if (run.fftCallbackCount == 1) {
                         Log.w(TAG, "FFT callback is active but returned a silent frame for session $audioSessionId")
                     }
-                    publishBands(fft)
+                    publishBands(run, fft)
                 }
             }
 
@@ -176,20 +227,15 @@ class PlaybackVisualizerController(
                 return false
             }
 
-            capture = candidate
-            activeSessionId = audioSessionId
-            fftCallbackCount = 0
-            fftSignalFrameCount = 0
-            fftPollFrameCount = 0
-            fftPollSignalFrameCount = 0
-            running = true
+            run.capture = candidate
+            run.activeSessionId = audioSessionId
+            resetSignalCounters(run)
 
             val enableResult = candidate.setEnabled(true)
             if (enableResult != Visualizer.SUCCESS) {
                 Log.w(TAG, "Visualizer.setEnabled(true) failed: $enableResult")
-                running = false
-                capture = null
-                activeSessionId = 0
+                run.capture = null
+                run.activeSessionId = 0
                 candidate.release()
                 return false
             }
@@ -198,121 +244,152 @@ class PlaybackVisualizerController(
             true
         } catch (error: Exception) {
             Log.w(TAG, "Visualizer initialization failed for audio session $audioSessionId", error)
-            running = false
-            capture = null
-            activeSessionId = 0
+            if (run.capture === candidate) {
+                run.capture = null
+                run.activeSessionId = 0
+            }
             runCatching { candidate.setEnabled(false) }
             runCatching { candidate.release() }
-            publishLevels(FloatArray(BAR_COUNT) { 0f })
             false
         }
     }
 
     /**
-     * Poll the same platform FFT buffer when an OEM accepts the capture listener but does
-     * not invoke it. The worker exists only while the fullscreen visualizer is open.
+     * Poll the platform FFT buffer on the capture worker when an OEM accepts the
+     * callback listener but does not dispatch useful callback data.
      */
-    @Synchronized
-    private fun startPolling(candidate: Visualizer, sessionId: Int) {
-        if (!running || capture !== candidate || pollingThread != null) return
+    private fun schedulePollingFallback(run: CaptureRun, sessionId: Int) {
+        val fallback = Runnable {
+            if (!isCurrent(run) ||
+                run.activeSessionId != sessionId ||
+                run.fftSignalFrameCount > 0 ||
+                run.pollingTask != null
+            ) {
+                return@Runnable
+            }
 
-        val thread = HandlerThread("QuantuneVisualizerFFT").apply { start() }
-        val handler = Handler(thread.looper)
+            val activeCapture = run.capture ?: return@Runnable
+            Log.w(TAG, "No callback FFT frames from session $sessionId; enabling getFft() polling")
+            startPolling(run, activeCapture, sessionId)
+        }
+        run.pollingFallbackTask = fallback
+        run.handler.postDelayed(fallback, CALLBACK_GRACE_PERIOD_MS)
+    }
+
+    private fun startPolling(run: CaptureRun, candidate: Visualizer, sessionId: Int) {
+        if (!isCurrent(run) || run.capture !== candidate || run.pollingTask != null) return
+
         val buffer = ByteArray(candidate.captureSize)
-
         val task = object : Runnable {
             override fun run() {
-                if (!running || capture !== candidate || activeSessionId != sessionId) return
+                if (!isCurrent(run) || run.capture !== candidate || run.activeSessionId != sessionId) {
+                    run.pollingTask = null
+                    return
+                }
 
-                // Stop polling only after the native callback delivers usable non-silent data.
-                // Some OEM implementations call back with an all-zero FFT buffer.
-                if (fftSignalFrameCount > 0) return
+                // Native callback data takes priority as soon as it becomes usable.
+                if (run.fftSignalFrameCount > 0) {
+                    run.pollingTask = null
+                    return
+                }
 
                 try {
                     val result = candidate.getFft(buffer)
                     if (result == Visualizer.SUCCESS) {
-                        fftPollFrameCount++
+                        run.fftPollFrameCount++
                         if (containsAudioSignal(buffer)) {
-                            fftPollSignalFrameCount++
-                            if (fftPollSignalFrameCount == 1) {
-                                Log.d(TAG, "Received first non-silent polled FFT frame from session $sessionId (${buffer.size} bytes)")
+                            run.fftPollSignalFrameCount++
+                            if (run.fftPollSignalFrameCount == 1) {
+                                Log.d(
+                                    TAG,
+                                    "Received first non-silent polled FFT frame from " +
+                                        "session $sessionId (${buffer.size} bytes)"
+                                )
                             }
-                        } else if (fftPollFrameCount == 1) {
+                            cancelOutputMixFallback(run)
+                        } else if (run.fftPollFrameCount == 1) {
                             Log.w(TAG, "Polled FFT is silent on session $sessionId")
                         }
-                        publishBands(buffer.copyOf())
-                    } else if (fftPollFrameCount == 0) {
+                        publishBands(run, buffer.copyOf())
+                    } else if (run.fftPollFrameCount == 0 && !run.pollErrorLogged) {
+                        run.pollErrorLogged = true
                         Log.w(TAG, "Visualizer.getFft() returned $result for session $sessionId")
                     }
                 } catch (error: Exception) {
-                    Log.w(TAG, "Visualizer FFT polling failed for session $sessionId", error)
+                    if (!run.pollErrorLogged) {
+                        run.pollErrorLogged = true
+                        Log.w(TAG, "Visualizer FFT polling failed for session $sessionId", error)
+                    }
                 }
 
-                if (running && capture === candidate && activeSessionId == sessionId &&
-                    fftSignalFrameCount == 0
+                if (isCurrent(run) && run.capture === candidate &&
+                    run.activeSessionId == sessionId && run.fftSignalFrameCount == 0
                 ) {
-                    handler.postDelayed(this, POLL_INTERVAL_MS)
+                    run.handler.postDelayed(this, POLL_INTERVAL_MS)
+                } else {
+                    run.pollingTask = null
                 }
             }
         }
 
-        pollingThread = thread
-        pollingHandler = handler
-        pollingTask = task
-        handler.post(task)
+        run.pollingTask = task
+        run.handler.post(task)
     }
 
-    /** Rebind to the new primary player after a crossfade handoff, if capture is active. */
-    @Synchronized
-    fun switchSession(audioSessionId: Int) {
-        if (!running || audioSessionId <= 0) return
-        start(audioSessionId)
+    private fun switchToOutputMix(run: CaptureRun) {
+        if (!isCurrent(run)) return
+        releaseCurrentCapture(run)
+        if (!isCurrent(run)) return
+
+        if (startOnSession(run, 0)) {
+            schedulePollingFallback(run, 0)
+        } else {
+            Log.w(TAG, "Output-mix Visualizer session could not be started")
+            publishEmptyLevels()
+        }
     }
 
-    @Synchronized
-    fun stop() {
-        running = false
-        outputMixFallback?.let(mainHandler::removeCallbacks)
-        outputMixFallback = null
-        pollingFallback?.let(mainHandler::removeCallbacks)
-        pollingFallback = null
+    private fun cancelOutputMixFallback(run: CaptureRun) {
+        run.outputMixFallbackTask?.let(run.handler::removeCallbacks)
+        run.outputMixFallbackTask = null
+    }
 
-        pollingTask?.let { task -> pollingHandler?.removeCallbacks(task) }
-        pollingTask = null
-        pollingHandler = null
-        pollingThread?.quitSafely()
-        pollingThread = null
+    private fun resetSignalCounters(run: CaptureRun) {
+        run.fftCallbackCount = 0
+        run.fftSignalFrameCount = 0
+        run.fftPollFrameCount = 0
+        run.fftPollSignalFrameCount = 0
+        run.pollErrorLogged = false
+    }
 
-        activeSessionId = 0
-        fftCallbackCount = 0
-        fftSignalFrameCount = 0
-        fftPollFrameCount = 0
-        fftPollSignalFrameCount = 0
-        val oldCapture = capture
-        capture = null
+    private fun releaseCurrentCapture(run: CaptureRun) {
+        run.pollingFallbackTask?.let(run.handler::removeCallbacks)
+        run.pollingFallbackTask = null
+        cancelOutputMixFallback(run)
+        run.pollingTask?.let(run.handler::removeCallbacks)
+        run.pollingTask = null
+
+        val oldCapture = run.capture
+        run.capture = null
+        run.activeSessionId = 0
+        resetSignalCounters(run)
         if (oldCapture != null) {
             runCatching { oldCapture.setEnabled(false) }
             runCatching { oldCapture.setDataCaptureListener(null, 0, false, false) }
             runCatching { oldCapture.release() }
         }
-        publishLevels(FloatArray(BAR_COUNT) { 0f })
-    }
-
-    private fun publishLevels(levels: FloatArray) {
-        _levels.value = levels
-        onLevelsChanged(levels)
     }
 
     private fun containsAudioSignal(fft: ByteArray): Boolean {
-        // Ignore the DC bin and tiny byte noise. This distinguishes a usable playback
-        // spectrum from OEM callback frames that technically arrive but carry no signal.
+        // Ignore the DC bin and tiny byte noise. This distinguishes usable playback
+        // spectrum data from OEM callback frames that technically arrive but carry no signal.
         for (index in 2 until fft.size) {
             if (kotlin.math.abs(fft[index].toInt()) > 2) return true
         }
         return false
     }
 
-    private fun publishBands(fft: ByteArray) {
+    private fun publishBands(run: CaptureRun, fft: ByteArray) {
         val pointCount = fft.size / 2
         if (pointCount <= 2) return
 
@@ -340,15 +417,12 @@ class PlaybackVisualizerController(
                 if (offset + 1 >= fft.size) break
                 val real = fft[offset].toInt()
                 val imaginary = fft[offset + 1].toInt()
-                val magnitude = sqrt(
-                    (real * real + imaginary * imaginary).toFloat()
-                )
+                val magnitude = sqrt((real * real + imaginary * imaginary).toFloat())
                 if (magnitude > peak) peak = magnitude
             }
 
             // Use a linear fixed range so loud playback can reach the top without
-            // compressing the upper half of the meter. The floor suppresses FFT noise;
-            // values around 64 and above fill the bar, while quieter levels remain distinct.
+            // compressing the upper half of the meter. Values around 64 and above fill it.
             val noiseFloor = 4f
             val nearFullScale = 64f
             val target = ((peak - noiseFloor) / (nearFullScale - noiseFloor))
@@ -361,6 +435,15 @@ class PlaybackVisualizerController(
             }
         }
 
-        if (running) publishLevels(newLevels)
+        if (isCurrent(run)) publishLevels(newLevels)
+    }
+
+    private fun publishLevels(levels: FloatArray) {
+        _levels.value = levels
+        onLevelsChanged(levels)
+    }
+
+    private fun publishEmptyLevels() {
+        publishLevels(FloatArray(BAR_COUNT) { 0f })
     }
 }
