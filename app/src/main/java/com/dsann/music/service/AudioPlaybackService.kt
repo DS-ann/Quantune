@@ -824,7 +824,11 @@ class AudioPlaybackService : MediaSessionService() {
     private var widgetLyricsObserverJob: Job? = null
     private var widgetPlainLyricsObserverJob: Job? = null
     private var widgetSongObserverJob: Job? = null
-    @Volatile private var widgetLyricsRequestedSongId: Long? = null
+    private var widgetLyricsLoadingObserverJob: Job? = null
+    @Volatile private var widgetLyricsRequestedSongKey: String? = null
+    private var widgetLyricsWaitingForExistingFetchSongKey: String? = null
+    private var lastWidgetLyricContentKey: String? = null
+    private var lastWidgetLyricPublishedAtMs = 0L
     @Volatile private var widgetSyncedLyrics: List<LyricLine> = emptyList()
     @Volatile private var widgetPlainLyrics: String? = null
     @Volatile private var lyricsWidgetInstalledCached = false
@@ -1259,9 +1263,27 @@ class AudioPlaybackService : MediaSessionService() {
             cacheAssetsSongId = null
             widgetSyncedLyrics = emptyList()
             widgetPlainLyrics = null
+            widgetLyricsRequestedSongKey = null
+            widgetLyricsWaitingForExistingFetchSongKey = null
+            lastWidgetLyricContentKey = null
+            lastWidgetLyricPublishedAtMs = 0L
             cancelWidgetLyricRefresh()
             updateWidgetState(player.isPlaying)
-            // The ViewModel song observer refetches lyrics when it is attached.
+            // Refresh from the selected ViewModel item when available. This also handles
+            // repeat/replay transitions where StateFlow sees the same song ID and emits nothing.
+            viewModel?.let { vm ->
+                val activeSong = vm.currentSong.value
+                if (activeSong != null &&
+                    (mediaItem?.mediaId.isNullOrBlank() ||
+                        activeSong.id.toString() == mediaItem?.mediaId)
+                ) {
+                    ensureWidgetLyricsForSong(
+                        vm = vm,
+                        song = activeSong,
+                        refreshWidgetDetection = false
+                    )
+                }
+            }
             // The service-only widget fetch is needed only when no Activity ViewModel exists.
             if (viewModel == null && hasLyricsWidgetInstalled()) {
                 requestWidgetLyrics()
@@ -1515,6 +1537,10 @@ class AudioPlaybackService : MediaSessionService() {
         }
         mediaSession?.release()
         playerReadyCallbacks.clear()
+        widgetLyricsObserverJob?.cancel()
+        widgetPlainLyricsObserverJob?.cancel()
+        widgetSongObserverJob?.cancel()
+        widgetLyricsLoadingObserverJob?.cancel()
         serviceScope.cancel()
         if (activeService === this) activeService = null
     }
@@ -1644,16 +1670,48 @@ class AudioPlaybackService : MediaSessionService() {
                 }
             }
         }
+        widgetLyricsLoadingObserverJob?.cancel()
+        widgetLyricsLoadingObserverJob = serviceScope.launch {
+            vm.isLyricsLoading.collect { loading ->
+                if (loading) return@collect
+                val song = vm.currentSong.value ?: return@collect
+                val songKey = widgetLyricsSongKey(song)
+                if (widgetLyricsWaitingForExistingFetchSongKey != songKey) return@collect
+
+                widgetLyricsWaitingForExistingFetchSongKey = null
+                val hasLyrics = !vm.syncedLyrics.value.isNullOrEmpty() ||
+                    !vm.plainLyrics.value.isNullOrBlank()
+                if (hasLyrics) {
+                    ensureWidgetLyricsForSong(
+                        vm = vm,
+                        song = song,
+                        refreshWidgetDetection = false
+                    )
+                } else {
+                    Log.w(TAG, "Existing lyrics request finished without data for songId=${song.id}; retrying widget fetch once")
+                    ensureWidgetLyricsForSong(
+                        vm = vm,
+                        song = song,
+                        refreshWidgetDetection = false
+                    )
+                }
+            }
+        }
         widgetSongObserverJob?.cancel()
         widgetSongObserverJob = serviceScope.launch {
             // Treat the first StateFlow value as an attach-time snapshot. Seeding this
             // from vm.currentSong.value can swallow that first value if a track was
             // already selected/restored before the collector starts, leaving the widget
             // without a lyric request until the next track change.
-            var previousSongId: Long? = null
+            var previousSongKey: String? = null
             vm.currentSong.collect { song ->
-                if (song?.id != previousSongId) {
-                    previousSongId = song?.id
+                val songKey = song?.let(::widgetLyricsSongKey)
+                if (songKey != previousSongKey) {
+                    previousSongKey = songKey
+                    widgetLyricsRequestedSongKey = null
+                    widgetLyricsWaitingForExistingFetchSongKey = null
+                    lastWidgetLyricContentKey = null
+                    lastWidgetLyricPublishedAtMs = 0L
 
                     // Read the ViewModel's current lyric snapshot instead of unconditionally
                     // clearing it. The synced/plain observers may already have delivered
@@ -3620,8 +3678,10 @@ class AudioPlaybackService : MediaSessionService() {
 
                     val lyricsWidgetActive = hasLyricsWidgetInstalled()
                     if (player.isPlaying && lyricsWidgetActive) {
-                        // Re-evaluate after seeks and track changes, but the scheduled task
-                        // itself fires at the next timed lyric/word boundary.
+                        // The precise boundary timer is primary. Reconcile against the actual
+                        // playhead on each housekeeping pass as a safety net for delayed Handler
+                        // callbacks or missed RemoteViews updates; identical lines are coalesced.
+                        updateWidgetLyrics(pos, dur)
                         scheduleNextWidgetLyricRefresh(pos)
                     }
                     // Keep widget progress predictable across Android versions. Synced lyric
@@ -3677,6 +3737,15 @@ class AudioPlaybackService : MediaSessionService() {
      * already selected when the service attaches. The request is deduplicated by song ID
      * and never cancels a fetch that the player UI has already started.
      */
+    private fun widgetLyricsSongKey(song: com.dsann.music.model.SongItem): String =
+        "${song.id}|${song.videoId.orEmpty()}"
+
+    private fun publishWidgetLyricStatus(message: String) {
+        lastWidgetLyricContentKey = message
+        lastWidgetLyricPublishedAtMs = android.os.SystemClock.elapsedRealtime()
+        DsmusicWidgetProvider.updateAllWidgetsLyrics(applicationContext, styleWidgetLyricText(message))
+    }
+
     private fun ensureWidgetLyricsForSong(
         vm: PlayerSharedViewModel,
         song: com.dsann.music.model.SongItem,
@@ -3684,7 +3753,8 @@ class AudioPlaybackService : MediaSessionService() {
         allowRetry: Boolean = false
     ) {
         if (!hasLyricsWidgetInstalled(forceRefresh = refreshWidgetDetection)) return
-        if (vm.currentSong.value?.id != song.id) return
+        val songKey = widgetLyricsSongKey(song)
+        if (vm.currentSong.value?.let(::widgetLyricsSongKey) != songKey) return
 
         widgetSyncedLyrics = vm.syncedLyrics.value.orEmpty()
             .sortedBy { widgetLyricStartMs(it) }
@@ -3694,27 +3764,28 @@ class AudioPlaybackService : MediaSessionService() {
         val position = player.currentPosition.coerceAtLeast(0L)
         val duration = player.duration.coerceAtLeast(0L)
         if (hasLyrics) {
+            widgetLyricsWaitingForExistingFetchSongKey = null
             updateWidgetProgress(position, duration)
             scheduleNextWidgetLyricRefresh(position)
             return
         }
 
+        // Check our own request guard before the shared loading flag. This prevents a
+        // second observer callback from marking our fetch as an external request.
+        if (!allowRetry && widgetLyricsRequestedSongKey == songKey) return
+
         if (vm.isLyricsLoading.value) {
-            // The main player may have started the same request before the service observer.
-            DsmusicWidgetProvider.updateAllWidgetsLyrics(
-                applicationContext,
-                "Searching for lyrics…"
-            )
+            // The main player may already have started this track's fetch. Remember that
+            // dependency so a failed result can trigger one widget-owned recovery request.
+            widgetLyricsWaitingForExistingFetchSongKey = songKey
+            publishWidgetLyricStatus("Searching for lyrics…")
             return
         }
 
-        if (widgetLyricsRequestedSongId == song.id && !allowRetry) return
-        widgetLyricsRequestedSongId = song.id
+        widgetLyricsWaitingForExistingFetchSongKey = null
+        widgetLyricsRequestedSongKey = songKey
         cancelWidgetLyricRefresh()
-        DsmusicWidgetProvider.updateAllWidgetsLyrics(
-            applicationContext,
-            "Searching for lyrics…"
-        )
+        publishWidgetLyricStatus("Searching for lyrics…")
         Log.i(TAG, "Starting widget lyrics for '${song.title}' (songId=${song.id})")
         vm.fetchLyricsForCurrentSong()
     }
@@ -3833,7 +3904,7 @@ class AudioPlaybackService : MediaSessionService() {
      * the last word end is its final timing boundary. The full text stays together
      * until the next line begins, matching the portrait player's one-active-line model.
      */
-    private fun currentWidgetLyricText(positionMs: Long, playbackDurationMs: Long): CharSequence {
+    private fun currentWidgetLyricContent(positionMs: Long, playbackDurationMs: Long): String {
         val timeline = LineSyncedLyricTimeline.build(widgetSyncedLyrics)
         // Use the duration snapshot captured on the player's application looper. This
         // renderer is also called from Dispatchers.Default during widget progress updates,
@@ -3847,15 +3918,19 @@ class AudioPlaybackService : MediaSessionService() {
             durationMs = durationMs
         )
         val line = timeline.getOrNull(activeIndex)?.line
-        if (line != null) return styleWidgetLyricText(line.content)
+        if (line != null) return line.content.trim()
 
-        val plain = (widgetPlainLyrics ?: viewModel?.plainLyrics?.value).orEmpty()
+        return (widgetPlainLyrics ?: viewModel?.plainLyrics?.value).orEmpty()
             .lineSequence()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .take(4)
             .joinToString("\n")
-        return if (plain.isBlank()) "..." else styleWidgetLyricText(plain)
+    }
+
+    private fun currentWidgetLyricText(positionMs: Long, playbackDurationMs: Long): CharSequence {
+        val content = currentWidgetLyricContent(positionMs, playbackDurationMs)
+        return if (content.isBlank()) "..." else styleWidgetLyricText(content)
     }
 
     /** Widget lyric pages show one complete line, never a word-by-word karaoke sweep. */
@@ -4014,11 +4089,20 @@ class AudioPlaybackService : MediaSessionService() {
      * Publishes only the current complete lyric line. Progress refreshes use a separate
      * queue so they cannot replace this event with an older lyric snapshot.
      */
-    private fun updateWidgetLyrics(pos: Long, dur: Long) {
+    private fun updateWidgetLyrics(pos: Long, dur: Long, force: Boolean = false) {
         if (!DsmusicWidgetProvider.hasAnyWidgets(applicationContext)) return
+        val content = currentWidgetLyricContent(pos, dur)
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!force && content == lastWidgetLyricContentKey &&
+            now - lastWidgetLyricPublishedAtMs < 5_000L
+        ) {
+            return
+        }
+        lastWidgetLyricContentKey = content
+        lastWidgetLyricPublishedAtMs = now
         DsmusicWidgetProvider.updateAllWidgetsLyrics(
             this,
-            currentWidgetLyricText(pos, dur)
+            if (content.isBlank()) "..." else styleWidgetLyricText(content)
         )
     }
 
@@ -4083,13 +4167,16 @@ class AudioPlaybackService : MediaSessionService() {
                 albumName = mediaItem.mediaMetadata.albumTitle?.toString()
             }
         }
+        val lyricContent = currentWidgetLyricContent(position, duration)
+        lastWidgetLyricContentKey = lyricContent
+        lastWidgetLyricPublishedAtMs = android.os.SystemClock.elapsedRealtime()
         DsmusicWidgetProvider.updateAllWidgets(
             this,
             song,
             isPlaying,
             position.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
             duration.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-            currentWidgetLyricText(position, duration),
+            if (lyricContent.isBlank()) "..." else styleWidgetLyricText(lyricContent),
             currentWidgetRepeatIconResource()
         )
     }
