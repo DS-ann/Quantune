@@ -1,5 +1,6 @@
 package com.dsann.music.ui
 
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -88,19 +89,38 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
         }
     }
 
-    LaunchedEffect(role) {
+    // Do not rebroadcast a full "play" action on a timer. On a slow connection,
+    // queued play actions can arrive late and repeatedly seek guests back to the same
+    // old position, making a short part of the song sound as if it is looping.
+    // Play/pause and track changes are already sent by the event-driven effects above.
+    // Only send a seek when the host's position actually jumps away from its timeline.
+    LaunchedEffect(role, currentSong?.id, currentSong?.videoId) {
         if (role == "HOST") {
+            var previousPosition = latestPosition.toLong().coerceAtLeast(0L)
+            var previousSampleAt = SystemClock.elapsedRealtime()
+
             while (true) {
-                val song = latestSong
-                val videoId = song?.videoId
-                if (song != null && !videoId.isNullOrBlank()) {
-                    client.sendHostPlayback(
-                        isPlaying = latestPlaying,
-                        track = song.toSharedTrack(videoId),
-                        positionMs = latestPosition.toLong()
-                    )
+                delay(500L)
+                val now = SystemClock.elapsedRealtime()
+                val elapsed = (now - previousSampleAt).coerceIn(0L, 2_000L)
+                val observedPosition = latestPosition.toLong().coerceAtLeast(0L)
+                val expectedPosition = previousPosition + if (latestPlaying) elapsed else 0L
+
+                if (latestPlaying && elapsed > 0L &&
+                    abs(observedPosition - expectedPosition) > 2_500L
+                ) {
+                    val song = latestSong
+                    val videoId = song?.videoId
+                    if (song != null && !videoId.isNullOrBlank()) {
+                        client.sendHostSeek(
+                            track = song.toSharedTrack(videoId),
+                            positionMs = observedPosition
+                        )
+                    }
                 }
-                delay(4_000L)
+
+                previousPosition = observedPosition
+                previousSampleAt = now
             }
         }
     }
