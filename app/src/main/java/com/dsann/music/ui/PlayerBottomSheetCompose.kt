@@ -89,6 +89,7 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
@@ -1052,28 +1053,21 @@ fun PlayerBottomSheetCompose(
         val isDark = DsmusicTheme.colorScheme.background.luminance() < 0.5f
         val themePlayerSurface = DsmusicTheme.colorScheme.surface
         val dynamicBgColor = remember(playerBackgroundColor, isDark, playerBackgroundStyle, themePlayerSurface) {
-            when (playerBackgroundStyle) {
-                "Theme" -> themePlayerSurface
-                "Black" -> Color.Black
-                "Gradient" -> {
-                    val base = Color(playerBackgroundColor)
-                    if (isDark) androidx.compose.ui.graphics.lerp(base, Color.Black, 0.26f)
-                    else androidx.compose.ui.graphics.lerp(base, themePlayerSurface, 0.28f)
-                }
-                else -> {
-                    val baseColor = Color(playerBackgroundColor)
-                    val hsl = FloatArray(3)
-                    androidx.core.graphics.ColorUtils.colorToHSL(baseColor.toArgb(), hsl)
-                    val isMonochrome = hsl[1] < 0.06f
-                    if (isDark) {
-                        hsl[2] = 0.155f
-                        hsl[1] = if (isMonochrome) 0f else hsl[1].coerceIn(0.32f, 0.54f)
-                        Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
-                    } else {
-                        hsl[2] = 0.835f
-                        hsl[1] = if (isMonochrome) 0f else hsl[1].coerceIn(0.30f, 0.48f)
-                        Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
-                    }
+            if (playerBackgroundStyle == "Theme") {
+                themePlayerSurface
+            } else {
+                val baseColor = Color(playerBackgroundColor)
+                val hsl = FloatArray(3)
+                androidx.core.graphics.ColorUtils.colorToHSL(baseColor.toArgb(), hsl)
+                val isMonochrome = hsl[1] < 0.06f
+                if (isDark) {
+                    hsl[2] = 0.155f
+                    hsl[1] = if (isMonochrome) 0f else hsl[1].coerceIn(0.32f, 0.54f)
+                    Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
+                } else {
+                    hsl[2] = 0.835f
+                    hsl[1] = if (isMonochrome) 0f else hsl[1].coerceIn(0.30f, 0.48f)
+                    Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
                 }
             }
         }
@@ -2838,24 +2832,41 @@ private fun MiniPlayerArtworkProgressOverlay(
                 val fillHeight = size.height * progress
                 if (fillHeight > 0f) {
                     val top = size.height - fillHeight
-                    drawRect(
-                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                            colors = listOf(
-                                visibleAccentColor.copy(alpha = 0.16f),
-                                visibleAccentColor.copy(alpha = 0.58f)
+                    val artworkOutline = matchingCoverShape.createOutline(
+                        size,
+                        layoutDirection,
+                        this
+                    )
+                    val artworkClipPath = when (artworkOutline) {
+                        is Outline.Rectangle -> androidx.compose.ui.graphics.Path().apply {
+                            addRect(artworkOutline.rect)
+                        }
+                        is Outline.Rounded -> androidx.compose.ui.graphics.Path().apply {
+                            addRoundRect(artworkOutline.roundRect)
+                        }
+                        is Outline.Generic -> artworkOutline.path
+                    }
+
+                    clipPath(artworkClipPath) {
+                        drawRect(
+                            brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                colors = listOf(
+                                    visibleAccentColor.copy(alpha = 0.36f),
+                                    visibleAccentColor.copy(alpha = 0.78f)
+                                ),
+                                startY = top,
+                                endY = size.height
                             ),
-                            startY = top,
-                            endY = size.height
-                        ),
-                        topLeft = androidx.compose.ui.geometry.Offset(0f, top),
-                        size = androidx.compose.ui.geometry.Size(size.width, fillHeight)
-                    )
-                    drawLine(
-                        color = visibleAccentColor,
-                        start = androidx.compose.ui.geometry.Offset(0f, top),
-                        end = androidx.compose.ui.geometry.Offset(size.width, top),
-                        strokeWidth = (side * 0.018f).coerceAtLeast(1f)
-                    )
+                            topLeft = androidx.compose.ui.geometry.Offset(0f, top),
+                            size = androidx.compose.ui.geometry.Size(size.width, fillHeight)
+                        )
+                        drawLine(
+                            color = visibleAccentColor,
+                            start = androidx.compose.ui.geometry.Offset(0f, top),
+                            end = androidx.compose.ui.geometry.Offset(size.width, top),
+                            strokeWidth = (side * 0.018f).coerceAtLeast(1f)
+                        )
+                    }
                 }
             }
         }

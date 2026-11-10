@@ -55,7 +55,7 @@ internal object FreshInstallAppSettings {
         "session_buttons" to "like,repeat",
         "player_button_style" to "Pill",
         "player_animation_frame_rate" to 20,
-        "player_background_style" to "Gradient",
+        "player_background_style" to "Artwork",
         "tapered_song_dividers" to true,
         "video_quality_preferred_height" to 240,
         "player_title_size" to "Large",

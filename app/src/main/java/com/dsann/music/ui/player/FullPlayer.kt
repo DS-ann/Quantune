@@ -864,17 +864,10 @@ fun FullPlayer(
             darkSaturationRange = 0.32f..0.54f,
             lightSaturationRange = 0.30f..0.48f
         )
-        when (playerBackgroundStyle) {
-            "Theme" -> androidx.compose.ui.graphics.SolidColor(themePlayerBackground)
-            "Black" -> androidx.compose.ui.graphics.SolidColor(Color.Black)
-            "Gradient" -> Brush.linearGradient(
-                listOf(
-                    finalColor,
-                    finalColor.copy(alpha = 1f),
-                    themePlayerBackground
-                )
-            )
-            else -> androidx.compose.ui.graphics.SolidColor(finalColor)
+        if (playerBackgroundStyle == "Theme") {
+            androidx.compose.ui.graphics.SolidColor(themePlayerBackground)
+        } else {
+            androidx.compose.ui.graphics.SolidColor(finalColor)
         }
     }
 
@@ -892,16 +885,7 @@ fun FullPlayer(
             darkSaturationRange = 0.32f..0.54f,
             lightSaturationRange = 0.30f..0.48f
         )
-        when (playerBackgroundStyle) {
-            "Theme" -> themePlayerBackground
-            "Black" -> Color.Black
-            "Gradient" -> androidx.compose.ui.graphics.lerp(
-                derivedArtworkSurface,
-                themePlayerBackground,
-                0.5f
-            )
-            else -> derivedArtworkSurface
-        }
+        if (playerBackgroundStyle == "Theme") themePlayerBackground else derivedArtworkSurface
     }
 
     val hasLyrics = !syncedLyrics.isNullOrEmpty() || !plainLyrics.isNullOrBlank()

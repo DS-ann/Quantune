@@ -476,11 +476,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     private val _playerBackgroundStyle = MutableStateFlow(
-        prefs.getString("player_background_style", "Artwork") ?: "Artwork"
+        prefs.getString("player_background_style", "Artwork")
+            ?.takeIf { it in listOf("Artwork", "Theme") } ?: "Artwork"
     )
     val playerBackgroundStyle: StateFlow<String> = _playerBackgroundStyle.asStateFlow()
     fun setPlayerBackgroundStyle(value: String) {
-        val safe = value.takeIf { it in listOf("Artwork", "Theme", "Black", "Gradient") } ?: "Artwork"
+        val safe = value.takeIf { it in listOf("Artwork", "Theme") } ?: "Artwork"
         _playerBackgroundStyle.value = safe
         prefs.edit { putString("player_background_style", safe) }
     }
@@ -1319,7 +1320,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _uiCornerStyle.value = prefs.getString("ui_corner_style", "Soft")
             ?.takeIf { it in listOf("Tight", "Soft", "Round") } ?: "Soft"
         _playerArtworkShape.value = prefs.getString(KEY_PLAYER_ARTWORK_SHAPE, "Rounded") ?: "Rounded"
-        _playerBackgroundStyle.value = prefs.getString("player_background_style", "Artwork") ?: "Artwork"
+        setPlayerBackgroundStyle(prefs.getString("player_background_style", "Artwork") ?: "Artwork")
         _nowPlayingCoverAnimation.value = prefs.getString(NowPlayingCoverAnimationPreference.KEY, "Bars")
             ?.takeIf { it in NowPlayingCoverAnimationPreference.choices } ?: "Bars"
         NowPlayingCoverAnimationPreference.set(context, _nowPlayingCoverAnimation.value)
@@ -3786,9 +3787,9 @@ private fun AppearanceScreen(
 SettingsGroupCard(listOf {
     SettingsChoiceRow(
         title = "Player background",
-        description = "Choose the player background: album cover, app theme, black, or a soft blend of colours based on the cover.",
+        description = "Choose between an album-art-matched background and the app theme.",
         selected = playerBackgroundStyle,
-        options = listOf("Artwork", "Theme", "Black", "Gradient"),
+        options = listOf("Artwork", "Theme"),
         onSelected = onPlayerBackgroundStyleChange
     )
 })
