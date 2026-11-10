@@ -603,7 +603,8 @@ fun FullPlayerScreen(
     onNavigateToListenTogether: () -> Unit,
     dragModifier: Modifier = Modifier,
     isPlayerVisible: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onVisualizerVisibilityChanged: (Boolean) -> Unit = {}
 ) {
     val isLyricsModeEnabled by viewModel.isLyricsModeEnabled.collectAsStateWithLifecycle()
     val syncedLyrics by viewModel.syncedLyrics.collectAsStateWithLifecycle()
@@ -719,7 +720,8 @@ fun FullPlayerScreen(
             activity.showArtistPage(artistId, artistName)
         },
         dragModifier = dragModifier,
-        modifier = modifier
+        modifier = modifier,
+        onVisualizerVisibilityChanged = onVisualizerVisibilityChanged
     )
 }
 
@@ -780,7 +782,8 @@ fun FullPlayer(
     onProviderSelected: (String) -> Unit,
     onArtistClick: (String?, String) -> Unit = { _, _ -> },
     dragModifier: Modifier = Modifier,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onVisualizerVisibilityChanged: (Boolean) -> Unit = {}
 ) {
     val isDark = DsmusicTheme.colorScheme.background.luminance() < 0.5f
     val contentColor = if (isDark) Color.White else Color.Black
@@ -788,8 +791,9 @@ fun FullPlayer(
     val playerButtonColor = if (isDark) Color.Black else Color.White
     val playerButtonContentColor = if (isDark) Color.White else Color.Black
     val contentSecondary = contentColor.copy(alpha = 0.6f)
+    var showFullScreenVisualizer by remember { mutableStateOf(false) }
     val playerFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
-        active = isPlayerVisible && uiState.isPlaying
+        active = isPlayerVisible && uiState.isPlaying && !showFullScreenVisualizer
     )
     val artistOptions = remember(
         uiState.currentSong?.artistRefs,
@@ -901,7 +905,6 @@ fun FullPlayer(
     val isVideoMode by viewModel.isVideoMode.collectAsStateWithLifecycle()
     val videoPlaybackMetadata by viewModel.videoPlaybackMetadata.collectAsStateWithLifecycle()
     var showSongInfoDialog by remember { mutableStateOf(false) }
-    var showFullScreenVisualizer by remember { mutableStateOf(false) }
     var selectedQueueSongForMenu by remember { mutableStateOf<SongItem?>(null) }
     var lastLyricsFetchSongId by remember { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
@@ -915,6 +918,14 @@ fun FullPlayer(
     }
     // FFT capture is allocated only while the dedicated full-screen visualizer is open.
     val needsPlaybackVisualizer = showFullScreenVisualizer
+
+    LaunchedEffect(showFullScreenVisualizer) {
+        onVisualizerVisibilityChanged(showFullScreenVisualizer)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { onVisualizerVisibilityChanged(false) }
+    }
 
     LaunchedEffect(audioService, needsPlaybackVisualizer) {
         visualizerCaptureRequested = needsPlaybackVisualizer
@@ -974,7 +985,7 @@ fun FullPlayer(
         androidx.compose.ui.graphics.SolidColor(finalColor)
     }
 
-    if (showArtistPicker && artistOptions.size > 1) {
+    if (!showFullScreenVisualizer && showArtistPicker && artistOptions.size > 1) {
         Dialog(onDismissRequest = { showArtistPicker = false }) {
             DsmusicSurface(
                 modifier = Modifier.fillMaxWidth(),
@@ -1035,6 +1046,7 @@ fun FullPlayer(
         }
     }
 
+    if (!showFullScreenVisualizer) {
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -2254,6 +2266,7 @@ fun FullPlayer(
                 )
             }
         }
+    }
     }
 
     if (showFullScreenVisualizer) {

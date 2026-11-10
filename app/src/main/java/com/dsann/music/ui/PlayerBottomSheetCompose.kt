@@ -382,7 +382,9 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
     miniPlayerSurfaceAlpha: Float,
     miniPlayerShape: Shape,
     miniPlayerElevation: Dp,
-    miniSwipeModifier: Modifier
+    miniSwipeModifier: Modifier,
+    isFullscreenVisualizerOpen: Boolean = false,
+    onFullscreenVisualizerVisibilityChanged: (Boolean) -> Unit = {}
 ) {
     val currentSong = uiState.currentSong ?: return
     val isPlaying = uiState.isPlaying
@@ -503,6 +505,7 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                     onNavigateToListenTogether = onNavigateToListenTogether,
                     dragModifier = dragModifier,
                     isPlayerVisible = isFullPlayerVisible,
+                    onVisualizerVisibilityChanged = onFullscreenVisualizerVisibilityChanged,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -897,6 +900,7 @@ fun PlayerBottomSheetCompose(
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val context = LocalContext.current
+        var isFullscreenVisualizerOpen by remember { mutableStateOf(false) }
         val density = LocalDensity.current
         // The player can be hosted in a resized/freeform window. Use its measured bounds
         // instead of the physical display configuration for every responsive breakpoint.
@@ -1755,7 +1759,11 @@ fun PlayerBottomSheetCompose(
                                 miniPlayerSurfaceAlpha = 1f,
                                 miniPlayerShape = miniPlayerShape,
                                 miniPlayerElevation = miniPlayerElevation,
-                                miniSwipeModifier = miniSwipeGestureModifier
+                                miniSwipeModifier = miniSwipeGestureModifier,
+                                isFullscreenVisualizerOpen = isFullscreenVisualizerOpen,
+                                onFullscreenVisualizerVisibilityChanged = {
+                                    isFullscreenVisualizerOpen = it
+                                }
                             )
                         }
                     }
@@ -1807,7 +1815,7 @@ fun PlayerBottomSheetCompose(
                         label = "SharedArtworkQueueInset"
                     )
 
-                    if (!isLegacyCompactArtwork) {
+                    if (!isLegacyCompactArtwork && !isFullscreenVisualizerOpen) {
                     Box(
                         modifier = Modifier
                             .size(albumArtSizeDp)
