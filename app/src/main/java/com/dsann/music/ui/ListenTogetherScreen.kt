@@ -82,6 +82,7 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
     var serverUrl by rememberSaveable { mutableStateOf(DsmusicListenTogetherClient.DEFAULT_SERVER) }
     var displayName by rememberSaveable { mutableStateOf("Listener") }
     var joinCode by rememberSaveable { mutableStateOf("") }
+    var showInternetJoinCode by rememberSaveable { mutableStateOf(false) }
     var localHostAddress by rememberSaveable { mutableStateOf("") }
     var localJoinPin by rememberSaveable { mutableStateOf("") }
     var showLocalJoinPin by rememberSaveable { mutableStateOf(false) }
@@ -117,7 +118,9 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
     val canStartSession = connectionState == "Disconnected" || connectionState == "Connection error"
     val statusLabel = when {
         isConnected -> "LIVE"
+        connectionState == "Reconnecting" -> "RECONNECTING"
         connectionState == "Connecting" -> "CONNECTING"
+        connectionState == "Connection error" -> "OFFLINE"
         else -> "READY"
     }
     val hostCurrentTrack = remember(currentSong?.id, currentSong?.videoId) {
@@ -200,6 +203,58 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
             }
         }
 
+        if (joinRequests.isNotEmpty()) {
+            DsmusicCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "JOIN REQUESTS",
+                            style = DsmusicTheme.typography.labelSmall,
+                            color = DsmusicTheme.colorScheme.primary,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(Modifier.weight(1f))
+                        ListenTogetherStatusPill(
+                            statusLabel = joinRequests.size.toString() + " waiting",
+                            active = true
+                        )
+                    }
+                    joinRequests.forEach { request ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(DsmusicTheme.colorScheme.surfaceContainerLow)
+                                .padding(horizontal = 11.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(1.dp)
+                            ) {
+                                Text(request.username, style = DsmusicTheme.typography.bodyMedium)
+                                Text(
+                                    "Requesting to join",
+                                    style = DsmusicTheme.typography.labelSmall,
+                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            DsmusicButton(onClick = { client.approveJoin(request.userId) }) {
+                                Text("Approve")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -258,13 +313,19 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                 subtitle = "Nearby devices",
                 selected = networkMode == "SAME_NETWORK",
                 enabled = canStartSession
-            ) { networkMode = "SAME_NETWORK" }
+            ) {
+                networkMode = "SAME_NETWORK"
+                showInternetJoinCode = false
+            }
             ListenTogetherModeOption(
                 title = "Internet",
                 subtitle = "Different networks",
                 selected = networkMode == "DIFFERENT_NETWORK",
                 enabled = canStartSession
-            ) { networkMode = "DIFFERENT_NETWORK" }
+            ) {
+                networkMode = "DIFFERENT_NETWORK"
+                showInternetJoinCode = false
+            }
         }
 
         DsmusicCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(19.dp)) {
@@ -427,29 +488,40 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Create an internet room") }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = joinCode,
-                            onValueChange = { joinCode = it.uppercase().filter(Char::isLetterOrDigit).take(12) },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            label = { Text("Room code") }
-                        )
-                        DsmusicOutlinedButton(
-                            onClick = {
-                                actionMessage = null
-                                try {
-                                    client.joinRoom(serverUrl, joinCode, displayName)
-                                } catch (error: Exception) {
-                                    actionMessage = error.message ?: "Could not join the room."
-                                }
-                            },
-                            enabled = canStartSession && joinCode.isNotBlank() && displayName.isNotBlank()
-                        ) { Text("Join") }
+                    Text(
+                        if (showInternetJoinCode) "HIDE ROOM-CODE ENTRY" else "JOIN WITH A ROOM CODE",
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showInternetJoinCode = !showInternetJoinCode }
+                            .padding(vertical = 5.dp, horizontal = 2.dp),
+                        style = DsmusicTheme.typography.labelMedium,
+                        color = DsmusicTheme.colorScheme.primary
+                    )
+                    if (showInternetJoinCode) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = joinCode,
+                                onValueChange = { joinCode = it.uppercase().filter(Char::isLetterOrDigit).take(12) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                label = { Text("Room code") }
+                            )
+                            DsmusicOutlinedButton(
+                                onClick = {
+                                    actionMessage = null
+                                    try {
+                                        client.joinRoom(serverUrl, joinCode, displayName)
+                                    } catch (error: Exception) {
+                                        actionMessage = error.message ?: "Could not join the room."
+                                    }
+                                },
+                                enabled = canStartSession && joinCode.isNotBlank() && displayName.isNotBlank()
+                            ) { Text("Join") }
+                        }
                     }
 
                     Text(
@@ -595,33 +667,6 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                         onClick = { client.leaveRoom() },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Leave room") }
-                }
-            }
-        }
-
-        if (joinRequests.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Text("JOIN REQUESTS", style = DsmusicTheme.typography.labelSmall, color = DsmusicTheme.colorScheme.primary)
-                joinRequests.forEach { request ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(DsmusicTheme.colorScheme.surfaceContainerLow)
-                            .padding(horizontal = 11.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text(request.username, style = DsmusicTheme.typography.bodyMedium)
-                            Text(
-                                "Requesting to join",
-                                style = DsmusicTheme.typography.labelSmall,
-                                color = DsmusicTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        DsmusicButton(onClick = { client.approveJoin(request.userId) }) { Text("Approve") }
-                    }
                 }
             }
         }
