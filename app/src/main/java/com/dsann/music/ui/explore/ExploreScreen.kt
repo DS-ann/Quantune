@@ -477,6 +477,13 @@ fun ExploreScreen(
     val playerExpansionFraction by playerSharedViewModel.playerExpansionFraction.collectAsStateWithLifecycle()
     // Keep every Explore-level Back action subordinate until the player is fully closed.
     val isPlayerBackActive = isPlayerExpanded || playerExpansionFraction > 0.01f
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // The IME can remain visible over the player when expansion starts from the Search tab.
+    // Dismiss it as soon as the player begins opening, without modifying the current query.
+    LaunchedEffect(isPlayerBackActive) {
+        if (isPlayerBackActive) keyboardController?.hide()
+    }
 
     androidx.activity.compose.BackHandler(enabled = showCreditsForSong != null && !isPlayerBackActive) {
         showCreditsForSong = null
@@ -678,8 +685,15 @@ fun ExploreScreen(
             showCreditsForSong == null &&
             !isPlayerBackActive
     ) {
-        isSearchActive = false
-        viewModel.clearSearch()
+        if (isSearchDestination) {
+            // On the Search tab, Back from results returns to the editor and keeps
+            // the submitted query so it can be adjusted and searched again.
+            isSearchActive = true
+        } else {
+            // Preserve the Explore tab's existing query cleanup behavior.
+            isSearchActive = false
+            viewModel.clearSearch()
+        }
     }
 
     androidx.activity.compose.BackHandler(
