@@ -737,7 +737,6 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                 }
             }
         }
-    }
 }
 
 @Composable
