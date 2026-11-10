@@ -4366,7 +4366,8 @@ private val playerButtonNames = linkedMapOf(
     "sleep" to "Sleep timer",
     "shuffle" to "Shuffle",
     "listen_together" to "Listen Together",
-    "repeat" to "Repeat"
+    "repeat" to "Repeat",
+    "visualizer" to "Visualizer"
 )
 
 @Composable
