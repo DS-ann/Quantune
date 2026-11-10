@@ -347,11 +347,14 @@ class PlaybackVisualizerController(
                 if (magnitude > peak) peak = magnitude
             }
 
-            // The platform FFT is signed 8-bit complex data. Mild compression keeps
-            // quieter playback visible without manufacturing movement during silence.
-            val target = ((peak - 1f).coerceAtLeast(0f) / 64f)
+            // Use a deliberately wide, fixed amplitude range instead of normalizing
+            // against each frame. This keeps quiet and loud passages visually distinct:
+            // low-level audio occupies only a few blocks, while peaks approach the top.
+            val noiseFloor = 4f
+            val nearFullScale = 160f
+            val normalizedMagnitude = ((peak - noiseFloor) / (nearFullScale - noiseFloor))
                 .coerceIn(0f, 1f)
-                .pow(0.72f)
+            val target = normalizedMagnitude.pow(1.55f)
             val previous = oldLevels.getOrElse(bar) { 0f }
             newLevels[bar] = if (target >= previous) {
                 previous * 0.22f + target * 0.78f
