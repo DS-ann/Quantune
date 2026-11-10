@@ -987,7 +987,7 @@ class AudioPlaybackService : MediaSessionService() {
     // Each ExoPlayer owns a dedicated Android audio session. The playback visualizer
     // attaches to the active session only when the user opens its screen.
     private val playerAudioSessionIds = java.util.WeakHashMap<ExoPlayer, Int>()
-    private val playbackVisualizerLevelsState = MutableStateFlow(FloatArray(16) { 0f })
+    private val playbackVisualizerLevelsState = MutableStateFlow(FloatArray(PlaybackVisualizerController.BAR_COUNT) { 0f })
     @Volatile private var playbackVisualizerController: PlaybackVisualizerController? = null
     
     private var currentBaseVolume = 1.0f

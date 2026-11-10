@@ -7,8 +7,11 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.ln
-import kotlin.math.max
+import kotlin.math.log10
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
@@ -24,8 +27,17 @@ class PlaybackVisualizerController(
 
     companion object {
         private const val TAG = "PlaybackVisualizer"
-        const val BAR_COUNT = 16
+        // Shared 48-band logarithmic spectrum. Bars (16) aggregates these into 16
+        // columns; Spectrum and Circular Spectrum render all 48 measured bands.
+        const val BAR_COUNT = 48
         private const val TARGET_CAPTURE_RATE_MILLI_HZ = 30_000
+        private const val DEFAULT_SAMPLE_RATE_MILLI_HZ = 44_100_000
+        private const val MIN_FREQUENCY_HZ = 32f
+        private const val MAX_FREQUENCY_HZ = 16_000f
+        private const val MIN_SIGNAL_MAGNITUDE = 1.6f
+        private const val DISPLAY_FLOOR_DB = -42f
+        private const val DISPLAY_CEILING_DB = -3f
+        private const val MAX_TREBLE_COMPENSATION_DB = 6f
         private const val CALLBACK_GRACE_PERIOD_MS = 450L
         // The UI already waits 250 ms before requesting capture. If the player session
         // still has no usable signal after this window, try output mix instead of waiting
@@ -216,7 +228,7 @@ class PlaybackVisualizerController(
                     } else if (run.fftCallbackCount == 1) {
                         Log.w(TAG, "FFT callback is active but returned a silent frame for session $audioSessionId")
                     }
-                    publishBands(run, fft)
+                    publishBands(run, fft, samplingRate)
                 }
             }
 
@@ -310,7 +322,9 @@ class PlaybackVisualizerController(
                         } else if (run.fftPollFrameCount == 1) {
                             Log.w(TAG, "Polled FFT is silent on session $sessionId")
                         }
-                        publishBands(run, buffer.copyOf())
+                        val samplingRate = runCatching { candidate.samplingRate }
+                            .getOrDefault(DEFAULT_SAMPLE_RATE_MILLI_HZ)
+                        publishBands(run, buffer.copyOf(), samplingRate)
                     } else if (run.fftPollFrameCount == 0 && !run.pollErrorLogged) {
                         run.pollErrorLogged = true
                         Log.w(TAG, "Visualizer.getFft() returned $result for session $sessionId")
@@ -389,50 +403,92 @@ class PlaybackVisualizerController(
         return false
     }
 
-    private fun publishBands(run: CaptureRun, fft: ByteArray) {
+    /**
+     * Converts the native FFT into 48 logarithmically spaced, independently measured bands.
+     *
+     * RMS energy keeps wide bands from winning merely because they contain more bins, while
+     * a restrained peak contribution preserves transients. A small logarithmic treble tilt
+     * compensates for the natural energy roll-off in many mixes without flattening the spectrum.
+     * A dB display window avoids the old fixed linear threshold that saturated bass while
+     * leaving upper-frequency bars almost permanently dark.
+     */
+    private fun publishBands(run: CaptureRun, fft: ByteArray, samplingRateMilliHz: Int) {
         val pointCount = fft.size / 2
         if (pointCount <= 2) return
 
-        val firstBin = 1
-        val lastBin = (pointCount - 1).coerceAtLeast(firstBin + 1)
-        val logRange = ln(lastBin.toFloat() / firstBin.toFloat())
-        val oldLevels = _levels.value
+        val lastBin = pointCount - 1
+        val safeSampleRate = samplingRateMilliHz
+            .takeIf { it > 0 }
+            ?: DEFAULT_SAMPLE_RATE_MILLI_HZ
+        // Visualizer reports the sample rate in milliHertz; Nyquist is half the actual rate.
+        val nyquistHz = safeSampleRate / 2_000f
+        val hzPerBin = nyquistHz / lastBin.toFloat()
+        if (!hzPerBin.isFinite() || hzPerBin <= 0f) return
+
+        val lowerHz = maxOf(MIN_FREQUENCY_HZ, hzPerBin)
+        val upperHz = minOf(MAX_FREQUENCY_HZ, nyquistHz * 0.92f)
+            .coerceAtLeast(lowerHz * 1.05f)
+        val logRange = ln(upperHz / lowerHz)
+        val previousLevels = _levels.value
         val newLevels = FloatArray(BAR_COUNT)
 
-        for (bar in 0 until BAR_COUNT) {
-            val startFraction = bar.toFloat() / BAR_COUNT
-            val endFraction = (bar + 1).toFloat() / BAR_COUNT
-            val startBin = max(
-                firstBin,
-                (firstBin * kotlin.math.exp(logRange * startFraction)).toInt()
-            )
-            val endBin = max(
-                startBin + 1,
-                (firstBin * kotlin.math.exp(logRange * endFraction)).toInt()
-            ).coerceAtMost(lastBin + 1)
+        for (band in 0 until BAR_COUNT) {
+            val startFraction = band.toFloat() / BAR_COUNT
+            val endFraction = (band + 1).toFloat() / BAR_COUNT
+            val startHz = lowerHz * kotlin.math.exp(logRange * startFraction)
+            val endHz = lowerHz * kotlin.math.exp(logRange * endFraction)
 
-            var peak = 0f
-            for (bin in startBin until endBin) {
+            val startBin = floor(startHz / hzPerBin)
+                .toInt()
+                .coerceIn(1, lastBin)
+            val endExclusive = ceil(endHz / hzPerBin)
+                .toInt()
+                .coerceIn(startBin + 1, lastBin + 1)
+
+            var sumSquares = 0f
+            var peakMagnitude = 0f
+            var sampleCount = 0
+            for (bin in startBin until endExclusive) {
                 val offset = bin * 2
                 if (offset + 1 >= fft.size) break
+
                 val real = fft[offset].toInt()
                 val imaginary = fft[offset + 1].toInt()
-                val magnitude = sqrt((real * real + imaginary * imaginary).toFloat())
-                if (magnitude > peak) peak = magnitude
+                val magnitude = sqrt(
+                    (real * real + imaginary * imaginary).toFloat()
+                )
+                sumSquares += magnitude * magnitude
+                if (magnitude > peakMagnitude) peakMagnitude = magnitude
+                sampleCount++
             }
 
-            // Use a linear fixed range so loud playback can reach the top without
-            // compressing the upper half of the meter. Values around 64 and above fill it.
-            val noiseFloor = 4f
-            val nearFullScale = 64f
-            val target = ((peak - noiseFloor) / (nearFullScale - noiseFloor))
-                .coerceIn(0f, 1f)
-            val previous = oldLevels.getOrElse(bar) { 0f }
-            newLevels[bar] = if (target >= previous) {
-                previous * 0.22f + target * 0.78f
+            val rawMagnitude = if (sampleCount > 0) {
+                val rmsMagnitude = sqrt(sumSquares / sampleCount.toFloat())
+                // Mostly RMS for a stable spectrum, with enough peak response for kick/snare detail.
+                rmsMagnitude * 0.78f + peakMagnitude * 0.22f
             } else {
-                previous * 0.68f + target * 0.32f
+                0f
             }
+
+            val frequencyPosition = band.toFloat() / (BAR_COUNT - 1).coerceAtLeast(1)
+            val trebleCompensationDb = MAX_TREBLE_COMPENSATION_DB * frequencyPosition
+            val compensatedMagnitude = rawMagnitude * 10f.pow(trebleCompensationDb / 20f)
+
+            val target = if (rawMagnitude < MIN_SIGNAL_MAGNITUDE) {
+                0f
+            } else {
+                val magnitudeDb = 20f * log10(
+                    (compensatedMagnitude / 128f).coerceAtLeast(0.0001f)
+                )
+                ((magnitudeDb - DISPLAY_FLOOR_DB) /
+                    (DISPLAY_CEILING_DB - DISPLAY_FLOOR_DB))
+                    .coerceIn(0f, 1f)
+            }
+
+            // Fast attack and slower release give the bars a musical, connected motion.
+            val previous = previousLevels.getOrElse(band) { 0f }
+            val smoothing = if (target >= previous) 0.62f else 0.20f
+            newLevels[band] = previous + (target - previous) * smoothing
         }
 
         if (isCurrent(run)) publishLevels(newLevels)

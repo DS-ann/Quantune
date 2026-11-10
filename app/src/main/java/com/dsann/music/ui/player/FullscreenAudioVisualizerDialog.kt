@@ -37,6 +37,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dsann.music.service.AudioPlaybackService
+import com.dsann.music.service.PlaybackVisualizerController
 import com.dsann.music.ui.theme.Icon
 import com.dsann.music.ui.theme.dsmusicHomeStudioGradientBrush
 import com.dsann.music.ui.theme.Text
@@ -53,7 +54,7 @@ fun FullscreenAudioVisualizerDialog(
     lyricsColorStyle: String,
     onDismissRequest: () -> Unit
 ) {
-    val emptyLevels = remember { MutableStateFlow(FloatArray(16) { 0f }) }
+    val emptyLevels = remember { MutableStateFlow(FloatArray(PlaybackVisualizerController.BAR_COUNT) { 0f }) }
     val levelsFlow = audioService?.playbackVisualizerLevels ?: emptyLevels
     val levels by levelsFlow.collectAsStateWithLifecycle()
 
@@ -85,7 +86,25 @@ fun FullscreenAudioVisualizerDialog(
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val sideInset = 8.dp.toPx()
-                val safeLevels = levels.takeIf { it.isNotEmpty() } ?: FloatArray(16)
+                val safeLevels = levels.takeIf { it.isNotEmpty() }
+                    ?: FloatArray(PlaybackVisualizerController.BAR_COUNT)
+
+                fun levelForSixteenBar(index: Int): Float {
+                    val firstBand = index * safeLevels.size / 16
+                    val endBand = ((index + 1) * safeLevels.size / 16)
+                        .coerceAtLeast(firstBand + 1)
+                    var sum = 0f
+                    var peak = 0f
+                    var count = 0
+                    for (band in firstBand until endBand) {
+                        val value = safeLevels.getOrElse(band) { 0f }.coerceIn(0f, 1f)
+                        sum += value
+                        if (value > peak) peak = value
+                        count++
+                    }
+                    val average = if (count > 0) sum / count else 0f
+                    return (average * 0.78f + peak * 0.22f).coerceIn(0f, 1f)
+                }
 
                 fun levelAt(position: Float): Float {
                     val scaled = position.coerceIn(0f, 1f) * (safeLevels.size - 1)
@@ -110,8 +129,7 @@ fun FullscreenAudioVisualizerDialog(
 
                 when (visualizerStyle) {
                     "Spectrum" -> {
-                        // A wide, continuous spectrum: more columns than the 16-band
-                        // source, interpolated smoothly from the real playback levels.
+                        // 48 independently measured logarithmic FFT bands, rendered directly.
                         val count = 48
                         val gap = (size.width * 0.006f).coerceIn(1.dp.toPx(), 5.dp.toPx())
                         val barAreaWidth = (size.width - sideInset * 2f).coerceAtLeast(1f)
@@ -149,8 +167,7 @@ fun FullscreenAudioVisualizerDialog(
                     }
 
                     "Circular Spectrum" -> {
-                        // Radial spectrum centered in the screen. The 16 real FFT
-                        // bands are interpolated around the ring to keep the motion fluid.
+                        // 48 independently measured logarithmic FFT bands arranged radially.
                         val center = Offset(size.width / 2f, size.height / 2f)
                         val minDimension = minOf(size.width, size.height)
                         val innerRadius = minDimension * 0.20f
@@ -191,7 +208,8 @@ fun FullscreenAudioVisualizerDialog(
                     }
 
                     else -> {
-                        // Bars (16): preserve the original segmented full-screen design.
+                        // Bars (16): preserve the segmented design while combining each
+                        // three-band group from the shared 48-band spectrum.
                         val count = 16
                         val gap = (size.width * 0.012f).coerceIn(3.dp.toPx(), 10.dp.toPx())
                         val barAreaWidth = (size.width - sideInset * 2f).coerceAtLeast(1f)
@@ -213,7 +231,7 @@ fun FullscreenAudioVisualizerDialog(
                         )
 
                         repeat(count) { index ->
-                            val level = safeLevels.getOrElse(index) { 0f }.coerceIn(0f, 1f)
+                            val level = levelForSixteenBar(index)
                             val litBlocks = (level * maxBlocks)
                                 .toInt()
                                 .coerceIn(0, maxBlocks)
