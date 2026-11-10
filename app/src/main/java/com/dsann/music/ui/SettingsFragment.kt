@@ -677,15 +677,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     private val _visualizerStyle = MutableStateFlow(
-        (prefs.getString("player_visualizer", "Off") ?: "Off")
-            .let { if (it == "Ring") "Oval" else it }
-            .takeIf { it in listOf("Off", "Bars", "Wave", "Oval", "Pulse", "Glow") }
-            ?: "Off"
+        (prefs.getString("player_visualizer", "Off") ?: "Off").let { stored ->
+            when (stored) {
+                "Bars", "Spectrum Bars" -> "Spectrum Bars"
+                "Ring", "Oval", "Circular Spectrum" -> "Circular Spectrum"
+                else -> "Off"
+            }
+        }
     )
     val visualizerStyle: StateFlow<String> = _visualizerStyle.asStateFlow()
     fun setVisualizerStyle(value: String) {
-        val migrated = if (value == "Ring") "Oval" else value
-        val safe = migrated.takeIf { it in listOf("Off", "Bars", "Wave", "Oval", "Pulse", "Glow") } ?: "Off"
+        val safe = value.takeIf { it in listOf("Off", "Spectrum Bars", "Circular Spectrum") } ?: "Off"
         _visualizerStyle.value = safe
         prefs.edit { putString("player_visualizer", safe) }
     }
@@ -1355,8 +1357,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             ?.takeIf { it in listOf("Hairline", "Bold", "Medium", "Waveform") } ?: "Waveform"
         _scrubberColor.value = prefs.getString("scrubber_color", "Accent") ?: "Accent"
         _visualizerStyle.value = (prefs.getString("player_visualizer", "Off") ?: "Off")
-            .let { if (it == "Ring") "Oval" else it }
-            .takeIf { it in listOf("Off", "Bars", "Wave", "Oval", "Pulse", "Glow") } ?: "Off"
+            .let { stored ->
+                when (stored) {
+                    "Bars", "Spectrum Bars" -> "Spectrum Bars"
+                    "Ring", "Oval", "Circular Spectrum" -> "Circular Spectrum"
+                    else -> "Off"
+                }
+            }
         _playerButtonsPill.value = prefs.getBoolean("player_buttons_pill", true)
         _playerButtonStyle.value = when (prefs.getString("player_button_style", "Pill") ?: "Pill") {
             "Rounded" -> "Round"
@@ -3864,10 +3871,10 @@ SettingsGroupCard(listOf(
 
             SettingsGroupCard(listOf {
                 SettingsChoiceRow(
-                    title = "Player animation",
-                    description = "Choose an animation for the player. It follows music playback and never uses your microphone. Turn it off to save battery.",
+                    title = "Player visualizer",
+                    description = "Choose a real-time audio visualizer. Both styles respond to the music's frequency data; analysis runs only while the player visualizer is active.",
                     selected = visualizerStyle,
-                    options = listOf("Off", "Bars", "Wave", "Oval", "Pulse", "Glow"),
+                    options = listOf("Off", "Spectrum Bars", "Circular Spectrum"),
                     onSelected = onVisualizerStyleChange
                 )
             })
