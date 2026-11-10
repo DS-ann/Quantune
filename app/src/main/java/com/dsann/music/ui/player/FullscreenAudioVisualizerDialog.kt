@@ -122,43 +122,78 @@ fun FullscreenAudioVisualizerDialog(
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val count = 16
+                val sideInset = 8.dp.toPx()
                 val gap = size.width * 0.012f
-                val barWidth = ((size.width - gap * (count - 1)) / count)
+                val barAreaWidth = (size.width - sideInset * 2f).coerceAtLeast(1f)
+                val barWidth = ((barAreaWidth - gap * (count - 1)) / count)
                     .coerceAtLeast(1f)
-                // The spectrum baseline is fixed 6 dp above the physical bottom edge.
+
+                // The spectrum baseline stays close to the bottom edge, as before.
                 val baselineY = size.height - 6.dp.toPx()
-                val gradient = Brush.verticalGradient(
+                val blockHeight = 9.dp.toPx()
+                val blockGap = 4.dp.toPx()
+                val blockPitch = blockHeight + blockGap
+                val usableHeight = (baselineY - 28.dp.toPx()).coerceAtLeast(blockHeight)
+                val maxBlocks = ((usableHeight + blockGap) / blockPitch)
+                    .toInt()
+                    .coerceAtLeast(1)
+
+                // Use exactly the lyrics palette: accent at the top, lyric text tone below.
+                val activeGradient = Brush.verticalGradient(
                     colors = listOf(
-                        lyricsAccentColor.copy(alpha = 0.52f),
-                        lyricsAccentColor.copy(alpha = 0.96f),
-                        lyricsTextColor.copy(alpha = 0.92f)
+                        lyricsAccentColor.copy(alpha = 0.72f),
+                        lyricsAccentColor,
+                        lyricsTextColor.copy(alpha = 0.98f)
                     ),
                     startY = 0f,
                     endY = baselineY
                 )
+                val inactiveBlockColor = lyricsAccentColor.copy(alpha = 0.13f)
+                val blockCorner = androidx.compose.ui.geometry.CornerRadius(
+                    x = 2.dp.toPx(),
+                    y = 2.dp.toPx()
+                )
 
                 repeat(count) { index ->
                     val level = levels.getOrElse(index) { 0f }.coerceIn(0f, 1f)
-                    // Keep all 16 bars visible before the first FFT frame arrives.
-                    val barHeight = baselineY * (0.035f + level * 0.88f)
-                    val x = index * (barWidth + gap)
-                    val top = baselineY - barHeight
-                    drawRoundRect(
-                        brush = gradient,
-                        topLeft = androidx.compose.ui.geometry.Offset(x, top),
-                        size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(
-                            x = barWidth / 2f,
-                            y = barWidth / 2f
-                        )
-                    )
+                    val litBlocks = (level * maxBlocks)
+                        .toInt()
+                        .coerceIn(0, maxBlocks)
+                    val x = sideInset + index * (barWidth + gap)
+
+                    // Every column is a stack of independent rectangular segments.
+                    // Unlit segments remain faintly visible to give the spectrum structure.
+                    repeat(maxBlocks) { blockIndex ->
+                        val top = baselineY - blockHeight - blockIndex * blockPitch
+                        if (top >= 0f) {
+                            val blockSize = androidx.compose.ui.geometry.Size(barWidth, blockHeight)
+                            val blockOffset = androidx.compose.ui.geometry.Offset(x, top)
+                            if (blockIndex < litBlocks) {
+                                drawRoundRect(
+                                    brush = activeGradient,
+                                    topLeft = blockOffset,
+                                    size = blockSize,
+                                    cornerRadius = blockCorner
+                                )
+                            } else {
+                                drawRoundRect(
+                                    color = inactiveBlockColor.copy(
+                                        alpha = if (blockIndex % 3 == 0) 0.17f else 0.09f
+                                    ),
+                                    topLeft = blockOffset,
+                                    size = blockSize,
+                                    cornerRadius = blockCorner
+                                )
+                            }
+                        }
+                    }
                 }
 
-                // Shared frequency reference line; bar heights all terminate at this line.
+                // Shared reference line; all columns terminate at this fixed baseline.
                 drawLine(
-                    color = Color.White.copy(alpha = 0.58f),
-                    start = androidx.compose.ui.geometry.Offset(0f, baselineY),
-                    end = androidx.compose.ui.geometry.Offset(size.width, baselineY),
+                    color = lyricsTextColor.copy(alpha = 0.62f),
+                    start = androidx.compose.ui.geometry.Offset(sideInset, baselineY),
+                    end = androidx.compose.ui.geometry.Offset(size.width - sideInset, baselineY),
                     strokeWidth = 1.dp.toPx(),
                     cap = StrokeCap.Butt
                 )
