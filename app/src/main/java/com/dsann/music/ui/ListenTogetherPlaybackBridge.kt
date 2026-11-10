@@ -149,36 +149,38 @@ private suspend fun applyRemotePlayback(
     viewModel: PlayerSharedViewModel
 ) {
     val track = playback.track
-    if (track != null && (playback.action == "change_track" || currentSong?.videoId != track.id)) {
-        val incoming = SongItem(
-            id = (track.id.hashCode().toLong() and 0x7fffffffL) + 1L,
-            title = track.title.ifBlank { "Shared track" },
-            artist = track.artist.ifBlank { "Unknown artist" },
-            albumId = 0L,
-            path = null,
-            duration = track.durationMs.coerceAtLeast(0L),
-            dateAdded = System.currentTimeMillis() / 1000L,
-            data = null
-        ).apply {
-            videoId = track.id
-            thumbnailUrl = track.thumbnail.takeIf { it.startsWith("http") }
-            albumName = track.album
-        }
-        if (currentSong?.videoId != track.id) {
+    if (track != null) {
+        val isDifferentTrack = currentSong?.videoId != track.id
+        if (isDifferentTrack) {
+            val incoming = SongItem(
+                id = (track.id.hashCode().toLong() and 0x7fffffffL) + 1L,
+                title = track.title.ifBlank { "Shared track" },
+                artist = track.artist.ifBlank { "Unknown artist" },
+                albumId = 0L,
+                path = null,
+                duration = track.durationMs.coerceAtLeast(0L),
+                dateAdded = System.currentTimeMillis() / 1000L,
+                data = null
+            ).apply {
+                videoId = track.id
+                thumbnailUrl = track.thumbnail.takeIf { it.startsWith("http") }
+                albumName = track.album
+            }
             viewModel.playSong(incoming)
         }
-        // Stream resolution can take much longer than a fixed delay on mobile data.
-        // Wait for the player to become ready, but keep a bound so a failed stream
-        // cannot block subsequent room-state updates indefinitely.
+
+        // The selected song is published before its stream is resolved. Wait for the
+        // actual player-ready signal rather than guessing how long a slow connection needs.
+        // The timeout still lets later sync messages proceed when a stream cannot load.
         if (!viewModel.isPlaybackReady.value) {
             withTimeoutOrNull(20_000L) {
                 viewModel.isPlaybackReady.first { ready -> ready }
             }
         }
-        if (currentSong?.videoId == track.id && playback.action == "change_track") {
-            // The same video can occupy multiple queue positions. A host may advance to
-            // another occurrence with an identical video ID; restart that occurrence even
-            // though the track metadata itself compares equal.
+
+        if (!isDifferentTrack && playback.action == "change_track") {
+            // The same video can occupy multiple queue positions. Restart that occurrence
+            // at the host's position without unnecessarily resolving the same stream again.
             viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
             viewModel.pauseAudio()
         }
