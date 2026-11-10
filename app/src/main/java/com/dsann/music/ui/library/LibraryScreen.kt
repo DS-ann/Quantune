@@ -1346,6 +1346,7 @@ itemsIndexed(
                 AccountScreen(
                     viewModel = accountViewModel,
                     onBack = { showAccountScreen = false },
+                    bottomContentPadding = bottomContentPadding,
                     onSongClick = { song, queue, index ->
                         exploreViewModel?.playOnlineSongWithQueue(song, queue, index)
                     },

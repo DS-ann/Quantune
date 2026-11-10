@@ -7,6 +7,7 @@ import com.dsann.music.ui.theme.DsmusicButton
 import com.dsann.music.ui.theme.DsmusicOutlinedButton
 import com.dsann.music.ui.theme.DsmusicTextButton
 import com.dsann.music.ui.theme.DsmusicIconButton
+import com.dsann.music.ui.theme.DsmusicPageHeading
 import com.dsann.music.ui.theme.DsmusicFilterChip
 import com.dsann.music.ui.theme.DsmusicSwitchControl
 import androidx.compose.foundation.background
@@ -68,6 +69,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -86,11 +88,11 @@ fun AccountScreen(
     viewModel: AccountViewModel,
     onBack: () -> Unit,
     onSongClick: (OnlineSong, List<OnlineSong>, Int) -> Unit = { _, _, _ -> },
-    onNavigateToSignIn: () -> Unit = {}
+    onNavigateToSignIn: () -> Unit = {},
+    bottomContentPadding: Dp = 176.dp
 ) {
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
@@ -100,17 +102,38 @@ fun AccountScreen(
     }
     
     Scaffold(
-        modifier = Modifier.statusBarsPadding().nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = Modifier.statusBarsPadding(),
         topBar = {
-            TopAppBar(
-                title = { Text("Account Settings", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    DsmusicIconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
-                    }
-                },
-                scrollBehavior = scrollBehavior
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                DsmusicPageHeading(
+                    title = "Account Settings",
+                    subtitle = "Manage your profile and music sync.",
+                    kicker = "YOUR ACCOUNT",
+                    modifier = Modifier.weight(1f)
+                )
+                DsmusicIconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(
+                            DsmusicTheme.colorScheme.surfaceContainerLow,
+                            RoundedCornerShape(14.dp)
+                        ),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "Back",
+                        tint = DsmusicTheme.colorScheme.onSurface
+                    )
+                }
+            }
         }
     ) { padding ->
         Box(modifier = Modifier
@@ -123,7 +146,8 @@ fun AccountScreen(
                 history = history,
                 onSongClick = onSongClick,
                 onClose = onBack,
-                onNavigateToSignIn = onNavigateToSignIn
+                onNavigateToSignIn = onNavigateToSignIn,
+                bottomContentPadding = bottomContentPadding
             )
         }
     }
@@ -137,7 +161,8 @@ fun AccountSettingsSection(
     history: List<OnlineSong> = emptyList(),
     onSongClick: (OnlineSong, List<OnlineSong>, Int) -> Unit = { _, _, _ -> },
     onClose: () -> Unit,
-    onNavigateToSignIn: () -> Unit = {}
+    onNavigateToSignIn: () -> Unit = {},
+    bottomContentPadding: Dp = 176.dp
 ) {
     val context = LocalContext.current
     val isLoggedIn = remember(userProfile) { AccountManager.isLoggedIn(context) }
@@ -168,7 +193,12 @@ fun AccountSettingsSection(
 
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            top = 16.dp,
+            end = 16.dp,
+            bottom = bottomContentPadding + 16.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
@@ -503,25 +533,6 @@ fun AccountSettingsSection(
             }
         }
 
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            if (!isLoggedIn) {
-                DsmusicButton(
-                    onClick = onNavigateToSignIn,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = DsmusicTheme.colorScheme.primary,
-                        contentColor = DsmusicTheme.colorScheme.onPrimary
-                    )
-                ) {
-                    Icon(Icons.AutoMirrored.Rounded.Login, null)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text("Sign In to YouTube Music", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
     }
 
     if (showProfileNameDialog) {

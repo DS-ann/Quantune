@@ -958,6 +958,7 @@ fun ExploreScreen(
                                         AccountScreen(
                                             viewModel = accountVM,
                                             onBack = { isAccountVisible = false },
+                                            bottomContentPadding = bottomContentPadding,
                                             onSongClick = { song, queue, index ->
                                                 viewModel.playOnlineSongWithQueue(
                                                     song,
