@@ -712,13 +712,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         "Gradient (Horizontal)" -> "Gradient (Horizontal)"
         "White" -> "White"
         "UI Matching", "Theme Matching" -> "UI Matching"
-        else -> "Gradient (Vertical)"
+        else -> "Gradient (Horizontal)"
     }
 
     private val _visualizerColorStyle = MutableStateFlow(
         normalizeVisualizerColorStyle(
-            prefs.getString("player_visualizer_color_style", "Gradient (Vertical)")
-                ?: "Gradient (Vertical)"
+            prefs.getString("player_visualizer_color_style", "Gradient (Horizontal)")
+                ?: "Gradient (Horizontal)"
         )
     )
     val visualizerColorStyle: StateFlow<String> = _visualizerColorStyle.asStateFlow()
@@ -1384,7 +1384,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 }
             }
         _visualizerColorStyle.value = normalizeVisualizerColorStyle(
-            prefs.getString("player_visualizer_color_style", "Gradient (Vertical)") ?: "Gradient (Vertical)"
+            prefs.getString("player_visualizer_color_style", "Gradient (Horizontal)") ?: "Gradient (Horizontal)"
         )
         _playerButtonsPill.value = prefs.getBoolean("player_buttons_pill", true)
         _playerButtonStyle.value = when (prefs.getString("player_button_style", "Pill") ?: "Pill") {
