@@ -716,6 +716,7 @@ onNavigateToLibrary = {
                                         )
                                         "library" -> LibraryScreen(
                                             viewModel = playerViewModel,
+                                            bottomContentPadding = exploreBottomContentPadding,
                                             onEditSong = { song ->
                                                 editingSong = song
                                                 currentNavController.navigate("tag_editor")

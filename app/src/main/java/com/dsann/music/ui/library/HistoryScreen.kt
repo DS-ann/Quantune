@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import com.dsann.music.data.innertube.OnlineSong
 import com.dsann.music.data.innertube.SearchItem
 import com.dsann.music.ui.explore.SearchResultItem
@@ -52,6 +53,7 @@ fun HistoryScreen(
     onSongClick: (OnlineSong, List<OnlineSong>, Int) -> Unit,
     onSongMenuClick: (OnlineSong) -> Unit,
     modifier: Modifier = Modifier,
+    bottomContentPadding: Dp = 120.dp,
     showTopBar: Boolean = true
 ) {
     Scaffold(
@@ -129,7 +131,7 @@ fun HistoryScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 120.dp, top = 8.dp)
+                    contentPadding = PaddingValues(bottom = bottomContentPadding, top = 8.dp)
                 ) {
                     itemsIndexed(
                         items = history,

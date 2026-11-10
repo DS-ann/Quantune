@@ -14,6 +14,11 @@ import com.dsann.music.ui.theme.DsmusicFilterChip
 import com.dsann.music.ui.theme.DsmusicSwitchControl
 import android.R.attr.translationY
 import android.content.res.Configuration
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.os.Handler
+import android.os.Looper
 import android.graphics.Color.alpha
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -148,6 +153,7 @@ import com.dsann.music.data.innertube.SearchFilter
 import com.dsann.music.data.innertube.SearchItem
 import com.dsann.music.data.innertube.UserProfile
 import com.dsann.music.model.SongItem
+import com.dsann.music.util.NetworkFailureClassifier
 import com.dsann.music.viewmodel.AccountViewModel
 import com.dsann.music.viewmodel.ExploreViewModel
 import com.dsann.music.viewmodel.PlayerSharedViewModel
@@ -320,6 +326,77 @@ fun ExploreScreen(
     }
 
     val rootTabActive = LocalRootTabActive.current
+    var hasValidatedInternet by remember(context) {
+        mutableStateOf(NetworkFailureClassifier.hasValidatedInternet(context))
+    }
+
+    DisposableEffect(context, rootTabActive, viewModel, isSearchDestination) {
+        if (!rootTabActive) {
+            onDispose { }
+        } else {
+            val connectivityManager = context.getSystemService(
+                android.content.Context.CONNECTIVITY_SERVICE
+            ) as? ConnectivityManager
+            if (connectivityManager == null) {
+                hasValidatedInternet = false
+                onDispose { }
+            } else {
+                val handler = Handler(Looper.getMainLooper())
+                val updateNetworkState = Runnable {
+                    hasValidatedInternet =
+                        NetworkFailureClassifier.hasValidatedInternet(context)
+                }
+                val callback = object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: android.net.Network) {
+                        handler.post(updateNetworkState)
+                    }
+                    override fun onLost(network: android.net.Network) {
+                        handler.post(updateNetworkState)
+                    }
+                    override fun onCapabilitiesChanged(
+                        network: android.net.Network,
+                        networkCapabilities: NetworkCapabilities
+                    ) {
+                        handler.post(updateNetworkState)
+                    }
+                }
+                try {
+                    connectivityManager.registerNetworkCallback(
+                        NetworkRequest.Builder()
+                            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                            .build(),
+                        callback
+                    )
+                    handler.post(updateNetworkState)
+                } catch (error: Exception) {
+                    android.util.Log.w("QuantuneExplore", "Unable to observe network changes", error)
+                }
+                onDispose {
+                    handler.removeCallbacksAndMessages(null)
+                    runCatching { connectivityManager.unregisterNetworkCallback(callback) }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(rootTabActive, hasValidatedInternet, isSearchDestination) {
+        if (!rootTabActive || !hasValidatedInternet) return@LaunchedEffect
+        delay(500L)
+        if (!hasValidatedInternet) return@LaunchedEffect
+
+        val state = viewModel.uiState.value
+        if (isSearchDestination) {
+            if (state.searchOfflineError && state.searchQuery.isNotBlank() && !state.isSearching) {
+                viewModel.search(state.searchQuery)
+            }
+        } else if (
+            !state.isLoadingHome &&
+            !state.isRefreshing &&
+            (state.homeFeedOfflineError || state.homeFeedError != null || state.homeSections.isEmpty())
+        ) {
+            viewModel.refreshHomeFeed()
+        }
+    }
     LaunchedEffect(rootTabActive) {
         if (!rootTabActive) return@LaunchedEffect
         viewModel.playbackTriggerEvent.collect {
@@ -2002,7 +2079,7 @@ fun ExploreScreen(
                                                                     )
                                                                 ) {
 
-                                                                    if (homeFeedOfflineError) {
+                                                                    if (homeFeedOfflineError || !hasValidatedInternet) {
                                                                         item(key = "home-network-retry") {
                                                                             Row(
                                                                                 modifier = Modifier
@@ -2019,12 +2096,12 @@ fun ExploreScreen(
                                                                                 )
                                                                                 Column(modifier = Modifier.weight(1f)) {
                                                                                     Text(
-                                                                                        "Network not available",
+                                                                                        "No network connection",
                                                                                         style = DsmusicTheme.typography.titleSmall,
                                                                                         color = DsmusicTheme.colorScheme.onSurface
                                                                                     )
                                                                                     Text(
-                                                                                        "Showing the feed already loaded. Connect and refresh to get new content.",
+                                                                                        "Explore will reload automatically when your connection is restored.",
                                                                                         style = DsmusicTheme.typography.bodySmall,
                                                                                         color = DsmusicTheme.colorScheme.onSurfaceVariant
                                                                                     )
@@ -2155,7 +2232,8 @@ fun ExploreScreen(
                                                                 }
                                                             }
 
-                                                            isLoadingHome || (isRefreshing && homeSections.isEmpty()) -> {
+                                                            (isLoadingHome || (isRefreshing && homeSections.isEmpty())) &&
+                                                                hasValidatedInternet -> {
                                                                 Box(
                                                                     modifier = Modifier.fillMaxSize(),
                                                                     contentAlignment = Alignment.Center
@@ -2175,10 +2253,12 @@ fun ExploreScreen(
                                                             }
 
                                                             homeFeedError != null && homeSections.isEmpty() -> {
-                                                                if (homeFeedOfflineError) {
+                                                                if (homeFeedOfflineError || !hasValidatedInternet) {
                                                                     com.dsann.music.ui.theme.NoInternetState(
                                                                         modifier = Modifier.fillMaxSize(),
-                                                                        onRetry = { viewModel.refreshHomeFeed() }
+                                                                        onRetry = { viewModel.refreshHomeFeed() },
+                                                                        title = "No network connection",
+                                                                        message = "Explore will reload automatically when your connection is restored."
                                                                     )
                                                                 } else {
                                                                     Box(
@@ -2209,29 +2289,38 @@ fun ExploreScreen(
                                                             }
 
                                                             else -> {
-                                                                Box(
-                                                                    modifier = Modifier.fillMaxSize()
-                                                                        .verticalScroll(rememberScrollState()),
-                                                                    contentAlignment = Alignment.Center
-                                                                ) {
-                                                                    Column(
-                                                                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                                                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                                                if (!hasValidatedInternet) {
+                                                                    com.dsann.music.ui.theme.NoInternetState(
+                                                                        modifier = Modifier.fillMaxSize(),
+                                                                        onRetry = { viewModel.refreshHomeFeed() },
+                                                                        title = "No network connection",
+                                                                        message = "Explore will reload automatically when your connection is restored."
+                                                                    )
+                                                                } else {
+                                                                    Box(
+                                                                        modifier = Modifier.fillMaxSize()
+                                                                            .verticalScroll(rememberScrollState()),
+                                                                        contentAlignment = Alignment.Center
                                                                     ) {
-                                                                        Icon(
-                                                                            imageVector = Icons.Rounded.MusicNote,
-                                                                            contentDescription = null,
-                                                                            modifier = Modifier.size(56.dp),
-                                                                            tint = DsmusicTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                                                        )
-                                                                        Text(
-                                                                            "Nothing to show right now",
-                                                                            style = DsmusicTheme.typography.titleMedium,
-                                                                            color = DsmusicTheme.colorScheme.onSurfaceVariant
-                                                                        )
-                                                                        DsmusicOutlinedButton(onClick = { viewModel.refreshHomeFeed() }) {
-                                                                            Text("Refresh")
+                                                                        Column(
+                                                                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                                                        ) {
+                                                                            Icon(
+                                                                                imageVector = Icons.Rounded.MusicNote,
+                                                                                contentDescription = null,
+                                                                                modifier = Modifier.size(56.dp),
+                                                                                tint = DsmusicTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                                                            )
+                                                                            Text(
+                                                                                "Nothing to show right now",
+                                                                                style = DsmusicTheme.typography.titleMedium,
+                                                                                color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                                                            )
+                                                                            DsmusicOutlinedButton(onClick = { viewModel.refreshHomeFeed() }) {
+                                                                                Text("Refresh")
+                                                                            }
                                                                         }
                                                                     }
                                                                 }

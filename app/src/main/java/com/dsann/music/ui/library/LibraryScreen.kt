@@ -27,6 +27,7 @@ import android.os.Build
 import android.content.ContextWrapper
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -159,6 +160,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -239,7 +241,8 @@ private fun downloadedSongAddedAtSeconds(song: SongItem): Long {
 fun LibraryScreen(
     viewModel: PlayerSharedViewModel,
     onEditSong: (SongItem) -> Unit = {},
-    onNavigateToExplore: () -> Unit = {}
+    onNavigateToExplore: () -> Unit = {},
+    bottomContentPadding: Dp = 176.dp
 ) {
     val context = LocalContext.current
     val rootTabActive = LocalRootTabActive.current
@@ -274,8 +277,8 @@ fun LibraryScreen(
 
     var showAccountScreen by rememberSaveable { mutableStateOf(false) }
     var showHistoryScreen by rememberSaveable { mutableStateOf(false) }
-    var isCacheScreenOpen by rememberSaveable { mutableStateOf(false) }
-    val hideLibraryChrome = activeTab == "Downloaded songs" || isCacheScreenOpen
+    var isLibrarySubpageOpen by rememberSaveable { mutableStateOf(false) }
+    val hideLibraryChrome = activeTab == "Downloaded songs" || isLibrarySubpageOpen
 
     val accountViewModel = remember(fragmentActivity) {
         fragmentActivity?.let { ViewModelProvider(it)[AccountViewModel::class.java] }
@@ -707,7 +710,8 @@ fun LibraryScreen(
                             activeTab = "Downloaded songs"
                             searchQuery = ""
                         },
-                        onCacheScreenChanged = { isCacheScreenOpen = it }
+                        onLibrarySubpageChanged = { isLibrarySubpageOpen = it },
+                        bottomContentPadding = bottomContentPadding
                     )
                     "Podcasts" -> PodcastsTabContent(nestedScrollConnection)
                     "Songs" -> SongsTabContent(nestedScrollConnection, viewModel)
@@ -1242,7 +1246,7 @@ itemsIndexed(
                                                     .weight(0.42f)
                                                     .fillMaxHeight()
                                                     .verticalScroll(rememberScrollState())
-                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    .padding(horizontal = 12.dp, top = 8.dp, bottom = bottomContentPadding),
                                                 horizontalAlignment = Alignment.CenterHorizontally
                                             ) {
                                                 downloadPlaylistHero()
@@ -1261,7 +1265,7 @@ itemsIndexed(
                                                     start = 8.dp,
                                                     top = 12.dp,
                                                     end = 8.dp,
-                                                    bottom = 176.dp
+                                                    bottom = bottomContentPadding
                                                 ),
                                                 verticalArrangement = Arrangement.spacedBy(2.dp)
                                             ) {
@@ -1277,7 +1281,7 @@ itemsIndexed(
                                                 start = 0.dp,
                                                 top = 0.dp,
                                                 end = 0.dp,
-                                                bottom = 176.dp
+                                                bottom = bottomContentPadding
                                             ),
                                             verticalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
@@ -1300,6 +1304,7 @@ itemsIndexed(
                             exploreViewModel?.playOnlineSongWithQueue(song, queue, index)
                         },
                         onSongMenuClick = { song -> selectedSongForMenu = song },
+                        bottomContentPadding = bottomContentPadding,
                         showTopBar = false
                     )
                     "" -> PlaylistsTabContent(
@@ -1312,7 +1317,8 @@ itemsIndexed(
                             activeTab = "Downloaded songs"
                             searchQuery = ""
                         },
-                        onCacheScreenChanged = { isCacheScreenOpen = it }
+                        onLibrarySubpageChanged = { isLibrarySubpageOpen = it },
+                        bottomContentPadding = bottomContentPadding
                     )
                 }
                 }
@@ -1381,7 +1387,8 @@ itemsIndexed(
                 },
                 onSongMenuClick = { song ->
                     selectedSongForMenu = song
-                }
+                },
+                bottomContentPadding = bottomContentPadding
             )
         }
 
@@ -2180,11 +2187,13 @@ private fun PlaylistsTabContent(
     isPlayerBackActive: Boolean = false,
     onCachedSongLongClick: (CachedSongEntry) -> Unit,
     onOpenDownloads: () -> Unit,
-    onCacheScreenChanged: (Boolean) -> Unit = {}
+    onLibrarySubpageChanged: (Boolean) -> Unit = {},
+    bottomContentPadding: Dp = 176.dp
 ) {
     val context = LocalContext.current
     val lyricsCache = remember(context) { LyricsCacheManager(context.applicationContext) }
     val scope = rememberCoroutineScope()
+    val pageTransitionDurationMillis = LocalPageTransitionDurationMillis.current
     val activity = remember(context) { getActivityFromContext(context) as? androidx.fragment.app.FragmentActivity }
     val accountViewModel = remember(activity) {
         activity?.let { ViewModelProvider(it)[AccountViewModel::class.java] }
@@ -2199,13 +2208,18 @@ private fun PlaylistsTabContent(
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var selectedLocalPlaylist by remember { mutableStateOf<PlaylistEntity?>(null) }
     var showCachePlaylist by remember { mutableStateOf(false) }
-    LaunchedEffect(showCachePlaylist) {
-        onCacheScreenChanged(showCachePlaylist)
+    LaunchedEffect(showCachePlaylist, selectedLocalPlaylist?.id) {
+        val isSubpageOpen = showCachePlaylist || selectedLocalPlaylist != null
+        onLibrarySubpageChanged(isSubpageOpen)
+        if (isSubpageOpen) (activity as? MainActivity)?.showBottomNavWithAnimation()
     }
     val playlistGridState = rememberLazyGridState()
 
-    BackHandler(enabled = showCachePlaylist && !isPlayerBackActive) {
-        showCachePlaylist = false
+    BackHandler(
+        enabled = (showCachePlaylist || selectedLocalPlaylist != null) && !isPlayerBackActive
+    ) {
+        if (selectedLocalPlaylist != null) selectedLocalPlaylist = null
+        else showCachePlaylist = false
     }
 
     LaunchedEffect(Unit) { accountViewModel?.refreshAll() }
@@ -2282,17 +2296,28 @@ private fun PlaylistsTabContent(
         )
     }
 
-    selectedLocalPlaylist?.let { selected ->
-        val playlist = localPlaylists.firstOrNull { it.id == selected.id } ?: selected
-        LocalPlaylistDetailsScreen(
-            playlist = playlist,
-            viewModel = viewModel,
-            accountViewModel = accountViewModel,
-            onDismiss = { selectedLocalPlaylist = null }
-        )
-    }
-
-    if (showCachePlaylist) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedContent(
+            targetState = showCachePlaylist,
+            modifier = Modifier.fillMaxSize(),
+            transitionSpec = {
+                val direction = if (targetState) 1 else -1
+                slideInHorizontally(
+                    animationSpec = androidx.compose.animation.core.tween(
+                        durationMillis = pageTransitionDurationMillis,
+                        easing = androidx.compose.animation.core.FastOutSlowInEasing
+                    )
+                ) { width -> direction * width } togetherWith
+                    slideOutHorizontally(
+                        animationSpec = androidx.compose.animation.core.tween(
+                            durationMillis = pageTransitionDurationMillis,
+                            easing = androidx.compose.animation.core.FastOutSlowInEasing
+                        )
+                    ) { width -> -direction * width }
+            },
+            label = "Library Cache Page Slide"
+        ) { showCachePage ->
+    if (showCachePage) {
         // Keep Cache inside the root Library content instead of a fullscreen Dialog.
         // Dialog windows sit above MainActivity's persistent navigation and mini-player overlays.
         Column(
@@ -2307,6 +2332,7 @@ private fun PlaylistsTabContent(
                 lyricsCache = lyricsCache,
                 onSongLongClick = onCachedSongLongClick,
                 onBack = { showCachePlaylist = false },
+                bottomContentPadding = bottomContentPadding,
                 modifier = Modifier.weight(1f).fillMaxWidth()
             )
         }
@@ -2336,7 +2362,7 @@ private fun PlaylistsTabContent(
             LazyVerticalGrid(
                 state = playlistGridState,
                 columns = if (showAsList) GridCells.Fixed(1) else GridCells.Adaptive(minSize = 152.dp),
-                contentPadding = PaddingValues(bottom = 176.dp),
+                contentPadding = PaddingValues(bottom = bottomContentPadding),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
@@ -2443,6 +2469,39 @@ private fun PlaylistsTabContent(
             }
         }
     }
+        }
+        AnimatedContent(
+            targetState = selectedLocalPlaylist,
+            modifier = Modifier.fillMaxSize(),
+            transitionSpec = {
+                val direction = if (targetState != null) 1 else -1
+                slideInHorizontally(
+                    animationSpec = androidx.compose.animation.core.tween(
+                        durationMillis = pageTransitionDurationMillis,
+                        easing = androidx.compose.animation.core.FastOutSlowInEasing
+                    )
+                ) { width -> direction * width } togetherWith
+                    slideOutHorizontally(
+                        animationSpec = androidx.compose.animation.core.tween(
+                            durationMillis = pageTransitionDurationMillis,
+                            easing = androidx.compose.animation.core.FastOutSlowInEasing
+                        )
+                    ) { width -> -direction * width }
+            },
+            label = "Library Local Playlist Page Slide"
+        ) { selectedPlaylist ->
+            if (selectedPlaylist != null) {
+                val playlist = localPlaylists.firstOrNull { it.id == selectedPlaylist.id } ?: selectedPlaylist
+                LocalPlaylistDetailsScreen(
+                    playlist = playlist,
+                    viewModel = viewModel,
+                    accountViewModel = accountViewModel,
+                    bottomContentPadding = bottomContentPadding,
+                    onDismiss = { selectedLocalPlaylist = null }
+                )
+            }
+        }
+    }
 }
 
 
@@ -2456,11 +2515,12 @@ private fun LocalPlaylistSongsList(
     selectedSongKeys: Set<String> = emptySet(),
     onToggleSelection: (SongItem) -> Unit = {},
     emptyMessage: String = "This playlist is empty",
+    bottomContentPadding: Dp = 40.dp,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(top = 14.dp, bottom = 40.dp)
+        contentPadding = PaddingValues(top = 14.dp, bottom = bottomContentPadding)
     ) {
         item(key = "playlist-songs-heading") {
             Text(
@@ -2636,6 +2696,8 @@ private fun LocalPlaylistDetailsScreen(
     playlist: PlaylistEntity,
     viewModel: PlayerSharedViewModel,
     accountViewModel: AccountViewModel?,
+    bottomContentPadding: Dp = 176.dp,
+    modifier: Modifier = Modifier,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -3009,15 +3071,11 @@ private fun LocalPlaylistDetailsScreen(
         }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(DsmusicTheme.colorScheme.background)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(DsmusicTheme.colorScheme.background)
-        ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3042,7 +3100,7 @@ private fun LocalPlaylistDetailsScreen(
                             .weight(0.42f)
                             .fillMaxHeight()
                             .verticalScroll(rememberScrollState())
-                            .padding(start = 16.dp, top = 10.dp, end = 14.dp, bottom = 18.dp),
+                            .padding(start = 16.dp, top = 10.dp, end = 14.dp, bottom = bottomContentPadding),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Row(
@@ -3151,6 +3209,7 @@ private fun LocalPlaylistDetailsScreen(
                                 }
                             },
                             emptyMessage = if (songs.isEmpty()) "This playlist is empty" else "No matching songs",
+                            bottomContentPadding = bottomContentPadding,
                             modifier = Modifier.weight(1f).fillMaxWidth()
                         )
                     }
@@ -3207,7 +3266,7 @@ private fun LocalPlaylistDetailsScreen(
                     }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 40.dp)
+                        contentPadding = PaddingValues(bottom = bottomContentPadding)
                     ) {
                         item(key = "playlist-details-header") {
                             LibraryGradientPlaylistHero(
@@ -3297,10 +3356,7 @@ private fun LocalPlaylistDetailsScreen(
                 }
             }
         }
-    }
 }
-
-
 
 @Composable
 private fun OnlinePlaylistCard(
@@ -5042,6 +5098,7 @@ private fun StreamCacheTabContent(
     lyricsCache: LyricsCacheManager,
     onSongLongClick: (CachedSongEntry) -> Unit,
     onBack: () -> Unit,
+    bottomContentPadding: Dp = 176.dp,
     modifier: Modifier = Modifier
 ) {
     var cacheEntries by remember { mutableStateOf(emptyList<CachedSongEntry>()) }
@@ -5544,7 +5601,7 @@ if (filteredCacheEntries.isEmpty()) {
                         .weight(0.42f)
                         .fillMaxHeight()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 12.dp, top = 8.dp, bottom = bottomContentPadding),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     cachePlaylistHero()
@@ -5557,7 +5614,7 @@ if (filteredCacheEntries.isEmpty()) {
                 )
                 LazyColumn(
                     modifier = Modifier.weight(0.58f).fillMaxHeight(),
-                    contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 176.dp),
+                    contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = bottomContentPadding),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     item(key = "cache-playlist-songs-heading") {
@@ -5574,7 +5631,7 @@ if (filteredCacheEntries.isEmpty()) {
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f),
-                contentPadding = PaddingValues(start = 0.dp, top = 16.dp, end = 0.dp, bottom = 176.dp),
+                contentPadding = PaddingValues(start = 0.dp, top = 16.dp, end = 0.dp, bottom = bottomContentPadding),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 cacheListContent()
