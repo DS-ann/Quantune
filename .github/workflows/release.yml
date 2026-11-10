@@ -163,11 +163,24 @@ jobs:
               printf '%s\n\n' "$RELEASE_NOTES"
             else
               printf '%s\n' \
-                '### 🐞 Bug Fixes' \
-                'Fixes for reported issues across the app, alongside general stability and reliability improvements.' \
+                '### 🎚️ A New Full-Screen Visualizer Experience' \
+                'Explore three immersive, audio-reactive visualizer styles from the Full Screen Player:' \
                 '' \
-                '### 🔐 Login Improvements' \
-                'Resolved login-related problems and improved sign-in reliability and account access.'
+                '- **Bars (16)** — the classic segmented 16-bar visualizer.' \
+                '- **Spectrum** — a flowing 48-column frequency display.' \
+                '- **Circular Spectrum** — a radial, audio-reactive spectrum.' \
+                '' \
+                'Choose your preferred style in **Settings → Customize → Visualizer**. Open the visualizer from the Full Screen Player whenever you want to see it.' \
+                '' \
+                '### ⚡ Smarter Performance' \
+                '- Audio FFT capture starts only when the dedicated visualizer screen opens and is released when it closes.' \
+                '- The player interface and shared artwork rendering are suspended behind the visualizer, then restored when you return.' \
+                '- Music playback continues uninterrupted while the visualizer is open.' \
+                '' \
+                '### 🛠️ Fixes & Refinements' \
+                '- Addressed reported UI and playback-screen issues.' \
+                '- Refined rendering and lifecycle handling to reduce unnecessary background work.' \
+                '- Included additional stability and reliability fixes across the app.'
               printf '\n'
             fi
             printf '## Choose your APK\n\n'
