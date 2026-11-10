@@ -1,5 +1,6 @@
 package com.dsann.music
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.Intent
@@ -17,6 +18,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.system.exitProcess
 
 internal data class DiagnosticReport(
@@ -125,10 +127,36 @@ internal object CrashDiagnostics {
     }
 
     private fun startAnrWatchdog(application: Application) {
-        val mainHandler = Handler(Looper.getMainLooper())
-        // Handler.postDelayed is based on uptimeMillis. Use the same clock so deep sleep
-        // does not count toward the ANR timeout or create a false report on wake.
+        // An asynchronous message bypasses synchronization barriers in the main
+        // MessageQueue, so animation/frame barriers cannot make a healthy UI look stuck.
+        val mainHandler = Handler.createAsync(Looper.getMainLooper())
+        val startedActivities = AtomicInteger(0)
+        // Handler.postDelayed uses uptimeMillis. Use the same clock for the heartbeat.
         val lastMainResponse = java.util.concurrent.atomic.AtomicLong(SystemClock.uptimeMillis())
+
+        // Android may suspend/freeze a cached background process. A heartbeat gap while
+        // no Quantune Activity is visible is not a user-facing main-thread ANR.
+        application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) {
+                startedActivities.incrementAndGet()
+                // Give the UI a fresh response window when it becomes visible again.
+                lastMainResponse.set(SystemClock.uptimeMillis())
+            }
+
+            override fun onActivityStopped(activity: Activity) {
+                val remaining = startedActivities.decrementAndGet()
+                if (remaining <= 0) {
+                    startedActivities.set(0)
+                    lastMainResponse.set(SystemClock.uptimeMillis())
+                }
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: android.os.Bundle?) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: android.os.Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
 
         val heartbeat = object : Runnable {
             override fun run() {
@@ -147,6 +175,12 @@ internal object CrashDiagnostics {
                     break
                 }
 
+                // Reset the baseline while backgrounded. Cached/frozen time must not
+                // accumulate into a false ANR when Android schedules the process again.
+                if (startedActivities.get() <= 0) {
+                    lastMainResponse.set(SystemClock.uptimeMillis())
+                    continue
+                }
                 if (hasPendingReport(application)) continue
 
                 val now = SystemClock.uptimeMillis()
@@ -161,16 +195,17 @@ internal object CrashDiagnostics {
                     val report = buildReport(
                         context = application,
                         type = "ANR — APP NOT RESPONDING",
-                        summary = "The main thread did not process a heartbeat for approximately $blockedForMs ms.",
+                        summary = "The main thread did not process an asynchronous heartbeat for approximately $blockedForMs ms while a Quantune activity was visible.",
                         threadName = mainThread?.name ?: "main",
                         body = stackDump
                     )
                     persistReport(application, report)
 
-                    // This is queued on the main looper. If the app is genuinely stuck,
-                    // it runs only after the main thread responds again. If Android kills
-                    // the process first, MainActivity opens the saved report next launch.
+                    // Show the report only if Quantune is still visible when the main
+                    // looper handles this callback. Otherwise MainActivity routes to it
+                    // on the user's next launch.
                     mainHandler.post {
+                        if (startedActivities.get() <= 0) return@post
                         try {
                             application.startActivity(
                                 Intent(application, CrashReportActivity::class.java).apply {
