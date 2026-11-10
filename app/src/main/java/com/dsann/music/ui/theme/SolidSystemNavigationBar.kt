@@ -3,7 +3,6 @@ package com.dsann.music.ui.theme
 import android.app.Activity
 import android.graphics.Color
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.AlignmentLine
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
