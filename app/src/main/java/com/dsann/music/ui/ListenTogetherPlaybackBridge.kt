@@ -198,16 +198,15 @@ private suspend fun applyRemotePlayback(
 
     when (playback.action) {
         "play", "sync_state" -> {
-            if (playback.positionMs > 0L) {
-                val current = viewModel.currentPosition.value.toLong()
-                if (abs(current - playback.positionMs) > 2_500L) {
-                    viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
-                }
+            val current = viewModel.currentPosition.value.toLong()
+            if (abs(current - playback.positionMs) > 1_500L) {
+                viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
             }
             if (playback.isPlaying) viewModel.playAudio() else viewModel.pauseAudio()
         }
         "pause" -> {
-            if (playback.positionMs > 0L) {
+            val current = viewModel.currentPosition.value.toLong()
+            if (abs(current - playback.positionMs) > 450L) {
                 viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
             }
             viewModel.pauseAudio()
