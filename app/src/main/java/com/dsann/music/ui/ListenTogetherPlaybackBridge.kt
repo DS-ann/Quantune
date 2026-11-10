@@ -12,6 +12,8 @@ import com.dsann.music.data.collaboration.SharedTrack
 import com.dsann.music.model.SongItem
 import com.dsann.music.viewmodel.PlayerSharedViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 
 @Composable
@@ -164,8 +166,16 @@ private suspend fun applyRemotePlayback(
         }
         if (currentSong?.videoId != track.id) {
             viewModel.playSong(incoming)
-            delay(900L)
-        } else if (playback.action == "change_track") {
+        }
+        // Stream resolution can take much longer than a fixed delay on mobile data.
+        // Wait for the player to become ready, but keep a bound so a failed stream
+        // cannot block subsequent room-state updates indefinitely.
+        if (!viewModel.isPlaybackReady.value) {
+            withTimeoutOrNull(20_000L) {
+                viewModel.isPlaybackReady.first { ready -> ready }
+            }
+        }
+        if (currentSong?.videoId == track.id && playback.action == "change_track") {
             // The same video can occupy multiple queue positions. A host may advance to
             // another occurrence with an identical video ID; restart that occurrence even
             // though the track metadata itself compares equal.
