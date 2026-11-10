@@ -1246,7 +1246,7 @@ itemsIndexed(
                                                     .weight(0.42f)
                                                     .fillMaxHeight()
                                                     .verticalScroll(rememberScrollState())
-                                                    .padding(horizontal = 12.dp, top = 8.dp, bottom = bottomContentPadding),
+                                                    .padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = bottomContentPadding),
                                                 horizontalAlignment = Alignment.CenterHorizontally
                                             ) {
                                                 downloadPlaylistHero()
@@ -5601,7 +5601,7 @@ if (filteredCacheEntries.isEmpty()) {
                         .weight(0.42f)
                         .fillMaxHeight()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp, top = 8.dp, bottom = bottomContentPadding),
+                        .padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = bottomContentPadding),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     cachePlaylistHero()
