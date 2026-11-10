@@ -563,10 +563,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private val availablePlayerButtons = listOf(
         "lyrics", "video", "queue", "share", "download", "like", "dislike",
-        "sleep", "shuffle", "listen_together", "repeat"
+        "sleep", "shuffle", "listen_together", "repeat", "visualizer"
     )
     private val defaultPlayerButtons = listOf(
-        "lyrics", "video", "queue", "share", "download", "listen_together", "repeat"
+        "lyrics", "video", "queue", "share", "download", "listen_together", "repeat", "visualizer"
     )
     private fun readPlayerButtons(): List<String> {
         val stored = prefs.getString("player_buttons", null)
@@ -577,13 +577,19 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             val repeatIndex = merged.indexOf("repeat").takeIf { it >= 0 } ?: merged.size
             merged.add(repeatIndex, "listen_together")
         }
-        return merged.take(7)
+        return merged.take(8)
             .let { safe -> if (safe.size >= 3) safe else defaultPlayerButtons }
     }
     private val _playerButtons = MutableStateFlow(readPlayerButtons())
     val playerButtons: StateFlow<List<String>> = _playerButtons.asStateFlow()
     fun setPlayerButtons(buttons: List<String>) {
-        val safe = buttons.filter { it in availablePlayerButtons }.distinct().take(7)
+        val filtered = buttons.filter { it in availablePlayerButtons }.distinct()
+        val withoutVisualizer = filtered.filterNot { it == "visualizer" }.take(7)
+        val visualizerIndex = filtered.indexOf("visualizer")
+            .takeIf { it >= 0 }?.coerceAtMost(withoutVisualizer.size) ?: withoutVisualizer.size
+        val safe = withoutVisualizer.toMutableList().apply {
+            add(visualizerIndex, "visualizer")
+        }
         if (safe.size < 3) return
         _playerButtons.value = safe
         prefs.edit { putString("player_buttons", safe.joinToString(",")) }
@@ -695,14 +701,23 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         prefs.edit { putString("player_visualizer", safe) }
     }
 
+    private fun normalizeVisualizerColorStyle(value: String): String = when (value) {
+        "Gradient", "Gradient (Vertical)" -> "Gradient (Vertical)"
+        "Gradient (Horizontal)" -> "Gradient (Horizontal)"
+        "White" -> "White"
+        "UI Matching", "Theme Matching" -> "UI Matching"
+        else -> "Gradient (Vertical)"
+    }
+
     private val _visualizerColorStyle = MutableStateFlow(
-        (prefs.getString("player_visualizer_color_style", "Gradient") ?: "Gradient")
-            .takeIf { it in listOf("Gradient", "UI Matching", "Theme Matching") } ?: "Gradient"
+        normalizeVisualizerColorStyle(
+            prefs.getString("player_visualizer_color_style", "Gradient (Vertical)")
+                ?: "Gradient (Vertical)"
+        )
     )
     val visualizerColorStyle: StateFlow<String> = _visualizerColorStyle.asStateFlow()
     fun setVisualizerColorStyle(value: String) {
-        val safe = value.takeIf { it in listOf("Gradient", "UI Matching", "Theme Matching") }
-            ?: "Gradient"
+        val safe = normalizeVisualizerColorStyle(value)
         _visualizerColorStyle.value = safe
         prefs.edit { putString("player_visualizer_color_style", safe) }
     }
@@ -1362,8 +1377,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     else -> "Bars (16)"
                 }
             }
-        _visualizerColorStyle.value = (prefs.getString("player_visualizer_color_style", "Gradient") ?: "Gradient")
-            .takeIf { it in listOf("Gradient", "UI Matching", "Theme Matching") } ?: "Gradient"
+        _visualizerColorStyle.value = normalizeVisualizerColorStyle(
+            prefs.getString("player_visualizer_color_style", "Gradient (Vertical)") ?: "Gradient (Vertical)"
+        )
         _playerButtonsPill.value = prefs.getBoolean("player_buttons_pill", true)
         _playerButtonStyle.value = when (prefs.getString("player_button_style", "Pill") ?: "Pill") {
             "Rounded" -> "Round"
@@ -1799,7 +1815,6 @@ fun SettingsScreenContent(
     val playerTimes by viewModel.playerTimes.collectAsStateWithLifecycle()
     val scrubberStyle by viewModel.scrubberStyle.collectAsStateWithLifecycle()
     val scrubberColor by viewModel.scrubberColor.collectAsStateWithLifecycle()
-    val visualizerColorStyle by viewModel.visualizerColorStyle.collectAsStateWithLifecycle()
     val playerButtonStyle by viewModel.playerButtonStyle.collectAsStateWithLifecycle()
     val scrubberThumbStyle by viewModel.scrubberThumbStyle.collectAsStateWithLifecycle()
     val lyricsTextSize by viewModel.lyricsTextSize.collectAsStateWithLifecycle()
@@ -2197,8 +2212,6 @@ fun SettingsScreenContent(
                 onScrubberStyleChange = { viewModel.setScrubberStyle(it) },
                 scrubberColor = scrubberColor,
                 onScrubberColorChange = { viewModel.setScrubberColor(it) },
-                visualizerColorStyle = visualizerColorStyle,
-                onVisualizerColorStyleChange = { viewModel.setVisualizerColorStyle(it) },
                 playerButtonStyle = playerButtonStyle,
                 onPlayerButtonStyleChange = { viewModel.setPlayerButtonStyle(it) },
                 scrubberThumbStyle = scrubberThumbStyle,
@@ -3554,8 +3567,6 @@ private fun AppearanceScreen(
     onScrubberStyleChange: (String) -> Unit,
     scrubberColor: String,
     onScrubberColorChange: (String) -> Unit,
-    visualizerColorStyle: String,
-    onVisualizerColorStyleChange: (String) -> Unit,
     playerButtonStyle: String,
     onPlayerButtonStyleChange: (String) -> Unit,
     scrubberThumbStyle: String,
@@ -3855,18 +3866,6 @@ SettingsGroupCard(listOf(
         )
     }
 ))
-            }
-
-            SettingsAccordionSection("Visualizer") {
-                SettingsGroupCard(listOf {
-                    SettingsChoiceRow(
-                        title = "Visualizer colour",
-                        description = "Choose the visualizer colours. Change Bar, Spectrum or Ring directly from the visualizer screen.",
-                        selected = visualizerColorStyle,
-                        options = listOf("Gradient", "UI Matching", "Theme Matching"),
-                        onSelected = onVisualizerColorStyleChange
-                    )
-                })
             }
 
             SettingsAccordionSection("Notification") {
@@ -4382,7 +4381,7 @@ private fun PlayerButtonsSettings(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                "Choose 3 to 7 actions and arrange their order in the player.",
+                "Choose 3 to 8 actions and arrange their order. Visualizer is always included; move it to change its position.",
                 style = DsmusicTheme.typography.bodySmall,
                 color = DsmusicTheme.colorScheme.onSurfaceVariant
             )
@@ -4401,8 +4400,9 @@ private fun PlayerButtonsSettings(
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     com.dsann.music.ui.theme.Checkbox(
                         checked = true,
+                        enabled = key != "visualizer" && orderedSelected.size > 3,
                         onCheckedChange = { enabled ->
-                            if (!enabled && orderedSelected.size > 3) {
+                            if (!enabled && key != "visualizer" && orderedSelected.size > 3) {
                                 onSelectionChanged(orderedSelected - key)
                             }
                         }
@@ -4432,9 +4432,9 @@ private fun PlayerButtonsSettings(
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         com.dsann.music.ui.theme.Checkbox(
                             checked = false,
-                            enabled = orderedSelected.size < 7,
+                            enabled = orderedSelected.size < 8,
                             onCheckedChange = { enabled ->
-                                if (enabled && orderedSelected.size < 7) {
+                                if (enabled && orderedSelected.size < 8) {
                                     onSelectionChanged(orderedSelected + key)
                                 }
                             }
@@ -4450,13 +4450,13 @@ private fun PlayerButtonsSettings(
                 }
             }
             Text(
-                "${selected.size}/7 selected",
+                "${selected.size}/8 selected",
                 color = DsmusicTheme.colorScheme.primary,
                 style = DsmusicTheme.typography.labelSmall
             )
             DsmusicTextButton(onClick = {
                 onSelectionChanged(listOf(
-                    "lyrics", "video", "queue", "share", "download", "listen_together", "repeat"
+                    "lyrics", "video", "queue", "share", "download", "listen_together", "repeat", "visualizer"
                 ))
             }) { Text("Restore default buttons") }
         }
