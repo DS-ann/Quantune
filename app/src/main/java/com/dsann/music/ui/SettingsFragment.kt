@@ -858,8 +858,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         "mini_player_control_shape", "mini_player_control_icons", "mini_player_progress",
         "player_layout", "player_artwork_scale", "player_buttons_pill", "player_buttons", "session_buttons", "player_title_align", "player_title_size",
         "player_title_weight", "player_title_scroll", "player_times", "scrubber_style",
-        "scrubber_color", "player_visualizer", "player_button_style", "scrubber_thickness",
-        "scrubber_thumb_style", "visualizer_color", "lyrics_text_size", "lyrics_alignment",
         "lyrics_font_family", "lyrics_color_style", "show_synced_lyrics_in_player",
         "ui_density", "ui_font_family", "ui_font_scale", "tapered_song_dividers",
         "ui_font_weight", "ui_letter_spacing", "nav_label_mode", "hide_nav_labels",
