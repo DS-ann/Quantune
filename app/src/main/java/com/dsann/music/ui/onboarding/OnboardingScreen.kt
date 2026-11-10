@@ -189,6 +189,13 @@ import com.dsann.music.applyDsmusicNightMode
             )
         }
 
+        val permissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestMultiplePermissions()
+        ) {
+            // Do not trust the result map alone; re-read the platform permission state.
+            refreshPermissionState()
+        }
+
         fun requestMissingPermissions(requests: List<Pair<String, String>>) {
             val missing = requests.filter { (permission, _) ->
                 ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
@@ -209,13 +216,6 @@ import com.dsann.music.applyDsmusicNightMode
                 missing.forEach { (_, key) -> putBoolean(key, true) }
             }
             permissionLauncher.launch(missing.map { it.first }.toTypedArray())
-        }
-
-        val permissionLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestMultiplePermissions()
-        ) {
-            // Do not trust the result map alone; re-read the platform permission state.
-            refreshPermissionState()
         }
 
         LaunchedEffect(Unit) {
