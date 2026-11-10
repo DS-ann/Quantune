@@ -171,7 +171,7 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
     }
 
     LaunchedEffect(joinRequests.map { it.userId }) {
-        if (joinRequests.isNotEmpty()) showJoinRequestDialog = true
+        showJoinRequestDialog = joinRequests.isNotEmpty()
     }
 
     LaunchedEffect(networkMode, canStartSession, localNetworkPermissionGranted) {
@@ -539,8 +539,6 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                             label = { Text("WebSocket server") },
                             placeholder = { Text("wss://server.example/ws") }
                         )
-                        Text(
-                        )
                     }
                 }
 
@@ -675,10 +673,9 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
         Spacer(Modifier.height(156.dp))
     }
 
-    if (showJoinRequestDialog) {
-        val request = joinRequests.firstOrNull()
-        if (request != null) {
-            Dialog(onDismissRequest = { showJoinRequestDialog = false }) {
+    val activeJoinRequest = joinRequests.firstOrNull()
+    if (showJoinRequestDialog && activeJoinRequest != null) {
+        Dialog(onDismissRequest = { showJoinRequestDialog = false }) {
                 DsmusicCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(26.dp)
@@ -709,7 +706,7 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                             letterSpacing = 1.sp
                         )
                         Text(
-                            request.username,
+                            activeJoinRequest.username,
                             style = DsmusicTheme.typography.titleLarge,
                             color = DsmusicTheme.colorScheme.onSurface
                         )
@@ -727,7 +724,7 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                         }
                         DsmusicButton(
                             onClick = {
-                                client.approveJoin(request.userId)
+                                client.approveJoin(activeJoinRequest.userId)
                                 showJoinRequestDialog = false
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -739,8 +736,6 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                     }
                 }
             }
-        } else {
-            showJoinRequestDialog = false
         }
     }
 }
