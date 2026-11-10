@@ -1103,12 +1103,14 @@ class AudioPlaybackService : MediaSessionService() {
                     playbackRecoveryStage = 1
                     forceWebRemixOnNextResolveVideoId = videoId
                     Log.w(TAG, "Playback recovery 1/2: retrying $videoId with a fresh WEB_REMIX URL")
-                    showPlaybackFailure(error, action = "trying alternate stream (1/2)")
+                    // This is an automatic recovery, not a final playback failure.
+                    // Keep the user informed without presenting a recoverable URL rejection as an error.
+                    showPlaybackRecoveryStatus(stage = 1)
                 } else {
                     playbackRecoveryStage = 2
                     forceCompatibleFallbackOnNextResolveVideoId = videoId
                     Log.w(TAG, "Playback recovery 2/2: retrying $videoId with an AAC-compatible stream")
-                    showPlaybackFailure(error, action = "trying compatible stream (2/2)")
+                    showPlaybackRecoveryStatus(stage = 2)
                 }
 
                 val resumePosition = getStablePlaybackPositionMs()
@@ -3106,6 +3108,15 @@ class AudioPlaybackService : MediaSessionService() {
             "IllegalArgumentException" -> "Invalid playback source ($type)"
             else -> type
         }
+    }
+
+    private fun showPlaybackRecoveryStatus(stage: Int) {
+        val message = if (stage <= 1) {
+            "Reconnecting to the audio stream…"
+        } else {
+            "Trying a compatible audio stream…"
+        }
+        com.dsann.music.ui.SnackbarController.showMessage(message)
     }
 
     private fun showPlaybackFailure(

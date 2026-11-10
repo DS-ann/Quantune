@@ -34,7 +34,9 @@ object YouTubeMusic {
     )
     private val activeStreamRequests = ConcurrentHashMap<String, ActiveStreamRequest>()
     private val streamSelectionGeneration = AtomicLong(0L)
-    private const val CACHE_TTL = 6 * 60 * 60 * 1000L // Standard 6 Hour TTL
+    // Signed YouTube URLs may expire earlier than a long-lived process cache assumes.
+    // Refresh well before expiry; NewPipe additionally honours the URL's explicit expire= value.
+    private const val CACHE_TTL = 15L * 60L * 1000L
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -357,7 +359,18 @@ object YouTubeMusic {
                     if (!bestUrl.isNullOrEmpty()) {
                         // Commit successfully resolved URL to memory cache
                         if (streamSelectionGeneration.get() == requestGeneration) {
-                            streamUrlCache[id] = bestUrl to (System.currentTimeMillis() + CACHE_TTL)
+                            val cachedAtMs = System.currentTimeMillis()
+                            val signedExpiryMs = runCatching {
+                                android.net.Uri.parse(bestUrl).getQueryParameter("expire")
+                                    ?.toLongOrNull()?.times(1000L)
+                            }.getOrNull()
+                            val conservativeExpiryMs = cachedAtMs + CACHE_TTL
+                            val expiresAtMs = signedExpiryMs?.let {
+                                minOf(conservativeExpiryMs, it - 60_000L)
+                            } ?: conservativeExpiryMs
+                            if (expiresAtMs > cachedAtMs) {
+                                streamUrlCache[id] = bestUrl to expiresAtMs
+                            }
                         }
                         Result.success(bestUrl)
                     } else {

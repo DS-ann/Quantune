@@ -1,6 +1,7 @@
 package com.dsann.music.data.innertube
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import android.util.LruCache
 import kotlinx.coroutines.*
@@ -49,10 +50,18 @@ object NewPipeStreamExtractor {
     @Volatile private var appContext: Context? = null
 
     // === Multi-Level Caching ===
-    // Tier 1: Fastest. Just the URL.
-    private val streamUrlCache = LruCache<String, String>(500)
-    typealias CachedStreamInfo = StreamInfo
-    // Tier 2: Slowest to fetch, but fast to re-parse.
+    // YouTube stream URLs are signed and expire. Keeping URL or StreamInfo objects indefinitely
+    // makes the first play after a long idle period reuse an expired URL, forcing error recovery.
+    private const val STREAM_URL_CACHE_TTL_MS = 15L * 60L * 1000L
+    private const val STREAM_INFO_CACHE_TTL_MS = 15L * 60L * 1000L
+    private const val STREAM_URL_EXPIRY_SAFETY_MS = 60_000L
+
+    private data class CachedStreamUrl(val url: String, val expiresAtMs: Long)
+    private data class CachedStreamInfo(val info: StreamInfo, val expiresAtMs: Long)
+
+    // Tier 1: Fastest. Keep only URLs that are comfortably inside their signed lifetime.
+    private val streamUrlCache = LruCache<String, CachedStreamUrl>(500)
+    // Tier 2: Parsed stream metadata; also expires because its contained URLs are signed.
     private val streamInfoCache = LruCache<String, CachedStreamInfo>(200)
     // Tier 3: Parsed UI data.
     private val playerResultCache = LruCache<String, PlayerResult>(200)
@@ -245,6 +254,28 @@ object NewPipeStreamExtractor {
     /**
      * Internal generic fetcher that populates the streamInfoCache.
      */
+    private fun streamUrlCacheExpiry(url: String, nowMs: Long = System.currentTimeMillis()): Long {
+        val conservativeExpiry = nowMs + STREAM_URL_CACHE_TTL_MS
+        val signedExpiryMs = runCatching {
+            Uri.parse(url).getQueryParameter("expire")?.toLongOrNull()?.times(1000L)
+        }.getOrNull()
+        return signedExpiryMs?.let {
+            minOf(conservativeExpiry, it - STREAM_URL_EXPIRY_SAFETY_MS)
+        } ?: conservativeExpiry
+    }
+
+    private fun streamInfoCacheExpiry(info: StreamInfo, nowMs: Long): Long {
+        val conservativeExpiry = nowMs + STREAM_INFO_CACHE_TTL_MS
+        val earliestStreamExpiry = info.audioStreams.asSequence()
+            .mapNotNull { stream ->
+                runCatching { Uri.parse(stream.content).getQueryParameter("expire")?.toLongOrNull()?.times(1000L) }
+                    .getOrNull()
+                    ?.minus(STREAM_URL_EXPIRY_SAFETY_MS)
+            }
+            .minOrNull()
+        return earliestStreamExpiry?.let { minOf(conservativeExpiry, it) } ?: conservativeExpiry
+    }
+
     private suspend fun fetchStreamInfo(videoId: String): StreamInfo? {
         // Application startup initializes NewPipe off the UI thread. If a track is requested
         // before that worker finishes, initialize it here on the extraction dispatcher.
@@ -256,15 +287,26 @@ object NewPipeStreamExtractor {
                 }
             }
         }
+        val nowMs = System.currentTimeMillis()
         val cachedInfo = synchronized(cacheLock) { streamInfoCache.get(videoId) }
-        if (cachedInfo != null) return cachedInfo
+        if (cachedInfo != null) {
+            if (cachedInfo.expiresAtMs > nowMs) return cachedInfo.info
+            synchronized(cacheLock) { streamInfoCache.remove(videoId) }
+            Log.d(TAG, "Expired cached StreamInfo for $videoId; refreshing signed stream URLs")
+        }
 
         return try {
             val url = "https://www.youtube.com/watch?v=$videoId"
             val infoStart = System.currentTimeMillis()
             val info = StreamInfo.getInfo(ServiceList.YouTube, url)
-            Log.d(TAG, "StreamInfo.getInfo took ${System.currentTimeMillis() - infoStart}ms for $videoId")
-            synchronized(cacheLock) { streamInfoCache.put(videoId, info) }
+            val fetchedAtMs = System.currentTimeMillis()
+            val expiresAtMs = streamInfoCacheExpiry(info, fetchedAtMs)
+            if (expiresAtMs > fetchedAtMs) {
+                synchronized(cacheLock) {
+                    streamInfoCache.put(videoId, CachedStreamInfo(info, expiresAtMs))
+                }
+            }
+            Log.d(TAG, "StreamInfo.getInfo took ${fetchedAtMs - infoStart}ms for $videoId")
             info
         } catch (e: Exception) {
             Log.e(TAG, "Stream extraction failed for $videoId: ${e.message}")
@@ -385,12 +427,16 @@ object NewPipeStreamExtractor {
         // Interactive resolution must inspect the current format list instead of silently using
         // a URL selected earlier by prefetch or another resolver.
         val canUseCachedUrl = !allowFormatChoice || requestedFormat == "auto"
-        val cachedUrl = if (canUseCachedUrl) {
+        val cachedUrlEntry = if (canUseCachedUrl) {
             synchronized(cacheLock) { streamUrlCache.get(videoId) }
         } else null
-        if (cachedUrl != null) {
-            Log.d(TAG, "Cache HIT (URL) for $videoId")
-            return@coroutineScope cachedUrl
+        if (cachedUrlEntry != null) {
+            if (cachedUrlEntry.expiresAtMs > System.currentTimeMillis()) {
+                Log.d(TAG, "Cache HIT (URL) for $videoId")
+                return@coroutineScope cachedUrlEntry.url
+            }
+            synchronized(cacheLock) { streamUrlCache.remove(videoId) }
+            Log.d(TAG, "Expired cached stream URL for $videoId; resolving a fresh source")
         }
 
         // Deduplication
@@ -427,7 +473,16 @@ object NewPipeStreamExtractor {
                     }
 
                     if (bestUrl != null) {
-                        synchronized(cacheLock) { streamUrlCache.put(videoId, bestUrl) }
+                        val cachedAtMs = System.currentTimeMillis()
+                        val expiresAtMs = streamUrlCacheExpiry(bestUrl, cachedAtMs)
+                        if (expiresAtMs <= cachedAtMs) {
+                            Log.w(TAG, "Rejected an expired/near-expiry stream URL for $videoId")
+                            bestUrl = null
+                        } else {
+                            synchronized(cacheLock) {
+                                streamUrlCache.put(videoId, CachedStreamUrl(bestUrl, expiresAtMs))
+                            }
+                        }
                     }
                     Log.d(TAG, "Stream extraction took ${System.currentTimeMillis() - start}ms for $videoId")
                     bestUrl
