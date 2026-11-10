@@ -165,6 +165,9 @@ class DsmusicListenTogetherClient {
     private val _joinRequests = MutableStateFlow<List<RoomJoinRequest>>(emptyList())
     val joinRequests: StateFlow<List<RoomJoinRequest>> = _joinRequests.asStateFlow()
 
+    private val _joinPending = MutableStateFlow(false)
+    val joinPending: StateFlow<Boolean> = _joinPending.asStateFlow()
+
     private val _remotePlayback = MutableStateFlow<RemotePlaybackState?>(null)
     val remotePlayback: StateFlow<RemotePlaybackState?> = _remotePlayback.asStateFlow()
 
@@ -433,6 +436,7 @@ class DsmusicListenTogetherClient {
         leaveRoom()
         localMode = true
         localRoomPin = cleanPin
+        _joinPending.value = true
         _connectionState.value = "Connecting"
         _message.value = "Connecting directly to the host…"
 
@@ -464,6 +468,7 @@ class DsmusicListenTogetherClient {
                 localClientSocket = connection
                 localClientWriter = writer
                 _roomCode.value = approval.optString("pin", cleanPin)
+                _joinPending.value = false
                 _role.value = "GUEST"
                 _roomUsers.value = readLocalUsers(approval.optJSONArray("users"))
                 _joinRequests.value = emptyList()
@@ -477,6 +482,7 @@ class DsmusicListenTogetherClient {
                 }
             } catch (error: Exception) {
                 if (localMode && (localClientSocket == null || localClientSocket === candidate)) {
+                    _joinPending.value = false
                     _connectionState.value = "Connection error"
                     _message.value = error.message ?: "Could not connect to the local room."
                     clearRoomState()
@@ -713,6 +719,7 @@ class DsmusicListenTogetherClient {
         require(normalized.length <= 300) { "Server address is too long." }
 
         leaveRoom()
+        _joinPending.value = type == "join_room"
         reconnectAttempt = 0
         connectionGeneration += 1L
         manualDisconnect = false
@@ -735,6 +742,8 @@ class DsmusicListenTogetherClient {
                 .build()
         } catch (error: Exception) {
             if (sessionToken.isNullOrBlank()) {
+                _joinPending.value = false
+                pendingMessage = null
                 _connectionState.value = "Connection error"
                 _message.value = error.message ?: "The room server address is invalid."
             } else {
@@ -857,6 +866,7 @@ class DsmusicListenTogetherClient {
                 _message.value = "Could not open the connection. Retrying…"
                 scheduleReconnect(generation)
             } else {
+                _joinPending.value = false
                 pendingMessage = null
                 _connectionState.value = "Connection error"
                 _message.value = error.message ?: "Could not open the Listen Together connection."
@@ -1051,7 +1061,14 @@ class DsmusicListenTogetherClient {
         _joinRequests.value = _joinRequests.value.filterNot { it.userId == userId }
     }
 
+    fun cancelJoinRequest() {
+        if (!_joinPending.value) return
+        leaveRoom()
+        _message.value = "Join request cancelled."
+    }
+
     fun leaveRoom() {
+        _joinPending.value = false
         manualDisconnect = true
         connectionGeneration += 1L
         reconnectJob?.cancel()
@@ -1114,6 +1131,7 @@ class DsmusicListenTogetherClient {
     fun disconnect() = leaveRoom()
 
     private fun clearRoomState() {
+        _joinPending.value = false
         _roomCode.value = null
         _role.value = "NONE"
         ownUserId = null
@@ -1298,6 +1316,7 @@ class DsmusicListenTogetherClient {
             }
             "join_approved" -> {
                 val code = fields.firstString(1) ?: return
+                _joinPending.value = false
                 _roomCode.value = code
                 ownUserId = fields.firstString(2)
                 fields.firstString(3)?.takeIf { it.isNotBlank() }?.let { sessionToken = it }
@@ -1342,7 +1361,9 @@ class DsmusicListenTogetherClient {
                     ?: "The room server is restarting. Quantune will reconnect automatically."
             }
             "join_rejected" -> {
-                _message.value = fields.firstString(1) ?: "The host declined the join request."
+                val reason = fields.firstString(1) ?: "The host declined the join request."
+                leaveRoom()
+                _message.value = reason
             }
             "join_request" -> {
                 val id = fields.firstString(1) ?: return
@@ -1398,6 +1419,9 @@ class DsmusicListenTogetherClient {
                     clearRoomState()
                     _connectionState.value = "Connection error"
                     _message.value = "Automatic reconnect is no longer available. Join the room again. $description"
+                } else if (_joinPending.value) {
+                    leaveRoom()
+                    _message.value = description
                 } else {
                     _message.value = description
                     if (reconnectHandshakePending) socket?.cancel()

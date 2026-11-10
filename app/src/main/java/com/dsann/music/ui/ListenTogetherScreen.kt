@@ -3,6 +3,7 @@ package com.dsann.music.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -35,12 +36,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -73,6 +74,7 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
     val role by client.role.collectAsStateWithLifecycle()
     val roomUsers by client.roomUsers.collectAsStateWithLifecycle()
     val joinRequests by client.joinRequests.collectAsStateWithLifecycle()
+    val joinPending by client.joinPending.collectAsStateWithLifecycle()
     val roomMessage by client.message.collectAsStateWithLifecycle()
     val localAddress by client.localAddress.collectAsStateWithLifecycle()
     val discoveredLocalRooms by client.discoveredLocalRooms.collectAsStateWithLifecycle()
@@ -82,7 +84,7 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
     var serverUrl by rememberSaveable { mutableStateOf(DsmusicListenTogetherClient.DEFAULT_SERVER) }
     var displayName by rememberSaveable { mutableStateOf("Listener") }
     var joinCode by rememberSaveable { mutableStateOf("") }
-    var showInternetJoinCode by rememberSaveable { mutableStateOf(false) }
+    var showInternetJoinCode by remember { mutableStateOf(false) }
     var localHostAddress by rememberSaveable { mutableStateOf("") }
     var localJoinPin by rememberSaveable { mutableStateOf("") }
     var showLocalJoinPin by rememberSaveable { mutableStateOf(false) }
@@ -92,6 +94,7 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
     var advancedSettingsVisible by rememberSaveable { mutableStateOf(false) }
     var actionMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var localPermissionMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var showJoinRequestDialog by remember { mutableStateOf(false) }
 
     val requiredLocalPermission = when {
         Build.VERSION.SDK_INT >= 37 -> Manifest.permission.ACCESS_LOCAL_NETWORK
@@ -114,9 +117,10 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
         if (granted && networkMode == "SAME_NETWORK") client.discoverLocalRooms(context)
     }
 
-    val isConnected = connectionState == "Connected"
+    val isConnected = connectionState == "Connected" && !roomCode.isNullOrBlank()
     val canStartSession = connectionState == "Disconnected" || connectionState == "Connection error"
     val statusLabel = when {
+        joinPending -> if (connectionState == "Connecting" || connectionState == "Reconnecting") "JOINING" else "WAITING"
         isConnected -> "LIVE"
         connectionState == "Reconnecting" -> "RECONNECTING"
         connectionState == "Connecting" -> "CONNECTING"
@@ -161,6 +165,15 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
     val roomCurrentTrack = if (role == "HOST") hostCurrentTrack else remotePlayback?.track
     val roomUpcomingQueue = if (role == "HOST") hostUpcomingQueue else remotePlayback?.queue.orEmpty()
 
+    BackHandler(enabled = joinPending) {
+        client.cancelJoinRequest()
+        onBack()
+    }
+
+    LaunchedEffect(joinRequests.map { it.userId }) {
+        if (joinRequests.isNotEmpty()) showJoinRequestDialog = true
+    }
+
     LaunchedEffect(networkMode, canStartSession, localNetworkPermissionGranted) {
         if (networkMode == "SAME_NETWORK" && canStartSession) {
             if (localNetworkPermissionGranted) client.discoverLocalRooms(context)
@@ -187,9 +200,12 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                 title = "Listen Together",
                 modifier = Modifier.weight(1f)
             )
-            ListenTogetherStatusPill(statusLabel = statusLabel, active = isConnected)
+            ListenTogetherStatusPill(statusLabel = statusLabel, active = isConnected || joinPending)
             DsmusicIconButton(
-                onClick = onBack,
+                onClick = {
+                    if (joinPending) client.cancelJoinRequest()
+                    onBack()
+                },
                 modifier = Modifier
                     .size(42.dp)
                     .background(DsmusicTheme.colorScheme.surfaceContainerLow, RoundedCornerShape(14.dp)),
@@ -204,102 +220,82 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
         }
 
         if (joinRequests.isNotEmpty()) {
-            DsmusicCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(DsmusicTheme.colorScheme.surfaceContainerLow)
+                    .clickable { showJoinRequestDialog = true }
+                    .padding(horizontal = 13.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text("JOIN REQUESTS", style = DsmusicTheme.typography.labelSmall, color = DsmusicTheme.colorScheme.primary)
+                    Text(
+                        if (joinRequests.size == 1) "1 person is waiting" else "${joinRequests.size} people are waiting",
+                        style = DsmusicTheme.typography.bodySmall,
+                        color = DsmusicTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                Text("Review", style = DsmusicTheme.typography.labelMedium, color = DsmusicTheme.colorScheme.primary)
+            }
+        }
+
+        if (joinPending) {
+            DsmusicCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
                 Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(58.dp)
+                            .clip(CircleShape)
+                            .background(DsmusicTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Rounded.Groups,
+                            contentDescription = null,
+                            tint = DsmusicTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(29.dp)
+                        )
+                    }
+                    Text(
+                        if (connectionState == "Connecting" || connectionState == "Reconnecting") "Connecting to room"
+                        else "Waiting for host approval",
+                        style = DsmusicTheme.typography.titleMedium,
+                        color = DsmusicTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        when (connectionState) {
+                            "Connecting" -> "Connecting to the room server…"
+                            "Reconnecting" -> "Restoring the connection…"
+                            else -> "Your request has been sent to the host."
+                        },
+                        style = DsmusicTheme.typography.bodySmall,
+                        color = DsmusicTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (networkMode == "DIFFERENT_NETWORK" && joinCode.isNotBlank()) {
                         Text(
-                            "JOIN REQUESTS",
-                            style = DsmusicTheme.typography.labelSmall,
+                            "ROOM  ·  ${joinCode.uppercase()}",
+                            style = DsmusicTheme.typography.labelMedium,
                             color = DsmusicTheme.colorScheme.primary,
                             letterSpacing = 1.sp
                         )
-                        Spacer(Modifier.weight(1f))
-                        ListenTogetherStatusPill(
-                            statusLabel = joinRequests.size.toString() + " waiting",
-                            active = true
-                        )
                     }
-                    joinRequests.forEach { request ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(DsmusicTheme.colorScheme.surfaceContainerLow)
-                                .padding(horizontal = 11.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(1.dp)
-                            ) {
-                                Text(request.username, style = DsmusicTheme.typography.bodyMedium)
-                                Text(
-                                    "Requesting to join",
-                                    style = DsmusicTheme.typography.labelSmall,
-                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            DsmusicButton(onClick = { client.approveJoin(request.userId) }) {
-                                Text("Approve")
-                            }
-                        }
-                    }
+                    DsmusicOutlinedButton(
+                        onClick = {
+                            showInternetJoinCode = false
+                            client.cancelJoinRequest()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Cancel request") }
                 }
             }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            DsmusicTheme.colorScheme.primary.copy(alpha = 0.92f),
-                            DsmusicTheme.colorScheme.secondary.copy(alpha = 0.82f),
-                            DsmusicTheme.colorScheme.tertiary.copy(alpha = 0.78f)
-                        )
-                    )
-                )
-                .padding(horizontal = 13.dp, vertical = 11.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(11.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(DsmusicTheme.colorScheme.onPrimary.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Rounded.Groups,
-                    contentDescription = null,
-                    tint = DsmusicTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(23.dp)
-                )
-            }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text(
-                    "One room. One shared queue.",
-                    style = DsmusicTheme.typography.titleSmall,
-                    color = DsmusicTheme.colorScheme.onPrimary
-                )
-                Text(
-                    "Sync tracks and playback with your friends.",
-                    style = DsmusicTheme.typography.bodySmall,
-                    color = DsmusicTheme.colorScheme.onPrimary.copy(alpha = 0.86f)
-                )
-            }
-        }
-
+        } else {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -335,10 +331,10 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("Room setup", style = DsmusicTheme.typography.titleMedium)
+                        Text("Create or join", style = DsmusicTheme.typography.titleMedium)
                         Text(
-                            if (networkMode == "SAME_NETWORK") "Connect over your local Wi-Fi or hotspot."
-                            else "Connect listeners over the internet.",
+                            if (networkMode == "SAME_NETWORK") "Local network"
+                            else "Online room",
                             style = DsmusicTheme.typography.bodySmall,
                             color = DsmusicTheme.colorScheme.onSurfaceVariant
                         )
@@ -489,7 +485,7 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                     ) { Text("Create an internet room") }
 
                     Text(
-                        if (showInternetJoinCode) "HIDE ROOM-CODE ENTRY" else "JOIN WITH A ROOM CODE",
+                        if (showInternetJoinCode) "CLOSE ROOM CODE" else "JOIN WITH A ROOM CODE",
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { showInternetJoinCode = !showInternetJoinCode }
@@ -512,6 +508,7 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                             )
                             DsmusicOutlinedButton(
                                 onClick = {
+                                    showInternetJoinCode = false
                                     actionMessage = null
                                     try {
                                         client.joinRoom(serverUrl, joinCode, displayName)
@@ -543,9 +540,6 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                             placeholder = { Text("wss://server.example/ws") }
                         )
                         Text(
-                            "Keep the default unless you operate a compatible relay.",
-                            style = DsmusicTheme.typography.bodySmall,
-                            color = DsmusicTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -564,6 +558,8 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                 }
             }
         }
+        }
+
 
         if (!roomCode.isNullOrBlank()) {
             DsmusicCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(19.dp)) {
@@ -672,15 +668,80 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
         }
 
         Text(
-            if (networkMode == "SAME_NETWORK") {
-                "Local mode uses your Wi-Fi or hotspot. Room traffic is not end-to-end encrypted; audio is not streamed."
-            } else {
-                "Track details, queue and playback controls are shared as metadata. Audio is not streamed; the default relay is community-operated."
-            },
+            "Only track details, queue and playback controls are shared. Audio stays on each device.",
             style = DsmusicTheme.typography.labelSmall,
             color = DsmusicTheme.colorScheme.onSurfaceVariant
         )
         Spacer(Modifier.height(156.dp))
+    }
+
+    if (showJoinRequestDialog) {
+        val request = joinRequests.firstOrNull()
+        if (request != null) {
+            Dialog(onDismissRequest = { showJoinRequestDialog = false }) {
+                DsmusicCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(26.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(22.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(68.dp)
+                                .clip(CircleShape)
+                                .background(DsmusicTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Rounded.Groups,
+                                contentDescription = null,
+                                tint = DsmusicTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(34.dp)
+                            )
+                        }
+                        Text(
+                            "ROOM JOIN REQUEST",
+                            style = DsmusicTheme.typography.labelSmall,
+                            color = DsmusicTheme.colorScheme.primary,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            request.username,
+                            style = DsmusicTheme.typography.titleLarge,
+                            color = DsmusicTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "Wants to join your listening room.",
+                            style = DsmusicTheme.typography.bodyMedium,
+                            color = DsmusicTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (joinRequests.size > 1) {
+                            Text(
+                                "${joinRequests.size - 1} more waiting",
+                                style = DsmusicTheme.typography.labelSmall,
+                                color = DsmusicTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        DsmusicButton(
+                            onClick = {
+                                client.approveJoin(request.userId)
+                                showJoinRequestDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Approve request") }
+                        DsmusicOutlinedButton(
+                            onClick = { showJoinRequestDialog = false },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Later") }
+                    }
+                }
+            }
+        } else {
+            showJoinRequestDialog = false
+        }
     }
 }
 
