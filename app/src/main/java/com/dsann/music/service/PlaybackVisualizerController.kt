@@ -2,6 +2,8 @@ package com.dsann.music.service
 
 import android.media.audiofx.Visualizer
 import android.util.Log
+import android.os.Handler
+import android.os.Looper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,15 +32,51 @@ class PlaybackVisualizerController(
     private val _levels = MutableStateFlow(FloatArray(BAR_COUNT) { 0f })
     val levels: StateFlow<FloatArray> = _levels.asStateFlow()
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     @Volatile
     private var running = false
+    @Volatile
+    private var fftCallbackCount = 0
     private var capture: Visualizer? = null
+    private var activeSessionId = 0
+    private var outputMixFallback: Runnable? = null
 
     @Synchronized
     fun start(audioSessionId: Int): Boolean {
         stop()
-        if (audioSessionId <= 0) return false
+        if (audioSessionId < 0) return false
 
+        // Attach to the player's own session first. Some device audio policies accept
+        // the effect but do not deliver frames for that track; retry against the
+        // system output mix if no FFT callback arrives.
+        val preferredSession = audioSessionId
+        val started = startOnSession(preferredSession)
+        if (!started) {
+            if (preferredSession == 0) return false
+            Log.w(TAG, "Player-session capture failed; trying output-mix session 0")
+            return startOnSession(0)
+        }
+
+        if (preferredSession != 0) {
+            val fallback = Runnable {
+                val shouldFallback = synchronized(this) {
+                    running && activeSessionId == preferredSession && fftCallbackCount == 0
+                }
+                if (shouldFallback) {
+                    Log.w(TAG, "No FFT callbacks on player session $preferredSession; switching to output mix")
+                    start(0)
+                }
+            }
+            outputMixFallback = fallback
+            mainHandler.postDelayed(fallback, 1400L)
+        }
+        return true
+    }
+
+    @Synchronized
+    private fun startOnSession(audioSessionId: Int): Boolean {
+        if (audioSessionId < 0) return false
         val candidate = try {
             Visualizer(audioSessionId)
         } catch (error: Exception) {
@@ -65,10 +103,8 @@ class PlaybackVisualizerController(
             }
 
             candidate.setScalingMode(Visualizer.SCALING_MODE_NORMALIZED)
-            val captureRate = minOf(
-                TARGET_CAPTURE_RATE_MILLI_HZ,
-                Visualizer.getMaxCaptureRate()
-            ).coerceAtLeast(1)
+            val captureRate = minOf(TARGET_CAPTURE_RATE_MILLI_HZ, Visualizer.getMaxCaptureRate())
+                .coerceAtLeast(1)
 
             val listener = object : Visualizer.OnDataCaptureListener {
                 override fun onWaveFormDataCapture(
@@ -83,6 +119,10 @@ class PlaybackVisualizerController(
                     samplingRate: Int
                 ) {
                     if (!running || fft == null || fft.isEmpty()) return
+                    fftCallbackCount++
+                    if (fftCallbackCount == 1) {
+                        Log.d(TAG, "Received first FFT frame from session $audioSessionId (${fft.size} bytes)")
+                    }
                     publishBands(fft)
                 }
             }
@@ -95,12 +135,15 @@ class PlaybackVisualizerController(
             }
 
             capture = candidate
+            activeSessionId = audioSessionId
+            fftCallbackCount = 0
             running = true
             val enableResult = candidate.setEnabled(true)
             if (enableResult != Visualizer.SUCCESS) {
                 Log.w(TAG, "Visualizer.setEnabled(true) failed: $enableResult")
                 running = false
                 capture = null
+                activeSessionId = 0
                 candidate.release()
                 return false
             }
@@ -110,6 +153,7 @@ class PlaybackVisualizerController(
             Log.w(TAG, "Visualizer initialization failed for audio session $audioSessionId", error)
             running = false
             capture = null
+            activeSessionId = 0
             runCatching { candidate.setEnabled(false) }
             runCatching { candidate.release() }
             publishLevels(FloatArray(BAR_COUNT) { 0f })
@@ -127,6 +171,10 @@ class PlaybackVisualizerController(
     @Synchronized
     fun stop() {
         running = false
+        outputMixFallback?.let(mainHandler::removeCallbacks)
+        outputMixFallback = null
+        activeSessionId = 0
+        fftCallbackCount = 0
         val oldCapture = capture
         capture = null
         if (oldCapture != null) {
