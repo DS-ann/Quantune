@@ -1,10 +1,5 @@
 package com.dsann.music.ui.player
 
-import android.Manifest
-import android.app.Activity
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,11 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Modifier
@@ -30,14 +21,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
-import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -46,50 +35,16 @@ import com.dsann.music.service.AudioPlaybackService
 import com.dsann.music.ui.theme.Icon
 import com.dsann.music.ui.theme.dsmusicHomeStudioGradientBrush
 import com.dsann.music.ui.theme.Text
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 
 @Composable
 fun FullscreenAudioVisualizerDialog(
-    activity: Activity,
     audioService: AudioPlaybackService?,
     lyricsAccentColor: Color,
     lyricsTextColor: Color,
     lyricsColorStyle: String,
     onDismissRequest: () -> Unit
 ) {
-    val context = LocalContext.current
-    var captureAttempted by remember { mutableStateOf(false) }
-    var captureAvailable by remember { mutableStateOf(false) }
-    var permissionDenied by remember { mutableStateOf(false) }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        permissionDenied = !granted
-        captureAttempted = true
-        captureAvailable = granted && audioService?.startPlaybackVisualizer() == true
-    }
-
-    LaunchedEffect(audioService) {
-        // Let the full-screen dialog settle in the current orientation before allocating the FFT effect.
-        delay(450L)
-        if (ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            captureAttempted = true
-            captureAvailable = audioService?.startPlaybackVisualizer() == true
-        } else {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
-    }
-
-    DisposableEffect(audioService) {
-        onDispose { audioService?.stopPlaybackVisualizer() }
-    }
-
     val emptyLevels = remember { MutableStateFlow(FloatArray(16) { 0f }) }
     val levelsFlow = audioService?.playbackVisualizerLevels ?: emptyLevels
     val levels by levelsFlow.collectAsStateWithLifecycle()
@@ -244,21 +199,6 @@ fun FullscreenAudioVisualizerDialog(
                 )
             }
 
-            if (captureAttempted && !captureAvailable) {
-                val message = when {
-                    permissionDenied ->
-                        "Audio capture permission is required to visualize playback."
-                    audioService == null ->
-                        "Playback audio is not ready."
-                    else ->
-                        "This audio output does not support the visualizer."
-                }
-                Text(
-                    text = message,
-                    color = Color.White.copy(alpha = 0.72f),
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
         }
     }
 }
