@@ -2,7 +2,6 @@ package com.dsann.music.ui.player
 
 import android.Manifest
 import android.app.Activity
-import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -57,8 +56,6 @@ fun FullscreenAudioVisualizerDialog(
     onDismissRequest: () -> Unit
 ) {
     val context = LocalContext.current
-    val previousOrientation = remember(activity) { activity.requestedOrientation }
-
     var captureAttempted by remember { mutableStateOf(false) }
     var captureAvailable by remember { mutableStateOf(false) }
     var permissionDenied by remember { mutableStateOf(false) }
@@ -72,7 +69,7 @@ fun FullscreenAudioVisualizerDialog(
     }
 
     LaunchedEffect(audioService) {
-        // Let the landscape dialog finish opening before allocating the platform FFT effect.
+        // Let the full-screen dialog settle in the current orientation before allocating the FFT effect.
         delay(450L)
         if (ContextCompat.checkSelfPermission(
                 context,
@@ -99,8 +96,9 @@ fun FullscreenAudioVisualizerDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
-        DisposableEffect(activity, dialogWindow) {
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        // Do not lock the Activity orientation. The visualizer follows the device's
+        // current orientation and Compose recalculates the bar geometry after rotation.
+        DisposableEffect(dialogWindow) {
             val controller = dialogWindow?.let { window ->
                 WindowCompat.setDecorFitsSystemWindows(window, false)
                 WindowCompat.getInsetsController(window, window.decorView).also {
@@ -111,7 +109,6 @@ fun FullscreenAudioVisualizerDialog(
             }
             onDispose {
                 controller?.show(WindowInsetsCompat.Type.systemBars())
-                activity.requestedOrientation = previousOrientation
             }
         }
 
@@ -123,7 +120,8 @@ fun FullscreenAudioVisualizerDialog(
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val count = 16
                 val sideInset = 8.dp.toPx()
-                val gap = size.width * 0.012f
+                // Keep spacing balanced on narrow phones and wide tablets in both orientations.
+                val gap = (size.width * 0.012f).coerceIn(3.dp.toPx(), 10.dp.toPx())
                 val barAreaWidth = (size.width - sideInset * 2f).coerceAtLeast(1f)
                 val barWidth = ((barAreaWidth - gap * (count - 1)) / count)
                     .coerceAtLeast(1f)
