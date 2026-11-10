@@ -238,11 +238,16 @@ internal fun SyncedLyricsCompose(
             currentPositionProvider
         }
     }
-    // Word highlights are synchronization-critical, not decorative animation. Always
-    // sample native display VSYNC here, even when decorative animations use a lower FPS cap.
+    // Word highlights stay aligned to display VSYNC, but fullscreen karaoke does not
+    // need a state update on every panel refresh. Respect the user's global frame cap and
+    // cap lower-memory devices at 30 fps to avoid overloading their first lyrics render.
+    val lyricsFrameContext = LocalContext.current
+    val karaokeFrameRateCeiling = remember(lyricsFrameContext) {
+        if (isLowCostLyricsDevice(lyricsFrameContext)) 30 else null
+    }
     val karaokeFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
         active = isPlaying && isKaraokeMode,
-        forceDisplayRefresh = true
+        maximumFrameRate = karaokeFrameRateCeiling
     )
 
     // ── Filter out interludes when in karaoke mode ──

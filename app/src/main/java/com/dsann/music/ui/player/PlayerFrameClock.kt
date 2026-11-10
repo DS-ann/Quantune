@@ -1,6 +1,7 @@
 package com.dsann.music.ui.player
 
 import android.content.Context
+import android.app.ActivityManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -64,10 +65,26 @@ internal object AppAnimationFrameRateController {
  * buckets, so player progress, waveform, visualizer, karaoke and other visual loops
  * remain aligned to the device's presented frames.
  */
+/**
+ * Keep expensive fullscreen lyric rendering on a conservative frame budget on
+ * lower-memory devices. This is a UI-only heuristic; playback timing stays native.
+ */
+internal fun isLowCostLyricsDevice(context: Context): Boolean {
+    val activityManager = context.applicationContext
+        .getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
+    if (activityManager.isLowRamDevice) return true
+
+    val memoryInfo = ActivityManager.MemoryInfo()
+    activityManager.getMemoryInfo(memoryInfo)
+    val sixGiB = 6L * 1024L * 1024L * 1024L
+    return memoryInfo.totalMem in 1L..sixGiB
+}
+
 @Composable
 internal fun rememberAppAnimationFrameTimeNanos(
     active: Boolean,
-    forceDisplayRefresh: Boolean = false
+    forceDisplayRefresh: Boolean = false,
+    maximumFrameRate: Int? = null
 ): State<Long> {
     val context = LocalContext.current.applicationContext
     val frameRate by AppAnimationFrameRateController.frameRate.collectAsState()
@@ -77,17 +94,26 @@ internal fun rememberAppAnimationFrameTimeNanos(
         AppAnimationFrameRateController.load(context)
     }
 
-    LaunchedEffect(active, frameRate, forceDisplayRefresh) {
+    LaunchedEffect(active, frameRate, forceDisplayRefresh, maximumFrameRate) {
         if (!active) {
             frameTimeNanos.longValue = 0L
             return@LaunchedEffect
         }
 
         // Playback progress can opt out of the decorative-animation FPS cap.
-        // This keeps the seek bar and mini-player progress aligned to every display vsync
-        // on API 23 without forcing the visualizer or other effects to run at full rate.
-        val intervalNanos = if (!forceDisplayRefresh && frameRate > 0) {
-            1_000_000_000L / frameRate
+        // A caller may also impose a device-specific ceiling without overriding a lower
+        // user-selected rate. Karaoke uses this on lower-memory phones to avoid forcing
+        // full-refresh GPU work while keeping its word timing synchronized to vsync.
+        val effectiveFrameRate = when {
+            forceDisplayRefresh -> 0
+            maximumFrameRate != null -> {
+                val ceiling = maximumFrameRate.coerceAtLeast(1)
+                if (frameRate > 0) minOf(frameRate, ceiling) else ceiling
+            }
+            else -> frameRate
+        }
+        val intervalNanos = if (effectiveFrameRate > 0) {
+            1_000_000_000L / effectiveFrameRate
         } else {
             0L
         }

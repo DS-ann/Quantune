@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -302,42 +305,60 @@ internal fun PlayerLyricsContent(
                     }
                     val plainLyricsScale = (configuredLyricsScale * viewportScale)
                         .coerceIn(0.48f, 1.18f)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp, vertical = 28.dp)
+                    val plainLyricsBrush = if (lyricsColorStyle == "Home Studio Gradient") {
+                        dsmusicHomeStudioGradientBrush()
+                    } else {
+                        null
+                    }
+                    val plainLyricsStyle = DsmusicTheme.typography.headlineMedium.copy(
+                        brush = plainLyricsBrush,
+                        fontFamily = plainLyricsFontFamily,
+                        fontSize = 44.sp * plainLyricsScale,
+                        lineHeight = 58.sp * plainLyricsScale,
+                        fontWeight = FontWeight.ExtraBold,
+                        platformStyle = PlatformTextStyle(includeFontPadding = true),
+                        textAlign = plainLyricsTextAlign
+                    )
+                    val plainLyricsColor = when (lyricsColorStyle) {
+                        "Home Studio Gradient" -> Color.Unspecified
+                        "White" -> Color.White
+                        "UI Matching" -> dynamicAccentColor
+                        else -> contentColor.copy(alpha = 0.9f)
+                    }
+                    // A single Text node containing an entire song makes Compose measure
+                    // and rasterize every off-screen line when the lyrics page first opens.
+                    // Virtualize one source line per item so only the visible lyric lines
+                    // enter the initial layout/draw pass.
+                    val plainLyricsLines = remember(plainLyrics) {
+                        plainLyrics.orEmpty().split('\n').map { it.removeSuffix("\r") }
+                    }
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 28.dp),
+                        verticalArrangement = Arrangement.spacedBy(0.dp)
                     ) {
-                        LyricsText(
-                            text = plainLyrics,
-                            style = DsmusicTheme.typography.headlineMedium.copy(
-                                brush = if (lyricsColorStyle == "Home Studio Gradient") {
-                                    dsmusicHomeStudioGradientBrush()
-                                } else null,
-                                fontFamily = plainLyricsFontFamily,
-                                fontSize = 44.sp * plainLyricsScale,
-                                lineHeight = 58.sp * plainLyricsScale,
-                                fontWeight = FontWeight.ExtraBold,
-                                platformStyle = PlatformTextStyle(includeFontPadding = true),
-                                textAlign = plainLyricsTextAlign
-                            ),
-                            color = when (lyricsColorStyle) {
-                                "Home Studio Gradient" -> Color.Unspecified
-                                "White" -> Color.White
-                                "UI Matching" -> dynamicAccentColor
-                                else -> contentColor.copy(alpha = 0.9f)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            outlineWidth = 1.dp,
-                            fillTextWidth = true,
-                            drawOutlineForSolidText = true
-                        )
-                        LyricsMetadataFooter(
-                            currentSong = currentSong,
-                            selectedProvider = selectedProvider,
-                            providerResults = providerResults,
-                            contentColor = contentColor
-                        )
+                        itemsIndexed(
+                            items = plainLyricsLines,
+                            key = { index, _ -> "plain-lyrics-$index" }
+                        ) { _, lyricLine ->
+                            LyricsText(
+                                text = lyricLine.ifEmpty { " " },
+                                style = plainLyricsStyle,
+                                color = plainLyricsColor,
+                                modifier = Modifier.fillMaxWidth(),
+                                outlineWidth = 1.dp,
+                                fillTextWidth = true,
+                                drawOutlineForSolidText = true
+                            )
+                        }
+                        item(key = "plain-lyrics-metadata-footer") {
+                            LyricsMetadataFooter(
+                                currentSong = currentSong,
+                                selectedProvider = selectedProvider,
+                                providerResults = providerResults,
+                                contentColor = contentColor
+                            )
+                        }
                     }
                 }
             }
@@ -405,16 +426,7 @@ internal fun FullScreenLyricsOverlay(
 
     val context = LocalContext.current
     val useLowCostReveal = remember(context) {
-        val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE)
-            as? android.app.ActivityManager
-        if (activityManager == null) {
-            false
-        } else {
-            val memoryInfo = android.app.ActivityManager.MemoryInfo()
-            activityManager.getMemoryInfo(memoryInfo)
-            val fourGiB = 4L * 1024L * 1024L * 1024L
-            activityManager.isLowRamDevice || (memoryInfo.totalMem in 1L..fourGiB)
-        }
+        isLowCostLyricsDevice(context)
     }
     val translationScope = rememberCoroutineScope()
     val translationSettingsStore = remember(context) { AiLyricsTranslationSettingsStore(context) }
