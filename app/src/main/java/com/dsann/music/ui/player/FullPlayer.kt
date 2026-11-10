@@ -636,6 +636,7 @@ fun FullPlayerScreen(
     val scrubberStyle by customizeViewModel.scrubberStyle.collectAsStateWithLifecycle()
     val scrubberColor by customizeViewModel.scrubberColor.collectAsStateWithLifecycle()
     val visualizerStyle by customizeViewModel.visualizerStyle.collectAsStateWithLifecycle()
+    val visualizerColorStyle by customizeViewModel.visualizerColorStyle.collectAsStateWithLifecycle()
     val playerBackgroundStyle by customizeViewModel.playerBackgroundStyle.collectAsStateWithLifecycle()
     val playerButtonStyle by customizeViewModel.playerButtonStyle.collectAsStateWithLifecycle()
     val scrubberThickness by customizeViewModel.scrubberThickness.collectAsStateWithLifecycle()
@@ -675,6 +676,8 @@ fun FullPlayerScreen(
         scrubberStyle = scrubberStyle,
         scrubberColor = scrubberColor,
         visualizerStyle = visualizerStyle,
+        visualizerColorStyle = visualizerColorStyle,
+        onVisualizerStyleChange = { customizeViewModel.setVisualizerStyle(it) },
         playerBackgroundStyle = playerBackgroundStyle,
         playerButtonStyle = playerButtonStyle,
         lyricsColorStyle = lyricsColorStyle,
@@ -773,6 +776,8 @@ fun FullPlayer(
     scrubberStyle: String = "Waveform",
     scrubberColor: String = "Accent",
     visualizerStyle: String = "Bars (16)",
+    visualizerColorStyle: String = "Gradient",
+    onVisualizerStyleChange: (String) -> Unit = {},
     playerBackgroundStyle: String = "Artwork",
     playerButtonStyle: String = "Pill",
     lyricsColorStyle: String = "Home Studio Gradient",
@@ -955,12 +960,28 @@ fun FullPlayer(
     
     // Sliding Queue Drawer State
     val isQueueExpanded by viewModel.isQueueExpanded.collectAsStateWithLifecycle()
+    val windowOrientation = androidx.compose.ui.platform.LocalConfiguration.current.orientation
+    var settledWindowOrientation by remember { mutableStateOf(windowOrientation) }
+    var suppressQueueForRotation by remember { mutableStateOf(false) }
+    val orientationChangeDetected = settledWindowOrientation != windowOrientation
+    LaunchedEffect(windowOrientation) {
+        if (settledWindowOrientation != windowOrientation) {
+            suppressQueueForRotation = true
+            viewModel.setQueueExpanded(false)
+            delay(450L)
+            settledWindowOrientation = windowOrientation
+            suppressQueueForRotation = false
+        }
+    }
+    val queueExpandedForUi = isQueueExpanded &&
+        !orientationChangeDetected &&
+        !suppressQueueForRotation
     val isShuffleEnabled by viewModel.isShuffleEnabled.collectAsStateWithLifecycle()
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
     val currentSongIndex by viewModel.currentSongIndex.collectAsStateWithLifecycle()
     // Back dismisses the one shared queue first, then the fullscreen lyrics overlay.
-    BackHandler(enabled = isLyricsModeEnabled || isQueueExpanded) {
-        if (isQueueExpanded) {
+    BackHandler(enabled = isLyricsModeEnabled || queueExpandedForUi) {
+        if (queueExpandedForUi) {
             viewModel.setQueueExpanded(false)
         } else {
             onLyricsModeChanged(false)
@@ -1051,7 +1072,7 @@ fun FullPlayer(
         modifier = modifier
             .fillMaxSize()
             .background(backgroundBrush)
-            .then(if (isQueueExpanded || isLyricsModeEnabled) Modifier else dragModifier) // Drag down anywhere to collapse
+            .then(if (queueExpandedForUi || isLyricsModeEnabled) Modifier else dragModifier) // Drag down anywhere to collapse
     ) {
         // Use the actual player window constraints, not the physical display metrics.
         // Split-screen/freeform windows can be much smaller than LocalConfiguration's device size.
@@ -1135,7 +1156,7 @@ fun FullPlayer(
                 useWidePlayer &&
                 isLandscapeWindow &&
                 isPlayerVisible &&
-                isQueueExpanded
+                queueExpandedForUi
             ) screenWidth * 0.42f else 0.dp,
             animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f),
             label = "QueueDockInset"
@@ -1328,7 +1349,14 @@ fun FullPlayer(
                 )
             )
 
-            // Keep title and artist centered on the player, independently of the trailing info control.
+            // Keep the title block symmetric around the player while respecting the saved
+            // left/center alignment, independently of the trailing song-info control.
+            val titleIsLeftAligned = playerTitleAlign == "Left"
+            val titleTextAlignment = if (titleIsLeftAligned) {
+                androidx.compose.ui.text.style.TextAlign.Start
+            } else {
+                androidx.compose.ui.text.style.TextAlign.Center
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1338,7 +1366,7 @@ fun FullPlayer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 48.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = if (titleIsLeftAligned) Alignment.Start else Alignment.CenterHorizontally
                 ) {
                     val titleSize = when (playerTitleSize) {
                         "Small" -> 23.sp
@@ -1362,7 +1390,7 @@ fun FullPlayer(
                         fontWeight = titleWeight,
                         color = contentColor,
                         maxLines = 1,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        textAlign = titleTextAlignment,
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(
@@ -1384,7 +1412,7 @@ fun FullPlayer(
                         style = DsmusicTheme.typography.bodyMedium,
                         color = contentSecondary,
                         maxLines = 1,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        textAlign = titleTextAlignment,
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(
@@ -1543,7 +1571,7 @@ fun FullPlayer(
                             icon = painterResource(id = R.drawable.ic_lyrics),
                             label = "Lyrics",
                             isSelected = isLyricsModeEnabled ||
-                                (useWidePlayer && isLandscapeWindow && !isQueueExpanded),
+                                (useWidePlayer && isLandscapeWindow && !queueExpandedForUi),
                             onClick = {
                                 viewModel.setQueueExpanded(false)
                                 onLyricsModeChanged(true)
@@ -1575,9 +1603,9 @@ fun FullPlayer(
                             style = playerButtonStyle,
                             icon = painterResource(id = R.drawable.ic_keyboard_arrow_down),
                             label = "Up next",
-                            isSelected = isQueueExpanded,
+                            isSelected = queueExpandedForUi,
                             onClick = {
-                                if (isQueueExpanded) {
+                                if (queueExpandedForUi) {
                                     viewModel.setQueueExpanded(false)
                                 } else {
                                     onLyricsModeChanged(false)
@@ -1854,7 +1882,7 @@ fun FullPlayer(
                     .height(if (compactLandscape) 36.dp else 48.dp)
                     .pointerInput(Unit) {
                         detectVerticalDragGestures { _, dragAmount ->
-                            if (dragAmount < -10f && !isQueueExpanded && !isLyricsModeEnabled) {
+                            if (dragAmount < -10f && !queueExpandedForUi && !isLyricsModeEnabled) {
                                 viewModel.setQueueExpanded(true)
                             }
                         }
@@ -1863,7 +1891,7 @@ fun FullPlayer(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {
-                        viewModel.setQueueExpanded(!isQueueExpanded)
+                        viewModel.setQueueExpanded(!queueExpandedForUi)
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -1973,7 +2001,7 @@ fun FullPlayer(
         // --- CUSTOM EMBEDDED SLIDING PLAY QUEUE ---
         SlidingQueueDrawer(
             // Do not reveal or shift the queue until the player frame has fully settled.
-            isQueueExpanded = isQueueExpanded && isPlayerVisible,
+            isQueueExpanded = queueExpandedForUi && isPlayerVisible,
             onQueueExpandedChange = { viewModel.setQueueExpanded(it) },
             songList = songList,
             currentSongIndex = currentSongIndex,
@@ -2275,7 +2303,8 @@ fun FullPlayer(
             visualizerStyle = visualizerStyle,
             lyricsAccentColor = lyricsAccentColor,
             lyricsTextColor = lyricsTextColor,
-            lyricsColorStyle = lyricsColorStyle,
+            visualizerColorStyle = visualizerColorStyle,
+            onVisualizerStyleChange = onVisualizerStyleChange,
             onDismissRequest = { showFullScreenVisualizer = false }
         )
     }

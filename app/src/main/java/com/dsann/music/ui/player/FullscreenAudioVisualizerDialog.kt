@@ -3,6 +3,7 @@ package com.dsann.music.ui.player
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -38,6 +40,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dsann.music.service.AudioPlaybackService
 import com.dsann.music.service.PlaybackVisualizerController
+import com.dsann.music.ui.theme.DsmusicTheme
 import com.dsann.music.ui.theme.Icon
 import com.dsann.music.ui.theme.dsmusicHomeStudioGradientBrush
 import com.dsann.music.ui.theme.Text
@@ -51,12 +54,19 @@ fun FullscreenAudioVisualizerDialog(
     visualizerStyle: String,
     lyricsAccentColor: Color,
     lyricsTextColor: Color,
-    lyricsColorStyle: String,
+    visualizerColorStyle: String,
+    onVisualizerStyleChange: (String) -> Unit,
     onDismissRequest: () -> Unit
 ) {
     val emptyLevels = remember { MutableStateFlow(FloatArray(PlaybackVisualizerController.BAR_COUNT) { 0f }) }
     val levelsFlow = audioService?.playbackVisualizerLevels ?: emptyLevels
     val levels by levelsFlow.collectAsStateWithLifecycle()
+    val themePrimary = DsmusicTheme.colorScheme.primary
+    val themeSecondary = DsmusicTheme.colorScheme.secondary
+    val themeTertiary = DsmusicTheme.colorScheme.tertiary
+    val themeMatchingColors = remember(themePrimary, themeTertiary, themeSecondary) {
+        listOf(themePrimary, themeTertiary, themeSecondary)
+    }
 
     Dialog(
         onDismissRequest = onDismissRequest,
@@ -117,13 +127,17 @@ fun FullscreenAudioVisualizerDialog(
                         ).coerceIn(0f, 1f)
                 }
 
-                val activeBrush: Brush = when (lyricsColorStyle) {
-                    "Home Studio Gradient" -> dsmusicHomeStudioGradientBrush(
+                val activeBrush: Brush = when (visualizerColorStyle) {
+                    "Gradient" -> dsmusicHomeStudioGradientBrush(
                         startX = 0f,
                         endX = size.width
                     )
-                    "White" -> SolidColor(Color.White)
                     "UI Matching" -> SolidColor(lyricsAccentColor)
+                    "Theme Matching" -> Brush.verticalGradient(
+                        colors = themeMatchingColors,
+                        startY = 0f,
+                        endY = size.height
+                    )
                     else -> SolidColor(lyricsTextColor)
                 }
 
@@ -277,6 +291,44 @@ fun FullscreenAudioVisualizerDialog(
                             end = Offset(size.width - sideInset, baselineY),
                             strokeWidth = 1.dp.toPx(),
                             cap = StrokeCap.Butt
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 12.dp, end = 12.dp)
+                    .background(Color(0xAA03050A), RoundedCornerShape(24.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(
+                    "Bars (16)" to "BAR",
+                    "Spectrum" to "SPECTRUM",
+                    "Circular Spectrum" to "RING"
+                ).forEach { (style, label) ->
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = if (visualizerStyle == style) {
+                                    lyricsAccentColor.copy(alpha = 0.92f)
+                                } else {
+                                    Color.White.copy(alpha = 0.08f)
+                                },
+                                shape = RoundedCornerShape(18.dp)
+                            )
+                            .clickable { onVisualizerStyleChange(style) }
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            maxLines = 1
                         )
                     }
                 }

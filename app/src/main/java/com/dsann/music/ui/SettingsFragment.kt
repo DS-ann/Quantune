@@ -694,6 +694,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         prefs.edit { putString("player_visualizer", safe) }
     }
 
+    private val _visualizerColorStyle = MutableStateFlow(
+        (prefs.getString("player_visualizer_color_style", "Gradient") ?: "Gradient")
+            .takeIf { it in listOf("Gradient", "UI Matching", "Theme Matching") } ?: "Gradient"
+    )
+    val visualizerColorStyle: StateFlow<String> = _visualizerColorStyle.asStateFlow()
+    fun setVisualizerColorStyle(value: String) {
+        val safe = value.takeIf { it in listOf("Gradient", "UI Matching", "Theme Matching") }
+            ?: "Gradient"
+        _visualizerColorStyle.value = safe
+        prefs.edit { putString("player_visualizer_color_style", safe) }
+    }
+
     // Additional player customization.
     private val _playerButtonsPill = MutableStateFlow(prefs.getBoolean("player_buttons_pill", true))
     val playerButtonsPill: StateFlow<Boolean> = _playerButtonsPill.asStateFlow()
@@ -858,6 +870,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         "mini_player_control_shape", "mini_player_control_icons", "mini_player_progress",
         "player_layout", "player_artwork_scale", "player_buttons_pill", "player_buttons", "session_buttons", "player_title_align", "player_title_size",
         "player_title_weight", "player_title_scroll", "player_times", "scrubber_style",
+        "player_visualizer", "player_visualizer_color_style",
         "lyrics_font_family", "lyrics_color_style", "show_synced_lyrics_in_player",
         "ui_density", "ui_font_family", "ui_font_scale", "tapered_song_dividers",
         "ui_font_weight", "ui_letter_spacing", "nav_label_mode", "hide_nav_labels",
@@ -937,6 +950,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         setScrubberStyle(look.optString("scrubber_style", _scrubberStyle.value))
         setScrubberColor(look.optString("scrubber_color", _scrubberColor.value))
         setVisualizerStyle(look.optString("player_visualizer", _visualizerStyle.value))
+        setVisualizerColorStyle(
+            look.optString("player_visualizer_color_style", _visualizerColorStyle.value)
+        )
         setPlayerButtonStyle(look.optString("player_button_style", _playerButtonStyle.value))
         setScrubberThickness(look.optDouble("scrubber_thickness", _scrubberThickness.value.toDouble()).toFloat())
         setScrubberThumbStyle(look.optString("scrubber_thumb_style", _scrubberThumbStyle.value))
@@ -1345,6 +1361,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     else -> "Bars (16)"
                 }
             }
+        _visualizerColorStyle.value = (prefs.getString("player_visualizer_color_style", "Gradient") ?: "Gradient")
+            .takeIf { it in listOf("Gradient", "UI Matching", "Theme Matching") } ?: "Gradient"
         _playerButtonsPill.value = prefs.getBoolean("player_buttons_pill", true)
         _playerButtonStyle.value = when (prefs.getString("player_button_style", "Pill") ?: "Pill") {
             "Rounded" -> "Round"
@@ -1780,7 +1798,7 @@ fun SettingsScreenContent(
     val playerTimes by viewModel.playerTimes.collectAsStateWithLifecycle()
     val scrubberStyle by viewModel.scrubberStyle.collectAsStateWithLifecycle()
     val scrubberColor by viewModel.scrubberColor.collectAsStateWithLifecycle()
-    val visualizerStyle by viewModel.visualizerStyle.collectAsStateWithLifecycle()
+    val visualizerColorStyle by viewModel.visualizerColorStyle.collectAsStateWithLifecycle()
     val playerButtonStyle by viewModel.playerButtonStyle.collectAsStateWithLifecycle()
     val scrubberThumbStyle by viewModel.scrubberThumbStyle.collectAsStateWithLifecycle()
     val lyricsTextSize by viewModel.lyricsTextSize.collectAsStateWithLifecycle()
@@ -2178,8 +2196,8 @@ fun SettingsScreenContent(
                 onScrubberStyleChange = { viewModel.setScrubberStyle(it) },
                 scrubberColor = scrubberColor,
                 onScrubberColorChange = { viewModel.setScrubberColor(it) },
-                visualizerStyle = visualizerStyle,
-                onVisualizerStyleChange = { viewModel.setVisualizerStyle(it) },
+                visualizerColorStyle = visualizerColorStyle,
+                onVisualizerColorStyleChange = { viewModel.setVisualizerColorStyle(it) },
                 playerButtonStyle = playerButtonStyle,
                 onPlayerButtonStyleChange = { viewModel.setPlayerButtonStyle(it) },
                 scrubberThumbStyle = scrubberThumbStyle,
@@ -3535,8 +3553,8 @@ private fun AppearanceScreen(
     onScrubberStyleChange: (String) -> Unit,
     scrubberColor: String,
     onScrubberColorChange: (String) -> Unit,
-    visualizerStyle: String,
-    onVisualizerStyleChange: (String) -> Unit,
+    visualizerColorStyle: String,
+    onVisualizerColorStyleChange: (String) -> Unit,
     playerButtonStyle: String,
     onPlayerButtonStyleChange: (String) -> Unit,
     scrubberThumbStyle: String,
@@ -3841,11 +3859,11 @@ SettingsGroupCard(listOf(
             SettingsAccordionSection("Visualizer") {
                 SettingsGroupCard(listOf {
                     SettingsChoiceRow(
-                        title = "Visualizer type",
-                        description = "Choose the full-screen visualizer opened by the Visualizer button. Audio analysis runs only while that screen is open.",
-                        selected = visualizerStyle,
-                        options = listOf("Bars (16)", "Spectrum", "Circular Spectrum"),
-                        onSelected = onVisualizerStyleChange
+                        title = "Visualizer colour",
+                        description = "Choose the visualizer colours. Change Bar, Spectrum or Ring directly from the visualizer screen.",
+                        selected = visualizerColorStyle,
+                        options = listOf("Gradient", "UI Matching", "Theme Matching"),
+                        onSelected = onVisualizerColorStyleChange
                     )
                 })
             }
