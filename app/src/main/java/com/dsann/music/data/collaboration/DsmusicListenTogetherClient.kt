@@ -712,6 +712,7 @@ class DsmusicListenTogetherClient {
         require(normalized.length <= 300) { "Server address is too long." }
 
         leaveRoom()
+        reconnectAttempt = 0
         connectionGeneration += 1L
         manualDisconnect = false
         activeServerUrl = normalized
@@ -1190,7 +1191,7 @@ class DsmusicListenTogetherClient {
             .varint(1, sentWallClock)
             .varint(2, sequence)
         val playback = _remotePlayback.value
-        val track = playback?.track
+        val track = playback?.track ?: lastTrack
         if (playback != null && track != null && role.value == "GUEST" && hasServerClockOffset) {
             val elapsed = if (playback.isPlaying) {
                 (SystemClock.elapsedRealtime() - remotePlaybackReceivedAtElapsedMs).coerceAtLeast(0L)
@@ -1370,7 +1371,7 @@ class DsmusicListenTogetherClient {
                 lastTrack?.takeIf { it.id == id }
             }
         if (action == "change_track" && track != null) lastTrack = track
-        val position = fields.firstVarint(3) ?: 0L
+        val rawPosition = fields.firstVarint(3) ?: 0L
         val queueWasSent = fields.any { it.number == 6 && it.wireType == 2 } ||
             fields.firstVarint(12) == 1L || action == "sync_queue"
         val queue = if (queueWasSent) fields.allBytes(6).mapNotNull(::decodeTrack) else null
@@ -1381,6 +1382,12 @@ class DsmusicListenTogetherClient {
             "change_track" -> false
             else -> _remotePlayback.value?.isPlaying ?: false
         }
+        val position = compensateRemotePosition(
+            rawPosition,
+            playing,
+            fields.firstVarint(9) ?: 0L,
+            (track ?: lastTrack)?.durationMs ?: 0L
+        )
         publishRemote(action, track ?: lastTrack, position, playing, queue, fields.firstString(7))
     }
 
