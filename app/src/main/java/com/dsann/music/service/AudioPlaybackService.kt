@@ -1522,21 +1522,23 @@ class AudioPlaybackService : MediaSessionService() {
         target.setWakeMode(C.WAKE_MODE_NETWORK)
         target.skipSilenceEnabled = false
 
-        // Configure audio attributes before assigning the effect session. Media3 can
-        // recreate its AudioTrack/session when audio attributes change, so assigning
-        // the ID earlier would leave the visualizer attached to a stale session.
-        if (!playerAudioSessionIds.containsKey(target)) {
-            val sessionId = runCatching {
-                audioManager?.generateAudioSessionId() ?: 0
-            }.getOrDefault(0)
-            if (sessionId > 0) {
-                try {
-                    target.setAudioSessionId(sessionId)
-                    playerAudioSessionIds[target] = sessionId
-                } catch (error: Exception) {
-                    Log.w(TAG, "Could not assign a dedicated audio session for visualization", error)
-                }
+        // setAudioAttributes() can reset Media3's AudioTrack and clear its session.
+        // Keep one stable app-owned ID per ExoPlayer, but reapply it after EVERY audio
+        // attribute update. loadAudioPreferences() and preference changes both call
+        // this method, so guarding on containsKey() here can silently detach the effect.
+        val sessionId = playerAudioSessionIds[target] ?: runCatching {
+            audioManager?.generateAudioSessionId() ?: 0
+        }.getOrDefault(0)
+
+        if (sessionId > 0) {
+            try {
+                target.setAudioSessionId(sessionId)
+                playerAudioSessionIds[target] = sessionId
+            } catch (error: Exception) {
+                Log.w(TAG, "Could not reapply the dedicated audio session for visualization", error)
             }
+        } else {
+            Log.w(TAG, "Could not create a dedicated audio session for visualization")
         }
     }
 
