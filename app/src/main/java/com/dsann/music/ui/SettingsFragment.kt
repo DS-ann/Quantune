@@ -573,12 +573,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         val parsed = stored?.split(",")?.map { it.trim().lowercase() }
             ?.filter { it in availablePlayerButtons }?.distinct().orEmpty()
         val merged = (parsed + defaultPlayerButtons.filter { it !in parsed }).toMutableList()
-        if ("listen_together" !in parsed) {
+        if ("listen_together" !in merged) {
             val repeatIndex = merged.indexOf("repeat").takeIf { it >= 0 } ?: merged.size
             merged.add(repeatIndex, "listen_together")
         }
-        return merged.take(8)
-            .let { safe -> if (safe.size >= 3) safe else defaultPlayerButtons }
+        val withoutVisualizer = merged.filterNot { it == "visualizer" }.take(7)
+        val visualizerIndex = merged.indexOf("visualizer")
+            .takeIf { it >= 0 }?.coerceAtMost(withoutVisualizer.size) ?: withoutVisualizer.size
+        val safe = withoutVisualizer.toMutableList().apply {
+            add(visualizerIndex, "visualizer")
+        }
+        return if (safe.size >= 3) safe else defaultPlayerButtons
     }
     private val _playerButtons = MutableStateFlow(readPlayerButtons())
     val playerButtons: StateFlow<List<String>> = _playerButtons.asStateFlow()
