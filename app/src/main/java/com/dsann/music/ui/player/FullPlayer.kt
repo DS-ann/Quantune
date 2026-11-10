@@ -156,6 +156,30 @@ private fun AudioReactivePlayerVisualizer(
             }
 
         when (style) {
+            // Classic bar visualizer: retain the original compact bar appearance,
+            // but drive its height from the real playback FFT levels.
+            "Bars" -> {
+                val count = if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.M) 8 else 32
+                val gap = 3.dp.toPx()
+                val barWidth = ((size.width - gap * (count - 1)) / count).coerceAtLeast(1f)
+                repeat(count) { index ->
+                    val position = if (count <= 1) 0f else index / (count - 1f)
+                    val level = levelAt(position)
+                    val barHeight = (size.height * (0.18f + level * 0.78f))
+                        .coerceIn(2.dp.toPx(), size.height)
+                    val x = index * (barWidth + gap)
+                    drawRoundRect(
+                        color = visualizerColor(position).copy(alpha = 0.35f + level * 0.55f),
+                        topLeft = Offset(x, center.y - barHeight / 2f),
+                        size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                            x = barWidth / 2f,
+                            y = barWidth / 2f
+                        )
+                    )
+                }
+            }
+
             "Spectrum Bars" -> {
                 val count = 32
                 val gap = 2.dp.toPx()
