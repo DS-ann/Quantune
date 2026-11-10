@@ -136,21 +136,18 @@ fun FullscreenAudioVisualizerDialog(
                         val barWidth = (
                             (barAreaWidth - gap * (count - 1)) / count
                             ).coerceAtLeast(1f)
-                        val baselineY = size.height - 30.dp.toPx()
-                        val maxHeight = (baselineY - 18.dp.toPx()).coerceAtLeast(4.dp.toPx())
+                        val baselineY = size.height * 0.5f
+                        val maxHeight = (size.height * 0.5f - 28.dp.toPx())
+                            .coerceAtLeast(4.dp.toPx())
                         val corner = CornerRadius(
                             x = (barWidth * 0.45f).coerceAtLeast(1f),
                             y = (barWidth * 0.45f).coerceAtLeast(1f)
                         )
 
                         repeat(count) { index ->
-                            val centerDistance = kotlin.math.abs(
-                                index - (count - 1f) / 2f
-                            )
-                            val frequencyPosition = (
-                                centerDistance / ((count - 1f) / 2f).coerceAtLeast(1f)
-                            ).coerceIn(0f, 1f)
-                            val level = levelAt(frequencyPosition)
+                            // Keep frequency order left-to-right (bass to treble), but
+                            // mirror each bar vertically around the screen's midpoint.
+                            val level = levelAt(index / (count - 1f))
                             val barHeight = (
                                 maxHeight * (0.025f + level * 0.975f)
                                 ).coerceIn(2.dp.toPx(), maxHeight)
@@ -158,6 +155,12 @@ fun FullscreenAudioVisualizerDialog(
                             drawRoundRect(
                                 brush = activeBrush,
                                 topLeft = Offset(x, baselineY - barHeight),
+                                size = Size(barWidth, barHeight),
+                                cornerRadius = corner
+                            )
+                            drawRoundRect(
+                                brush = activeBrush,
+                                topLeft = Offset(x, baselineY),
                                 size = Size(barWidth, barHeight),
                                 cornerRadius = corner
                             )
@@ -288,12 +291,7 @@ fun FullscreenAudioVisualizerDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
                 ) {
-                    val frequencyLabels = if (visualizerStyle == "Spectrum") {
-                        listOf("16 kHz", "4 kHz", "1 kHz", "250 Hz", "60 Hz",
-                            "250 Hz", "1 kHz", "4 kHz", "16 kHz")
-                    } else {
-                        listOf("60 Hz", "250 Hz", "1 kHz", "4 kHz", "16 kHz")
-                    }
+                    val frequencyLabels = listOf("60 Hz", "250 Hz", "1 kHz", "4 kHz", "16 kHz")
                     frequencyLabels.forEach { frequency ->
                         Text(
                             text = frequency,
