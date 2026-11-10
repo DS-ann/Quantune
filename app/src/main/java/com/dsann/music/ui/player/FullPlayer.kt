@@ -777,7 +777,7 @@ fun FullPlayer(
     scrubberStyle: String = "Waveform",
     scrubberColor: String = "Accent",
     visualizerStyle: String = "Bars (16)",
-    visualizerColorStyle: String = "Gradient",
+    visualizerColorStyle: String = "Gradient (Vertical)",
     onVisualizerStyleChange: (String) -> Unit = {},
     onVisualizerColorStyleChange: (String) -> Unit = {},
     playerBackgroundStyle: String = "Artwork",
