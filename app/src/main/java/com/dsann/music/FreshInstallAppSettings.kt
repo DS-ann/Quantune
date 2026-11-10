@@ -21,7 +21,7 @@ internal object FreshInstallAppSettings {
         "show_synced_lyrics_in_player" to true,
         "amoled_black" to false,
         "mini_swipe_up" to "OPEN",
-        "player_visualizer" to "Oval",
+        "player_visualizer" to "Bars (16)",
         "ui_font_weight" to "Lighter",
         "download_bitrate" to "128 kbps",
         "nav_bar_style" to "Floating",
