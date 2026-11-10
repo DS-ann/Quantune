@@ -44,7 +44,11 @@ class PlaybackVisualizerController(
     @Volatile
     private var fftCallbackCount = 0
     @Volatile
+    private var fftSignalFrameCount = 0
+    @Volatile
     private var fftPollFrameCount = 0
+    @Volatile
+    private var fftPollSignalFrameCount = 0
     private var capture: Visualizer? = null
     private var activeSessionId = 0
     private var outputMixFallback: Runnable? = null
@@ -73,7 +77,7 @@ class PlaybackVisualizerController(
             val shouldPoll = synchronized(this) {
                 running &&
                     activeSessionId == preferredSession &&
-                    fftCallbackCount == 0 &&
+                    fftSignalFrameCount == 0 &&
                     pollingThread == null
             }
             if (shouldPoll) {
@@ -94,8 +98,8 @@ class PlaybackVisualizerController(
                 val shouldFallback = synchronized(this) {
                     running &&
                         activeSessionId == preferredSession &&
-                        fftCallbackCount == 0 &&
-                        fftPollFrameCount == 0
+                        fftSignalFrameCount == 0 &&
+                        fftPollSignalFrameCount == 0
                 }
                 if (shouldFallback) {
                     Log.w(TAG, "No FFT frames on player session $preferredSession; switching to output mix")
@@ -154,8 +158,13 @@ class PlaybackVisualizerController(
                 ) {
                     if (!running || capture !== candidate || fft == null || fft.isEmpty()) return
                     fftCallbackCount++
-                    if (fftCallbackCount == 1) {
-                        Log.d(TAG, "Received first callback FFT frame from session $audioSessionId (${fft.size} bytes)")
+                    if (containsAudioSignal(fft)) {
+                        fftSignalFrameCount++
+                        if (fftSignalFrameCount == 1) {
+                            Log.d(TAG, "Received first non-silent callback FFT frame from session $audioSessionId (${fft.size} bytes)")
+                        }
+                    } else if (fftCallbackCount == 1) {
+                        Log.w(TAG, "FFT callback is active but returned a silent frame for session $audioSessionId")
                     }
                     publishBands(fft)
                 }
@@ -171,7 +180,9 @@ class PlaybackVisualizerController(
             capture = candidate
             activeSessionId = audioSessionId
             fftCallbackCount = 0
+            fftSignalFrameCount = 0
             fftPollFrameCount = 0
+            fftPollSignalFrameCount = 0
             running = true
 
             val enableResult = candidate.setEnabled(true)
@@ -214,15 +225,21 @@ class PlaybackVisualizerController(
             override fun run() {
                 if (!running || capture !== candidate || activeSessionId != sessionId) return
 
-                // Stop polling as soon as the native callback begins delivering frames.
-                if (fftCallbackCount > 0) return
+                // Stop polling only after the native callback delivers usable non-silent data.
+                // Some OEM implementations call back with an all-zero FFT buffer.
+                if (fftSignalFrameCount > 0) return
 
                 try {
                     val result = candidate.getFft(buffer)
                     if (result == Visualizer.SUCCESS) {
                         fftPollFrameCount++
-                        if (fftPollFrameCount == 1) {
-                            Log.d(TAG, "Received first polled FFT frame from session $sessionId (${buffer.size} bytes)")
+                        if (containsAudioSignal(buffer)) {
+                            fftPollSignalFrameCount++
+                            if (fftPollSignalFrameCount == 1) {
+                                Log.d(TAG, "Received first non-silent polled FFT frame from session $sessionId (${buffer.size} bytes)")
+                            }
+                        } else if (fftPollFrameCount == 1) {
+                            Log.w(TAG, "Polled FFT is silent on session $sessionId")
                         }
                         publishBands(buffer.copyOf())
                     } else if (fftPollFrameCount == 0) {
@@ -233,7 +250,7 @@ class PlaybackVisualizerController(
                 }
 
                 if (running && capture === candidate && activeSessionId == sessionId &&
-                    fftCallbackCount == 0
+                    fftSignalFrameCount == 0
                 ) {
                     handler.postDelayed(this, POLL_INTERVAL_MS)
                 }
@@ -269,7 +286,9 @@ class PlaybackVisualizerController(
 
         activeSessionId = 0
         fftCallbackCount = 0
+        fftSignalFrameCount = 0
         fftPollFrameCount = 0
+        fftPollSignalFrameCount = 0
         val oldCapture = capture
         capture = null
         if (oldCapture != null) {
@@ -283,6 +302,15 @@ class PlaybackVisualizerController(
     private fun publishLevels(levels: FloatArray) {
         _levels.value = levels
         onLevelsChanged(levels)
+    }
+
+    private fun containsAudioSignal(fft: ByteArray): Boolean {
+        // Ignore the DC bin and tiny byte noise. This distinguishes a usable playback
+        // spectrum from OEM callback frames that technically arrive but carry no signal.
+        for (index in 2 until fft.size) {
+            if (kotlin.math.abs(fft[index].toInt()) > 2) return true
+        }
+        return false
     }
 
     private fun publishBands(fft: ByteArray) {
