@@ -34,6 +34,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -149,6 +150,59 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
             new AtomicReference<>();
     private static final AtomicBoolean PARTIAL_WIDGET_UPDATE_SCHEDULED = new AtomicBoolean(false);
 
+    // Widget presence is queried from the service's main-looper callbacks. Never perform
+    // AppWidgetManager Binder IPC synchronously from those callbacks: MIUI/launcher Binder
+    // stalls can otherwise freeze playback and trigger an ANR. Keep an atomic snapshot and
+    // refresh it on the same serial worker used for RemoteViews updates.
+    private static final AtomicBoolean CACHED_HAS_ANY_WIDGETS = new AtomicBoolean(false);
+    private static final AtomicBoolean CACHED_HAS_LYRICS_WIDGET = new AtomicBoolean(false);
+    private static final AtomicBoolean WIDGET_CACHE_REFRESH_SCHEDULED = new AtomicBoolean(false);
+    private static final AtomicLong LAST_WIDGET_CACHE_REFRESH_AT_MS = new AtomicLong(0L);
+    private static final long WIDGET_CACHE_REFRESH_INTERVAL_MS = 5_000L;
+
+    public static void refreshInstalledWidgetCache(Context context) {
+        refreshInstalledWidgetCache(context, false);
+    }
+
+    public static void refreshInstalledWidgetCache(Context context, boolean force) {
+        final Context appContext = context.getApplicationContext();
+        final long now = SystemClock.elapsedRealtime();
+        if (!force && now - LAST_WIDGET_CACHE_REFRESH_AT_MS.get() < WIDGET_CACHE_REFRESH_INTERVAL_MS) {
+            return;
+        }
+        if (!WIDGET_CACHE_REFRESH_SCHEDULED.compareAndSet(false, true)) {
+            return;
+        }
+
+        try {
+            PARTIAL_WIDGET_UPDATE_EXECUTOR.execute(() -> {
+                try {
+                    AppWidgetManager manager = AppWidgetManager.getInstance(appContext);
+                    int[] smallIds = manager.getAppWidgetIds(
+                            new ComponentName(appContext, WidgetSmallProvider.class));
+                    int[] mediumIds = manager.getAppWidgetIds(
+                            new ComponentName(appContext, WidgetMediumProvider.class));
+                    int[] largeIds = manager.getAppWidgetIds(
+                            new ComponentName(appContext, WidgetLargeProvider.class));
+
+                    CACHED_HAS_ANY_WIDGETS.set(
+                            smallIds.length > 0 || mediumIds.length > 0 || largeIds.length > 0);
+                    CACHED_HAS_LYRICS_WIDGET.set(mediumIds.length > 0 || largeIds.length > 0);
+                    LAST_WIDGET_CACHE_REFRESH_AT_MS.set(SystemClock.elapsedRealtime());
+                } catch (RuntimeException error) {
+                    // Keep the last known snapshot on Binder failure. Treating a transient
+                    // system-server stall as "no widgets" could stop widget playback recovery.
+                    Log.w(TAG, "Could not refresh installed-widget snapshot", error);
+                } finally {
+                    WIDGET_CACHE_REFRESH_SCHEDULED.set(false);
+                }
+            });
+        } catch (RuntimeException error) {
+            WIDGET_CACHE_REFRESH_SCHEDULED.set(false);
+            Log.w(TAG, "Could not schedule installed-widget snapshot refresh", error);
+        }
+    }
+
     private static final class WidgetProgressUpdate {
         final Context context;
         final int position;
@@ -173,11 +227,8 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
 
     @Override
     public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
-        try {
-            migrateWidgetPreferences(context);
-        } catch (RuntimeException migrationError) {
-            Log.w(TAG, "Widget preference migration failed; using current defaults", migrationError);
-        }
+        final Context appContext = context.getApplicationContext();
+        final int[] widgetIds = appWidgetIds != null ? appWidgetIds.clone() : new int[0];
         int layoutId = R.layout.widget_medium;
         Class<?> providerClass = WidgetMediumProvider.class;
         if (this instanceof WidgetSmallProvider) {
@@ -187,37 +238,66 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
             layoutId = R.layout.widget_large;
             providerClass = WidgetLargeProvider.class;
         }
-        for (int appWidgetId : appWidgetIds) {
-            updateWidget(context, appWidgetManager, appWidgetId, null, false, 0, 0, null, R.drawable.ic_notification_repeat_off, layoutId, providerClass);
+        final int targetLayoutId = layoutId;
+        final Class<?> targetProviderClass = providerClass;
+
+        // AppWidgetProvider callbacks run on the main looper. Move preference migration,
+        // widget-ID Binder queries and RemoteViews publication to the serial worker.
+        try {
+            PARTIAL_WIDGET_UPDATE_EXECUTOR.execute(() -> {
+                try {
+                    migrateWidgetPreferences(appContext);
+                } catch (RuntimeException migrationError) {
+                    Log.w(TAG, "Widget preference migration failed; using current defaults", migrationError);
+                }
+                try {
+                    AppWidgetManager manager = AppWidgetManager.getInstance(appContext);
+                    for (int appWidgetId : widgetIds) {
+                        updateWidget(appContext, manager, appWidgetId, null, false, 0, 0, null,
+                                R.drawable.ic_notification_repeat_off, targetLayoutId, targetProviderClass);
+                    }
+                } catch (RuntimeException updateError) {
+                    Log.w(TAG, "Could not initialize newly added widgets", updateError);
+                }
+            });
+        } catch (RuntimeException scheduleError) {
+            Log.w(TAG, "Could not schedule initial widget update", scheduleError);
         }
+        refreshInstalledWidgetCache(appContext, true);
 
         // onUpdate has no access to the current playback item itself. Ask the running playback
-        // service to replace these initial placeholders with the real track/position immediately;
-        // otherwise widgets added while a song is already playing can remain apparently blank.
+        // service to replace these initial placeholders with the real track/position immediately.
         try {
-            Intent refreshIntent = new Intent(context, com.dsann.music.service.AudioPlaybackService.class);
+            Intent refreshIntent = new Intent(appContext, com.dsann.music.service.AudioPlaybackService.class);
             refreshIntent.setAction("com.dsann.music.ACTION_WIDGET_REFRESH_STATE");
-            context.startService(refreshIntent);
+            appContext.startService(refreshIntent);
         } catch (Exception e) {
             Log.w(TAG, "Could not refresh widget state after adding a widget", e);
         }
     }
 
-    /** Returns whether any Quantune widget is installed on the current launcher. */
+    @Override
+    public void onEnabled(Context context) {
+        super.onEnabled(context);
+        refreshInstalledWidgetCache(context, true);
+    }
+
+    @Override
+    public void onDeleted(Context context, int[] appWidgetIds) {
+        super.onDeleted(context, appWidgetIds);
+        refreshInstalledWidgetCache(context, true);
+    }
+
+    @Override
+    public void onDisabled(Context context) {
+        super.onDisabled(context);
+        refreshInstalledWidgetCache(context, true);
+    }
+
+    /** Returns the last known widget-presence snapshot without blocking on system-server Binder IPC. */
     public static boolean hasAnyWidgets(Context context) {
-        try {
-            AppWidgetManager manager = AppWidgetManager.getInstance(context.getApplicationContext());
-            return manager.getAppWidgetIds(
-                    new ComponentName(context, WidgetSmallProvider.class)).length > 0
-                    || manager.getAppWidgetIds(
-                    new ComponentName(context, WidgetMediumProvider.class)).length > 0
-                    || manager.getAppWidgetIds(
-                    new ComponentName(context, WidgetLargeProvider.class)).length > 0;
-        } catch (RuntimeException error) {
-            Log.w(TAG, "Could not query installed widgets", error);
-            // Preserve the playback service if launcher state cannot be queried safely.
-            return true;
-        }
+        refreshInstalledWidgetCache(context, false);
+        return CACHED_HAS_ANY_WIDGETS.get();
     }
 
     public static void updateAllWidgets(Context context, SongItem currentSong, boolean isPlaying, int position,
@@ -227,26 +307,39 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
 
     public static void updateAllWidgets(Context context, SongItem currentSong, boolean isPlaying, int position,
             int duration, CharSequence currentLyric, int repeatIconResId) {
-        AppWidgetManager manager = AppWidgetManager.getInstance(context);
-        new Handler(Looper.getMainLooper()).post(() -> {
-            // Update Small Widgets
-            int[] smallIds = manager.getAppWidgetIds(new ComponentName(context, WidgetSmallProvider.class));
-            for (int id : smallIds) {
-                updateWidget(context, manager, id, currentSong, isPlaying, position, duration, currentLyric, repeatIconResId, R.layout.widget_small, WidgetSmallProvider.class);
-            }
+        final Context appContext = context.getApplicationContext();
+        try {
+            PARTIAL_WIDGET_UPDATE_EXECUTOR.execute(() -> {
+                try {
+                    AppWidgetManager manager = AppWidgetManager.getInstance(appContext);
 
-            // Update Medium Widgets
-            int[] mediumIds = manager.getAppWidgetIds(new ComponentName(context, WidgetMediumProvider.class));
-            for (int id : mediumIds) {
-                updateWidget(context, manager, id, currentSong, isPlaying, position, duration, currentLyric, repeatIconResId, R.layout.widget_medium, WidgetMediumProvider.class);
-            }
+                    int[] smallIds = manager.getAppWidgetIds(
+                            new ComponentName(appContext, WidgetSmallProvider.class));
+                    for (int id : smallIds) {
+                        updateWidget(appContext, manager, id, currentSong, isPlaying, position, duration,
+                                currentLyric, repeatIconResId, R.layout.widget_small, WidgetSmallProvider.class);
+                    }
 
-            // Update Large Widgets
-            int[] largeIds = manager.getAppWidgetIds(new ComponentName(context, WidgetLargeProvider.class));
-            for (int id : largeIds) {
-                updateWidget(context, manager, id, currentSong, isPlaying, position, duration, currentLyric, repeatIconResId, R.layout.widget_large, WidgetLargeProvider.class);
-            }
-        });
+                    int[] mediumIds = manager.getAppWidgetIds(
+                            new ComponentName(appContext, WidgetMediumProvider.class));
+                    for (int id : mediumIds) {
+                        updateWidget(appContext, manager, id, currentSong, isPlaying, position, duration,
+                                currentLyric, repeatIconResId, R.layout.widget_medium, WidgetMediumProvider.class);
+                    }
+
+                    int[] largeIds = manager.getAppWidgetIds(
+                            new ComponentName(appContext, WidgetLargeProvider.class));
+                    for (int id : largeIds) {
+                        updateWidget(appContext, manager, id, currentSong, isPlaying, position, duration,
+                                currentLyric, repeatIconResId, R.layout.widget_large, WidgetLargeProvider.class);
+                    }
+                } catch (RuntimeException updateError) {
+                    Log.w(TAG, "Could not update all installed widgets", updateError);
+                }
+            });
+        } catch (RuntimeException scheduleError) {
+            Log.w(TAG, "Could not schedule full widget update", scheduleError);
+        }
     }
 
     /**
@@ -259,19 +352,8 @@ public class DsmusicWidgetProvider extends AppWidgetProvider {
      * The 2x2 artwork-only widget is excluded.
      */
     public static boolean hasLyricsWidgetInstalled(Context context) {
-        try {
-            AppWidgetManager manager = AppWidgetManager.getInstance(context.getApplicationContext());
-            int[] largeIds = manager.getAppWidgetIds(
-                    new ComponentName(context, WidgetLargeProvider.class));
-            if (largeIds.length > 0) return true;
-
-            int[] mediumIds = manager.getAppWidgetIds(
-                    new ComponentName(context, WidgetMediumProvider.class));
-            return mediumIds.length > 0;
-        } catch (RuntimeException error) {
-            Log.w(TAG, "Could not inspect installed lyrics widgets", error);
-        }
-        return false;
+        refreshInstalledWidgetCache(context, false);
+        return CACHED_HAS_LYRICS_WIDGET.get();
     }
 
     private static void applyLyricsPresentation(Context context, RemoteViews views, CharSequence lyrics, int layoutId) {
