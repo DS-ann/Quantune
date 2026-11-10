@@ -16,7 +16,9 @@ import kotlin.math.sqrt
  * It does not open the microphone or alter the Media3 audio-renderer chain.
  */
 @Suppress("DEPRECATION")
-class PlaybackVisualizerController {
+class PlaybackVisualizerController(
+    private val onLevelsChanged: (FloatArray) -> Unit = {}
+) {
 
     companion object {
         const val BAR_COUNT = 16
@@ -98,7 +100,7 @@ class PlaybackVisualizerController {
             capture = null
             runCatching { candidate.setEnabled(false) }
             runCatching { candidate.release() }
-            _levels.value = FloatArray(BAR_COUNT) { 0f }
+            publishLevels(FloatArray(BAR_COUNT) { 0f })
             false
         }
     }
@@ -120,7 +122,12 @@ class PlaybackVisualizerController {
             runCatching { oldCapture.setDataCaptureListener(null, 0, false, false) }
             runCatching { oldCapture.release() }
         }
-        _levels.value = FloatArray(BAR_COUNT) { 0f }
+        publishLevels(FloatArray(BAR_COUNT) { 0f })
+    }
+
+    private fun publishLevels(levels: FloatArray) {
+        _levels.value = levels
+        onLevelsChanged(levels)
     }
 
     private fun publishBands(fft: ByteArray) {
@@ -170,6 +177,6 @@ class PlaybackVisualizerController {
             }
         }
 
-        if (running) _levels.value = newLevels
+        if (running) publishLevels(newLevels)
     }
 }
