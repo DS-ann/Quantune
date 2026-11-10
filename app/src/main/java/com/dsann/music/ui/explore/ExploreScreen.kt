@@ -593,8 +593,15 @@ fun ExploreScreen(
         }
     }
 
+    // Query cleanup belongs to the root/results page only. A populated query can remain
+    // behind album, playlist, artist, section, or credits pages; never let this handler
+    // consume Back before the currently visible nested page can close itself.
     androidx.activity.compose.BackHandler(
-        enabled = !isSearchActive && searchQuery.isNotBlank() && !isPlayerBackActive
+        enabled = !isSearchActive &&
+            searchQuery.isNotBlank() &&
+            !detailScreenActive &&
+            showCreditsForSong == null &&
+            !isPlayerBackActive
     ) {
         viewModel.clearSearch()
     }
