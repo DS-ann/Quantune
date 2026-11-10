@@ -106,6 +106,7 @@ class DsmusicListenTogetherClient {
     @Volatile private var reconnectHandshakePending = false
     @Volatile private var connectionGeneration = 0L
     private var reconnectJob: Job? = null
+    private var reconnectAttempt = 0
     private var initialHandshakeType: String? = null
     private val pendingPingSamples = ConcurrentHashMap<Long, Pair<Long, Long>>()
     @Volatile private var serverClockOffsetMs = 0L
@@ -1247,29 +1248,46 @@ class DsmusicListenTogetherClient {
                 val code = fields.firstString(1) ?: return
                 _roomCode.value = code
                 ownUserId = fields.firstString(2)
+                fields.firstString(3)?.takeIf { it.isNotBlank() }?.let { sessionToken = it }
+                pendingMessage = null
+                reconnectHandshakePending = false
+                reconnectAttempt = 0
                 _role.value = "HOST"
                 _roomUsers.value = listOf("You (host)")
+                _connectionState.value = "Connected"
                 _message.value = "Room created. Share this code with friends."
             }
             "join_approved" -> {
                 val code = fields.firstString(1) ?: return
                 _roomCode.value = code
                 ownUserId = fields.firstString(2)
+                fields.firstString(3)?.takeIf { it.isNotBlank() }?.let { sessionToken = it }
+                pendingMessage = null
+                reconnectHandshakePending = false
+                reconnectAttempt = 0
                 _role.value = "GUEST"
-                val state = fields.firstBytes(4)?.let { ProtoReader(it).fields() }
-                if (state != null) {
-                    _roomUsers.value = state.allBytes(3).mapNotNull { user ->
-                        ProtoReader(user).fields().firstString(2)
-                    }
-                    val track = state.firstBytes(4)?.let(::decodeTrack)
-                    val playing = state.firstVarint(5) == 1L
-                    val position = state.firstVarint(6) ?: 0L
-                    val queue = state.allBytes(9).mapNotNull(::decodeTrack)
-                    lastSharedQueue = queue
-                    if (track != null) lastTrack = track
-                    publishRemote(if (playing) "play" else "pause", track ?: lastTrack, position, playing, queue)
-                }
+                fields.firstBytes(4)?.let { updateRoomStateFromSnapshot(it, "sync_state") }
+                _connectionState.value = "Connected"
                 _message.value = "You joined the listening room."
+            }
+            "reconnected" -> {
+                val code = fields.firstString(1) ?: return
+                _roomCode.value = code
+                ownUserId = fields.firstString(2) ?: ownUserId
+                _role.value = if (fields.firstVarint(4) == 1L) "HOST" else "GUEST"
+                reconnectHandshakePending = false
+                reconnectAttempt = 0
+                pendingMessage = null
+                fields.firstBytes(3)?.let { updateRoomStateFromSnapshot(it, "sync_state") }
+                _connectionState.value = "Connected"
+                _message.value = "Connection restored. Your listening room is synchronized."
+            }
+            "pong" -> handlePong(fields)
+            "server_restarting" -> {
+                _connectionState.value = "Reconnecting"
+                _message.value = fields.firstString(2)
+                    ?.takeIf { it.isNotBlank() }
+                    ?: "The room server is restarting. Quantune will reconnect automatically."
             }
             "join_rejected" -> {
                 _message.value = fields.firstString(1) ?: "The host declined the join request."
@@ -1295,22 +1313,45 @@ class DsmusicListenTogetherClient {
                 val track = fields.firstBytes(1)?.let(::decodeTrack)
                 if (track != null) lastTrack = track
                 val playing = fields.firstVarint(2) == 1L
-                val position = fields.firstVarint(3) ?: 0L
+                val rawPosition = fields.firstVarint(3) ?: 0L
+                val lastUpdate = fields.firstVarint(4) ?: 0L
                 val queue = fields.allBytes(5).mapNotNull(::decodeTrack)
                 lastSharedQueue = queue
-                publishRemote(if (playing) "play" else "pause", track ?: lastTrack, position, playing, queue)
+                val position = compensateRemotePosition(rawPosition, playing, lastUpdate, track?.durationMs ?: 0L)
+                publishRemote("sync_state", track ?: lastTrack, position, playing, queue, fields.firstString(8))
             }
             "error" -> {
                 val code = fields.firstString(1).orEmpty()
                 val details = fields.firstString(2).orEmpty()
-                _message.value = listOf(code, details).filter { it.isNotBlank() }.joinToString(": ")
+                val description = listOf(code, details).filter { it.isNotBlank() }.joinToString(": ")
                     .ifBlank { "The room server returned an error." }
+                if (reconnectHandshakePending && code in setOf(
+                        "session_not_found", "session_expired", "room_not_found",
+                        "host_not_allowed", "missing_session_token"
+                    )
+                ) {
+                    sessionToken = null
+                    reconnectHandshakePending = false
+                    reconnectJob?.cancel()
+                    reconnectJob = null
+                    socket?.close(1000, "Session cannot be restored")
+                    _connectionState.value = "Connection error"
+                    _message.value = "Automatic reconnect is no longer available. Join the room again. $description"
+                } else {
+                    _message.value = description
+                    if (reconnectHandshakePending) socket?.cancel()
+                }
             }
             "kicked" -> {
                 _message.value = fields.firstString(1) ?: "You were removed from the room."
+                sessionToken = null
+                reconnectHandshakePending = false
+                reconnectJob?.cancel()
+                reconnectJob = null
                 _roomCode.value = null
                 _role.value = "NONE"
                 ownUserId = null
+                _connectionState.value = "Disconnected"
             }
             "host_changed" -> {
                 val hostId = fields.firstString(1)
@@ -1353,6 +1394,7 @@ class DsmusicListenTogetherClient {
     ) {
         if (queue != null) lastSharedQueue = queue
         remoteSequence += 1L
+        remotePlaybackReceivedAtElapsedMs = SystemClock.elapsedRealtime()
         _remotePlayback.value = RemotePlaybackState(
             sequence = remoteSequence,
             action = action,
