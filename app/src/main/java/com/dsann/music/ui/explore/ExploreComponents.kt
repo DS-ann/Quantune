@@ -87,6 +87,9 @@ import com.dsann.music.ui.theme.rememberDsmusicModalSheetGeometry
 import com.dsann.music.ui.theme.OutlinedButton
 import com.dsann.music.ui.theme.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.State
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -148,6 +151,9 @@ import com.dsann.music.ui.NowPlayingCoverIndicator
 import com.dsann.music.ui.rememberNowPlayingCoverColor
 import com.dsann.music.ui.player.rememberAppAnimationFrameTimeNanos
 
+// One frame clock is shared by every placeholder in the Home feed skeleton.
+private val LocalExploreShimmerFrameTime = staticCompositionLocalOf<State<Long>?> { null }
+
 /**
  * Standard UI Shimmer Modifier to render placeholder skeleton states efficiently.
  */
@@ -167,16 +173,16 @@ fun ShimmerModifier(
 
 @Composable
 fun Modifier.shimmerEffect(): Modifier {
-    // Cached/inactive tabs stay static. Visible shimmer samples the shared app frame clock.
+    // Cached/inactive tabs and low-RAM devices use a static skeleton. All visible
+    // Home-feed placeholders read the same frame state instead of starting one
+    // withFrameNanos coroutine per placeholder.
     val staticShimmerColor = DsmusicTheme.colorScheme.surfaceContainerHigh
-    // Android 6's software-accelerated drawing path struggles with continuously
-    // invalidated gradient placeholders. Keep the skeleton static on API 23.
-    if (!LocalRootTabActive.current || Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
+    val frameTimeNanos = LocalExploreShimmerFrameTime.current
+    if (!LocalRootTabActive.current || Build.VERSION.SDK_INT <= Build.VERSION_CODES.M || frameTimeNanos == null) {
         return this.background(staticShimmerColor)
     }
 
     var positionInRoot by remember { mutableStateOf(Offset.Zero) }
-    val frameTimeNanos = rememberAppAnimationFrameTimeNanos(active = true)
     val shimmerLowColor = DsmusicTheme.colorScheme.surfaceContainerLow
     val shimmerColors = remember(shimmerLowColor, staticShimmerColor) {
         listOf(shimmerLowColor, staticShimmerColor, shimmerLowColor)
@@ -258,37 +264,53 @@ fun AnimatedEqualizerBars(
  */
 @Composable
 fun HomeFeedSkeleton() {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(DsmusicTheme.colorScheme.background),
-        contentPadding = PaddingValues(bottom = 120.dp)
+    val context = LocalContext.current
+    val isLowRamDevice = (
+        context.getSystemService(android.content.Context.ACTIVITY_SERVICE)
+            as? android.app.ActivityManager
+        )?.isLowRamDevice == true
+    val animateShimmer = LocalRootTabActive.current &&
+        Build.VERSION.SDK_INT > Build.VERSION_CODES.M &&
+        !isLowRamDevice
+    // Share one bounded frame subscription across all visible skeleton tiles.
+    val sharedShimmerFrameTime = rememberAppAnimationFrameTimeNanos(active = animateShimmer)
+
+    CompositionLocalProvider(
+        LocalExploreShimmerFrameTime provides
+            if (animateShimmer) sharedShimmerFrameTime else null
     ) {
-        item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
-                ShimmerModifier(width = 160.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
-                Spacer(modifier = Modifier.height(20.dp))
-                // Chip row shimmer
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    repeat(4) {
-                        ShimmerModifier(width = 72.dp, height = 32.dp, shape = CircleShape)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().background(DsmusicTheme.colorScheme.background),
+            contentPadding = PaddingValues(bottom = 120.dp)
+        ) {
+            item {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
+                    ShimmerModifier(width = 160.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
+                    // Chip row shimmer
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        repeat(4) {
+                            ShimmerModifier(width = 72.dp, height = 32.dp, shape = CircleShape)
+                        }
                     }
                 }
             }
-        }
-        items(4) {
-            Column(modifier = Modifier.padding(vertical = 10.dp)) {
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    ShimmerModifier(width = 140.dp, height = 26.dp, shape = RoundedCornerShape(8.dp))
-                    ShimmerModifier(width = 64.dp, height = 28.dp, shape = CircleShape)
-                }
-                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(4) {
-                        Column(horizontalAlignment = Alignment.Start) {
-                            ShimmerModifier(width = 170.dp, height = 170.dp, shape = RoundedCornerShape(8.dp))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            ShimmerModifier(width = 120.dp, height = 16.dp, shape = RoundedCornerShape(6.dp))
-                            Spacer(modifier = Modifier.height(4.dp))
-                            ShimmerModifier(width = 80.dp, height = 12.dp, shape = RoundedCornerShape(6.dp))
+            items(4) {
+                Column(modifier = Modifier.padding(vertical = 10.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        ShimmerModifier(width = 140.dp, height = 26.dp, shape = RoundedCornerShape(8.dp))
+                        ShimmerModifier(width = 64.dp, height = 28.dp, shape = CircleShape)
+                    }
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(4) {
+                            Column(horizontalAlignment = Alignment.Start) {
+                                ShimmerModifier(width = 170.dp, height = 170.dp, shape = RoundedCornerShape(8.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                ShimmerModifier(width = 120.dp, height = 16.dp, shape = RoundedCornerShape(6.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                ShimmerModifier(width = 80.dp, height = 12.dp, shape = RoundedCornerShape(6.dp))
+                            }
                         }
                     }
                 }
