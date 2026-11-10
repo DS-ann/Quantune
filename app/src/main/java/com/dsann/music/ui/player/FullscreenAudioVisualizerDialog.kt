@@ -132,20 +132,20 @@ fun FullscreenAudioVisualizerDialog(
 
                 repeat(count) { index ->
                     val level = levels.getOrElse(index) { 0f }.coerceIn(0f, 1f)
-                    val barHeight = size.height * level
-                    if (barHeight > 1f) {
-                        val x = index * (barWidth + gap)
-                        val top = size.height - barHeight
-                        drawRoundRect(
-                            brush = gradient,
-                            topLeft = androidx.compose.ui.geometry.Offset(x, top),
-                            size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
-                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(
-                                x = barWidth / 2f,
-                                y = barWidth / 2f
-                            )
+                    // Keep a visible baseline before the first FFT frame arrives so
+                    // missing capture data cannot make the entire visualizer look blank.
+                    val barHeight = size.height * (0.035f + level * 0.88f)
+                    val x = index * (barWidth + gap)
+                    val top = size.height - barHeight
+                    drawRoundRect(
+                        brush = gradient,
+                        topLeft = androidx.compose.ui.geometry.Offset(x, top),
+                        size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                            x = barWidth / 2f,
+                            y = barWidth / 2f
                         )
-                    }
+                    )
                 }
             }
 
