@@ -983,7 +983,7 @@ class AudioPlaybackService : MediaSessionService() {
     // Each ExoPlayer owns a dedicated Android audio session. The playback visualizer
     // attaches to the active session only when the user opens its screen.
     private val playerAudioSessionIds = java.util.WeakHashMap<ExoPlayer, Int>()
-    private val idleVisualizerLevels = MutableStateFlow(FloatArray(16) { 0f })
+    private val playbackVisualizerLevelsState = MutableStateFlow(FloatArray(16) { 0f })
     @Volatile private var playbackVisualizerController: PlaybackVisualizerController? = null
     
     private var currentBaseVolume = 1.0f
@@ -4947,24 +4947,41 @@ class AudioPlaybackService : MediaSessionService() {
     fun getPlayerInstance(): ExoPlayer = player
 
     /** Starts playback-output FFT capture only for the full-screen visualizer. */
+    @OptIn(UnstableApi::class)
     fun startPlaybackVisualizer(): Boolean {
         if (!isPlayerInitialized) return false
-        val sessionId = playerAudioSessionIds[player] ?: return false
-        if (sessionId <= 0) return false
+
+        val activePlayer = player
+        // Prefer Media3's live session ID. The cached generated ID is only a fallback:
+        // an AudioTrack recreation can otherwise leave the effect attached to an old session.
+        val reportedSessionId = runCatching { activePlayer.audioSessionId }.getOrDefault(-1)
+        val cachedSessionId = playerAudioSessionIds[activePlayer] ?: 0
+        val sessionId = reportedSessionId.takeIf { it > 0 } ?: cachedSessionId
+        if (sessionId <= 0) {
+            Log.w(TAG, "Visualizer start skipped: no active audio session (reported=$reportedSessionId, cached=$cachedSessionId)")
+            return false
+        }
+        playerAudioSessionIds[activePlayer] = sessionId
+
         val controller = playbackVisualizerController ?: synchronized(this) {
-            playbackVisualizerController ?: PlaybackVisualizerController().also {
+            playbackVisualizerController ?: PlaybackVisualizerController { levels ->
+                playbackVisualizerLevelsState.value = levels
+            }.also {
                 playbackVisualizerController = it
             }
         }
-        return controller.start(sessionId)
+        val started = controller.start(sessionId)
+        Log.d(TAG, "Visualizer start: session=$sessionId started=$started playing=${activePlayer.isPlaying}")
+        return started
     }
 
     fun stopPlaybackVisualizer() {
         playbackVisualizerController?.stop()
     }
 
+    /** Stable stream observed by Compose before and after lazy capture starts. */
     val playbackVisualizerLevels: StateFlow<FloatArray>
-        get() = playbackVisualizerController?.levels ?: idleVisualizerLevels
+        get() = playbackVisualizerLevelsState
 
     inner class LocalBinder : Binder() {
         fun getService(): AudioPlaybackService = this@AudioPlaybackService
