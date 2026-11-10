@@ -707,7 +707,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun normalizeVisualizerColorStyle(value: String): String = when (value) {
-        "Gradient", "Gradient (Vertical)" -> "Gradient (Vertical)"
+        "Gradient" -> "Gradient (Horizontal)"
+        "Gradient (Vertical)" -> "Gradient (Vertical)"
         "Gradient (Horizontal)" -> "Gradient (Horizontal)"
         "White" -> "White"
         "UI Matching", "Theme Matching" -> "UI Matching"
