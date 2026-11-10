@@ -27,6 +27,7 @@ import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
+import java.util.zip.CRC32
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -97,8 +98,20 @@ class DsmusicListenTogetherClient {
         .pingInterval(30, TimeUnit.SECONDS)
         .build()
 
-    private var socket: WebSocket? = null
+    @Volatile private var socket: WebSocket? = null
     private var pendingMessage: ByteArray? = null
+    @Volatile private var activeServerUrl: String? = null
+    @Volatile private var sessionToken: String? = null
+    @Volatile private var manualDisconnect = true
+    @Volatile private var reconnectHandshakePending = false
+    @Volatile private var connectionGeneration = 0L
+    private var reconnectJob: Job? = null
+    private var initialHandshakeType: String? = null
+    private val pendingPingSamples = ConcurrentHashMap<Long, Pair<Long, Long>>()
+    @Volatile private var serverClockOffsetMs = 0L
+    @Volatile private var hasServerClockOffset = false
+    private var lastSyncRequestElapsedMs = 0L
+    private var remotePlaybackReceivedAtElapsedMs = 0L
     private var lastTrack: SharedTrack? = null
     private var lastSharedQueue: List<SharedTrack> = emptyList()
     private var ownUserId: String? = null
