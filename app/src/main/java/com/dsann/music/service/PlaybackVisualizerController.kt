@@ -1,6 +1,7 @@
 package com.dsann.music.service
 
 import android.media.audiofx.Visualizer
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +22,7 @@ class PlaybackVisualizerController(
 ) {
 
     companion object {
+        private const val TAG = "PlaybackVisualizer"
         const val BAR_COUNT = 16
         private const val TARGET_CAPTURE_RATE_MILLI_HZ = 30_000
     }
@@ -39,13 +41,15 @@ class PlaybackVisualizerController(
 
         val candidate = try {
             Visualizer(audioSessionId)
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            Log.w(TAG, "Unable to create Visualizer for audio session $audioSessionId", error)
             return false
         }
 
         return try {
             val range = Visualizer.getCaptureSizeRange()
             if (range.size < 2 || range[0] <= 0 || range[1] < range[0]) {
+                Log.w(TAG, "Invalid Visualizer capture-size range: ${range.contentToString()}")
                 candidate.release()
                 return false
             }
@@ -53,7 +57,9 @@ class PlaybackVisualizerController(
             val requestedSize = minOf(1024, range[1])
             val powerOfTwoSize = Integer.highestOneBit(requestedSize)
                 .coerceAtLeast(range[0])
-            if (candidate.setCaptureSize(powerOfTwoSize) != Visualizer.SUCCESS) {
+            val captureSizeResult = candidate.setCaptureSize(powerOfTwoSize)
+            if (captureSizeResult != Visualizer.SUCCESS) {
+                Log.w(TAG, "Visualizer.setCaptureSize($powerOfTwoSize) failed: $captureSizeResult")
                 candidate.release()
                 return false
             }
@@ -81,21 +87,27 @@ class PlaybackVisualizerController(
                 }
             }
 
-            if (candidate.setDataCaptureListener(listener, captureRate, false, true) != Visualizer.SUCCESS) {
+            val listenerResult = candidate.setDataCaptureListener(listener, captureRate, false, true)
+            if (listenerResult != Visualizer.SUCCESS) {
+                Log.w(TAG, "Visualizer.setDataCaptureListener() failed: $listenerResult")
                 candidate.release()
                 return false
             }
 
             capture = candidate
             running = true
-            if (candidate.setEnabled(true) != Visualizer.SUCCESS) {
+            val enableResult = candidate.setEnabled(true)
+            if (enableResult != Visualizer.SUCCESS) {
+                Log.w(TAG, "Visualizer.setEnabled(true) failed: $enableResult")
                 running = false
                 capture = null
                 candidate.release()
                 return false
             }
+            Log.d(TAG, "Visualizer capture enabled for audio session $audioSessionId at $captureRate mHz")
             true
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            Log.w(TAG, "Visualizer initialization failed for audio session $audioSessionId", error)
             running = false
             capture = null
             runCatching { candidate.setEnabled(false) }
