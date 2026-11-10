@@ -356,12 +356,13 @@ object YouTubeMusic {
                         }
                     }
 
-                    if (!bestUrl.isNullOrEmpty()) {
+                    val resolvedUrl = bestUrl
+                    if (!resolvedUrl.isNullOrEmpty()) {
                         // Commit successfully resolved URL to memory cache
                         if (streamSelectionGeneration.get() == requestGeneration) {
                             val cachedAtMs = System.currentTimeMillis()
                             val signedExpiryMs = runCatching {
-                                android.net.Uri.parse(bestUrl).getQueryParameter("expire")
+                                android.net.Uri.parse(resolvedUrl).getQueryParameter("expire")
                                     ?.toLongOrNull()?.times(1000L)
                             }.getOrNull()
                             val conservativeExpiryMs = cachedAtMs + CACHE_TTL
@@ -369,10 +370,10 @@ object YouTubeMusic {
                                 minOf(conservativeExpiryMs, it - 60_000L)
                             } ?: conservativeExpiryMs
                             if (expiresAtMs > cachedAtMs) {
-                                streamUrlCache[id] = bestUrl to expiresAtMs
+                                streamUrlCache[id] = resolvedUrl to expiresAtMs
                             }
                         }
-                        Result.success(bestUrl)
+                        Result.success(resolvedUrl)
                     } else {
                         Result.failure(
                             extractionFailure
