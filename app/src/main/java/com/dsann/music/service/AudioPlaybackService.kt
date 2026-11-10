@@ -811,6 +811,10 @@ class AudioPlaybackService : MediaSessionService() {
         val autoPlay: Boolean
     )
     private var mediaSession: MediaSession? = null
+    // Connection callbacks are on the application looper. This counter is diagnostic only;
+    // it helps identify rapid controller reconnects without doing any additional IPC.
+    private var mediaSessionConnectionRequestCount = 0
+    private var lastMediaSessionLayoutSignature: String? = null
     private var viewModel: PlayerSharedViewModel? = null
     // Minimal persisted song/queue snapshot used when widget actions cold-start the service
     // after MediaSessionService has stopped normally on a paused task removal.
@@ -4276,7 +4280,18 @@ class AudioPlaybackService : MediaSessionService() {
 
     fun updateMediaSessionCustomLayout() {
         val session = mediaSession ?: return
-        val buttons = configuredSessionButtons().map { key ->
+        val selectedButtons = configuredSessionButtons()
+
+        // Repeat/favorite observers can emit snapshots that do not change the visible
+        // actions. Do not send an identical layout to every connected media controller.
+        // The signature includes dynamic labels/icons so real repeat/favorite changes
+        // still refresh the lock-screen and notification controls.
+        val layoutSignature = selectedButtons.joinToString("|") { key ->
+            "$key:${sessionButtonLabel(key)}:${sessionButtonIcon(key)}"
+        }
+        if (layoutSignature == lastMediaSessionLayoutSignature) return
+
+        val buttons = selectedButtons.map { key ->
             CommandButton.Builder()
                 .setDisplayName(sessionButtonLabel(key))
                 .setSessionCommand(sessionButtonCommand(key))
@@ -4285,20 +4300,38 @@ class AudioPlaybackService : MediaSessionService() {
                 .build()
         }
         session.setCustomLayout(buttons)
+        lastMediaSessionLayoutSignature = layoutSignature
+
         // The MediaSession layout updates lock-screen controls. Rebuild the
         // notification as well because its custom actions are added separately.
         refreshMediaNotification()
     }
 
     private val mediaSessionCallback = object : MediaSession.Callback {
-        override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            mediaSessionConnectionRequestCount++
+            val requestNumber = mediaSessionConnectionRequestCount
+            if (requestNumber <= 8 || requestNumber % 50 == 0) {
+                Log.i(
+                    TAG,
+                    "MediaSession controller connection request #$requestNumber: " +
+                        "package=${controller.packageName}, uid=${controller.uid}"
+                )
+            }
+
             val playerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
                 .add(Player.COMMAND_PLAY_PAUSE)
                 .add(Player.COMMAND_SEEK_TO_NEXT)
                 .add(Player.COMMAND_SEEK_TO_PREVIOUS)
                 .build()
 
-            val sessionCommandsBuilder = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
+            // Quantune exposes a regular MediaSession, not a MediaLibrarySession.
+            // Advertising library commands is unnecessary and can cause controllers to
+            // probe browsing operations that this service does not implement.
+            val sessionCommandsBuilder = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                 .add(CMD_TOGGLE_LOOP)
                 .add(CMD_CYCLE_PLAYBACK_MODE)
                 .add(CMD_TOGGLE_FAV)
@@ -4311,6 +4344,28 @@ class AudioPlaybackService : MediaSessionService() {
             val sessionCommands = sessionCommandsBuilder.build()
 
             return MediaSession.ConnectionResult.accept(sessionCommands, playerCommands)
+        }
+
+        override fun onPostConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ) {
+            Log.i(
+                TAG,
+                "MediaSession controller connected: package=${controller.packageName}, " +
+                    "uid=${controller.uid}, activeControllers=${session.connectedControllers.size}"
+            )
+        }
+
+        override fun onDisconnected(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ) {
+            Log.i(
+                TAG,
+                "MediaSession controller disconnected: package=${controller.packageName}, " +
+                    "uid=${controller.uid}"
+            )
         }
 
         override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
