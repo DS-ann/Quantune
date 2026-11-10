@@ -29,7 +29,6 @@ internal object FreshInstallAppSettings {
         "player_artwork_shape" to "Cookie",
         "custom_accent_color" to "#000000",
         "page_transition_speed" to 0.5f,
-        "visualizer_color" to "Spectrum",
         "genre_card_gradient_style" to "Sunset",
         "cover_long_press" to "VIDEO",
         "player_buttons_pill" to true,
