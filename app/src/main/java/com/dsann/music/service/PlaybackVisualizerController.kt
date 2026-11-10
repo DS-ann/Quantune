@@ -34,9 +34,11 @@ class PlaybackVisualizerController(
         private const val DEFAULT_SAMPLE_RATE_MILLI_HZ = 44_100_000
         private const val MIN_FREQUENCY_HZ = 32f
         private const val MAX_FREQUENCY_HZ = 16_000f
-        private const val MIN_SIGNAL_MAGNITUDE = 1.6f
-        private const val DISPLAY_FLOOR_DB = -42f
-        private const val DISPLAY_CEILING_DB = -3f
+        private const val MIN_SIGNAL_MAGNITUDE = 0.8f
+        // A wider dB window keeps the spectrum visible at quiet playback levels while
+        // preserving enough headroom for loud sections and volume changes.
+        private const val DISPLAY_FLOOR_DB = -48f
+        private const val DISPLAY_CEILING_DB = -4f
         private const val MAX_TREBLE_COMPENSATION_DB = 6f
         private const val CALLBACK_GRACE_PERIOD_MS = 450L
         // The UI already waits 250 ms before requesting capture. If the player session
@@ -194,7 +196,13 @@ class PlaybackVisualizerController(
                 return false
             }
 
-            candidate.setScalingMode(Visualizer.SCALING_MODE_NORMALIZED)
+            // Keep visualizer amplitude tied to the actual playback gain. NORMALIZED
+            // counteracts volume changes and makes the spectrum look equally loud at
+            // low and high device volume.
+            val scalingResult = candidate.setScalingMode(Visualizer.SCALING_MODE_AS_PLAYED)
+            if (scalingResult != Visualizer.SUCCESS) {
+                Log.w(TAG, "Visualizer AS_PLAYED scaling mode failed: $scalingResult")
+            }
             val captureRate = minOf(TARGET_CAPTURE_RATE_MILLI_HZ, Visualizer.getMaxCaptureRate())
                 .coerceAtLeast(1)
 

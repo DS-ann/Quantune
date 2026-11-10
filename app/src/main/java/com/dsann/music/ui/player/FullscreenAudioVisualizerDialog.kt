@@ -144,7 +144,13 @@ fun FullscreenAudioVisualizerDialog(
                         )
 
                         repeat(count) { index ->
-                            val level = levelAt(index / (count - 1f))
+                            val centerDistance = kotlin.math.abs(
+                                index - (count - 1f) / 2f
+                            )
+                            val frequencyPosition = (
+                                centerDistance / ((count - 1f) / 2f).coerceAtLeast(1f)
+                            ).coerceIn(0f, 1f)
+                            val level = levelAt(frequencyPosition)
                             val barHeight = (
                                 maxHeight * (0.025f + level * 0.975f)
                                 ).coerceIn(2.dp.toPx(), maxHeight)
@@ -282,7 +288,13 @@ fun FullscreenAudioVisualizerDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
                 ) {
-                    listOf("60 Hz", "250 Hz", "1 kHz", "4 kHz", "16 kHz").forEach { frequency ->
+                    val frequencyLabels = if (visualizerStyle == "Spectrum") {
+                        listOf("16 kHz", "4 kHz", "1 kHz", "250 Hz", "60 Hz",
+                            "250 Hz", "1 kHz", "4 kHz", "16 kHz")
+                    } else {
+                        listOf("60 Hz", "250 Hz", "1 kHz", "4 kHz", "16 kHz")
+                    }
+                    frequencyLabels.forEach { frequency ->
                         Text(
                             text = frequency,
                             color = Color.White.copy(alpha = 0.88f),
