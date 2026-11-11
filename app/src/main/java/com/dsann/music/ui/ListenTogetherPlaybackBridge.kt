@@ -81,15 +81,13 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
     LaunchedEffect(role, isPlaying, currentSong?.id, currentSong?.videoId, isLoading) {
         if (role == "HOST") {
             val incomingGuestControl = remotePlayback
-            if (
-                incomingGuestControl != null &&
+            val isGuestControlEcho = incomingGuestControl != null &&
                 incomingGuestControl.action in setOf("play", "pause") &&
                 incomingGuestControl.sequence == lastAppliedGuestControlSequence.longValue
-            ) {
-                // The host has just applied this guest request. Consume the marker so
-                // a later independent host action with the same play state is not lost.
+            if (isGuestControlEcho) {
+                // The room already relayed this guest request to every other listener.
+                // Consume the marker, but still announce any host track change in progress.
                 lastAppliedGuestControlSequence.longValue = -1L
-                return@LaunchedEffect
             }
 
             val song = currentSong
@@ -110,7 +108,7 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
 
             // The track announcement above is independent of isLoading. Only the final
             // transport state waits for the host's selected track to become ready.
-            if (!isLoading) {
+            if (!isLoading && !isGuestControlEcho) {
                 client.sendHostPlayback(
                     isPlaying = isPlaying,
                     track = sharedTrack,
