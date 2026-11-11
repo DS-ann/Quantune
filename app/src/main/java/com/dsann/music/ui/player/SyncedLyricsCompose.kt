@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.dsann.music.ui.theme.Button
+import com.dsann.music.ui.theme.LoadingIndicator
 import com.dsann.music.ui.theme.Icon
 import com.dsann.music.ui.theme.DsmusicTheme
 import com.dsann.music.ui.theme.dsmusicHomeStudioGradientBrush
@@ -42,8 +43,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -96,6 +99,37 @@ private data class LyricDisplayItem(
     val isActive: Boolean = false,
     val isPast: Boolean = false
 )
+
+private data class PreparedSyncedLyrics(
+    val isKaraokeMode: Boolean,
+    val displayItems: List<LyricDisplayItem>,
+    val scrollBoundaries: LyricsScrollBoundaries,
+    val lastWordEndMs: Long?
+)
+
+private fun prepareSyncedLyrics(lyrics: List<LyricLine>): PreparedSyncedLyrics {
+    val isKaraokeMode = lyrics.any { !it.isInterlude && it.isWordByWord && it.words.isNotEmpty() }
+    val displayItems = lyrics.mapIndexedNotNull { index, line ->
+        if (line.isInterlude) null
+        else LyricDisplayItem(line = line, originalIndex = index)
+    }.sortedWith(
+        compareBy<LyricDisplayItem> { it.line.startTimeMs }
+            .thenBy { it.originalIndex }
+    )
+    val displayLines = displayItems.map { it.line }
+    val scrollBoundaries = buildLyricsScrollBoundaries(displayLines)
+    val lastLyric = displayItems.lastOrNull()?.line
+    val lastWordEndMs = lastLyric?.words
+        ?.maxOfOrNull { it.absoluteStartTimeMs + it.durationMs }
+        ?.takeIf { it > 0L }
+
+    return PreparedSyncedLyrics(
+        isKaraokeMode = isKaraokeMode,
+        displayItems = displayItems,
+        scrollBoundaries = scrollBoundaries,
+        lastWordEndMs = lastWordEndMs
+    )
+}
 
 internal data class LyricsScrollBoundaries(
     val lyricIndices: IntArray,
@@ -230,10 +264,20 @@ internal fun SyncedLyricsCompose(
         }
     }
 
-    // ── Detect karaoke mode ──
-    val isKaraokeMode = remember(lyrics) {
-        lyrics.any { !it.isInterlude && it.isWordByWord && it.words.isNotEmpty() }
+    // Sorting, karaoke detection and word-boundary scans can be costly for
+    // large karaoke payloads. Prepare them away from the UI thread so activating
+    // the lyrics view never blocks the first frame after its entrance transition.
+    var preparedSyncedLyrics by remember(lyrics) {
+        mutableStateOf<PreparedSyncedLyrics?>(null)
     }
+    LaunchedEffect(lyrics) {
+        preparedSyncedLyrics = null
+        preparedSyncedLyrics = withContext(Dispatchers.Default) {
+            prepareSyncedLyrics(lyrics)
+        }
+    }
+    val isLyricsPrepared = preparedSyncedLyrics != null
+    val isKaraokeMode = preparedSyncedLyrics?.isKaraokeMode ?: false
     // The UI's neutral timing value is 0 ms; karaoke playback uses a fixed +20 ms
     // internal baseline so this compensation is invisible in the adjustment controls.
     val timedPositionProvider: () -> Int = remember(currentPositionProvider, isKaraokeMode) {
@@ -262,27 +306,14 @@ internal fun SyncedLyricsCompose(
                 forceLowCostRendering -> "compact landscape panel text-only"
                 useLowCostLyricsRendering -> "low-memory text-only"
                 else -> "full karaoke effects"
-            }}; lines=${lyrics.size}; karaoke=$isKaraokeMode; playing=$isPlaying; " +
-                "frameCap=${karaokeFrameRateCeiling?.let { "$it FPS" } ?: "user/device setting"}"
+            }}; prepared=$isLyricsPrepared; lines=${lyrics.size}; karaoke=$isKaraokeMode; " +
+                "playing=$isPlaying; frameCap=${karaokeFrameRateCeiling?.let { "$it FPS" } ?: "user/device setting"}"
         )
     }
 
-    // ── Filter out interludes when in karaoke mode ──
-    val displayItems = remember(lyrics, isKaraokeMode) {
-        // Some lyric providers return blocks in source order rather than playback order.
-        // The active-line binary search requires monotonic timestamps; explicitly sort
-        // each track so an early playback position can never resolve to the final line.
-        lyrics.mapIndexedNotNull { index, line ->
-            if (line.isInterlude) null
-            else LyricDisplayItem(
-                line = line,
-                originalIndex = index
-            )
-        }.sortedWith(
-            compareBy<LyricDisplayItem> { it.line.startTimeMs }
-                .thenBy { it.originalIndex }
-        )
-    }
+    // The prepared row list and all word-time boundaries were built off-main.
+    // Keep the empty fallback stable while the worker result is being prepared.
+    val displayItems = preparedSyncedLyrics?.displayItems.orEmpty()
 
     // Interpolate from Media3's live playback position at display-frame cadence. The
     // dedicated clock applies bounded phase correction and re-anchors on seeks, pauses,
@@ -300,8 +331,10 @@ internal fun SyncedLyricsCompose(
     }
     val karaokePlaybackClock = remember(lyricTrackKey) { KaraokePlaybackClock() }
     LaunchedEffect(
-        isPlaying, lyricTrackKey, lyrics, timedPositionProvider, playbackSpeedProvider, isKaraokeMode
+        isPlaying, lyricTrackKey, lyrics, timedPositionProvider, playbackSpeedProvider,
+        isKaraokeMode, isLyricsPrepared
     ) {
+        if (!isLyricsPrepared) return@LaunchedEffect
         val initialPosition = timedPositionProvider().coerceAtLeast(0)
         var previousPosition = initialPosition
         karaokePlaybackClock.reset(initialPosition)
@@ -365,14 +398,12 @@ internal fun SyncedLyricsCompose(
     }
     val lyricPositionProvider = remember(lyricClock) { { lyricClock.intValue } }
 
-    // derivedStateOf means this parent/list selection changes only when the active lyric line changes.
-    val activeIndex by remember(displayItems, lyricClock, currentSong?.duration) {
+    // Derived line selection now reads precomputed tail timing rather than scanning
+    // the final karaoke word list during each playback-clock update.
+    val activeIndex by remember(displayItems, lyricClock, currentSong?.duration, preparedSyncedLyrics) {
         derivedStateOf {
             val currentPos = lyricClock.intValue
-            val lastLyric = displayItems.lastOrNull { !it.line.isInterlude }?.line
-            val lastWordEndMs = lastLyric?.words
-                ?.maxOfOrNull { it.absoluteStartTimeMs + it.durationMs }
-                ?.takeIf { it > 0L }
+            val lastWordEndMs = preparedSyncedLyrics?.lastWordEndMs
             val songDurationMs = currentSong?.duration?.takeIf { it > 0L }
             val hasPassedFinalLyric = when {
                 songDurationMs != null && currentPos.toLong() >= songDurationMs -> true
@@ -380,16 +411,15 @@ internal fun SyncedLyricsCompose(
                 else -> false
             }
 
-            if (displayItems.isEmpty() || hasPassedFinalLyric) -1
+            if (!isLyricsPrepared || displayItems.isEmpty() || hasPassedFinalLyric) -1
             else binarySearchActiveIndex(displayItems, currentPos)
         }
     }
 
-    // Precompute completion boundaries once. Per-frame target lookup is now O(log n)
-    // instead of repeatedly scanning forward through the lyrics list.
-    val scrollBoundaries = remember(displayItems) {
-        buildLyricsScrollBoundaries(displayItems.map { it.line })
+    val emptyScrollBoundaries = remember {
+        LyricsScrollBoundaries(IntArray(0), LongArray(0))
     }
+    val scrollBoundaries = preparedSyncedLyrics?.scrollBoundaries ?: emptyScrollBoundaries
     val scrollTargetIndex by remember(scrollBoundaries, lyricClock) {
         derivedStateOf {
             findLyricsScrollTargetIndex(
@@ -404,7 +434,10 @@ internal fun SyncedLyricsCompose(
     val hasPositionedInitialLyrics = remember(lyricTrackKey) {
         androidx.compose.runtime.mutableStateOf(false)
     }
-    LaunchedEffect(lyricTrackKey, displayItems, scrollTargetIndex, density) {
+    LaunchedEffect(
+        lyricTrackKey, displayItems, scrollTargetIndex, density, isLyricsPrepared
+    ) {
+        if (!isLyricsPrepared) return@LaunchedEffect
         if (scrollTargetIndex == 0) {
             listState.scrollToItem(0)
             hasPositionedInitialLyrics.value = true
@@ -453,6 +486,12 @@ internal fun SyncedLyricsCompose(
     // Avoid a full-screen offscreen composition on every karaoke frame.
     // The active-line emphasis and generous edge padding keep the reading focus clear.
     BoxWithConstraints(modifier = modifier) {
+        if (!isLyricsPrepared) {
+            LoadingIndicator(
+                modifier = Modifier.align(Alignment.Center).size(32.dp),
+                color = dynamicAccentColor
+            )
+        } else {
         // The two-pane landscape player has a much shorter lyrics viewport than portrait.
         // Scale against that real viewport instead of keeping the portrait 38sp lyric size.
         val viewportScale = if (isLandscape && maxHeight != Dp.Infinity) {
@@ -534,6 +573,7 @@ internal fun SyncedLyricsCompose(
                     contentColor = contentColor
                 )
             }
+        }
         }
     }
 }
