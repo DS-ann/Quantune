@@ -147,6 +147,31 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
         connectionState == "Connection error" -> "OFFLINE"
         else -> "READY"
     }
+    val displayedNetworkMode = when {
+        !roomCode.isNullOrBlank() -> if (client.isLocalRoom) "SAME_NETWORK" else "DIFFERENT_NETWORK"
+        else -> networkMode
+    }
+    val networkModeLocked = joinPending || !canStartSession || !roomCode.isNullOrBlank()
+    val onNetworkModeSelected: (String) -> Unit = { requestedMode ->
+        if (requestedMode != displayedNetworkMode) {
+            if (networkModeLocked) {
+                val currentLabel = if (displayedNetworkMode == "SAME_NETWORK") "Same Wi-Fi" else "Internet"
+                val requestedLabel = if (requestedMode == "SAME_NETWORK") "Same Wi-Fi" else "Internet"
+                val message = when {
+                    !roomCode.isNullOrBlank() ->
+                        "$requestedLabel is not available while your $currentLabel room is active. Leave the room before switching."
+                    joinPending ->
+                        "$requestedLabel is not available while your $currentLabel room request is pending. Cancel the request before switching."
+                    else ->
+                        "$requestedLabel is not available while your $currentLabel connection is in progress."
+                }
+                SnackbarController.showMessage(message)
+            } else {
+                networkMode = requestedMode
+                showInternetJoinCode = false
+            }
+        }
+    }
     val hostCurrentTrack = remember(currentSong?.id, currentSong?.videoId) {
         currentSong?.let { song ->
             song.videoId?.takeIf { it.isNotBlank() }?.let { videoId ->
@@ -207,6 +232,8 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
         if (roomCode.isNullOrBlank()) {
             showChatPanel = false
             chatDraft = ""
+        } else {
+            networkMode = if (client.isLocalRoom) "SAME_NETWORK" else "DIFFERENT_NETWORK"
         }
     }
 
@@ -316,6 +343,28 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                 Spacer(Modifier.weight(1f))
                 Text("Review", style = DsmusicTheme.typography.labelMedium, color = DsmusicTheme.colorScheme.primary)
             }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(17.dp))
+                .background(DsmusicTheme.colorScheme.surfaceContainerLow)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            ListenTogetherModeOption(
+                title = "Same Wi-Fi",
+                subtitle = "Nearby devices",
+                selected = displayedNetworkMode == "SAME_NETWORK",
+                enabled = true
+            ) { onNetworkModeSelected("SAME_NETWORK") }
+            ListenTogetherModeOption(
+                title = "Internet",
+                subtitle = "Different networks",
+                selected = displayedNetworkMode == "DIFFERENT_NETWORK",
+                enabled = true
+            ) { onNetworkModeSelected("DIFFERENT_NETWORK") }
         }
 
         if (joinPending) {
@@ -482,34 +531,6 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                     }
                 }
             } else {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(17.dp))
-                .background(DsmusicTheme.colorScheme.surfaceContainerLow)
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            ListenTogetherModeOption(
-                title = "Same Wi-Fi",
-                subtitle = "Nearby devices",
-                selected = networkMode == "SAME_NETWORK",
-                enabled = canStartSession
-            ) {
-                networkMode = "SAME_NETWORK"
-                showInternetJoinCode = false
-            }
-            ListenTogetherModeOption(
-                title = "Internet",
-                subtitle = "Different networks",
-                selected = networkMode == "DIFFERENT_NETWORK",
-                enabled = canStartSession
-            ) {
-                networkMode = "DIFFERENT_NETWORK"
-                showInternetJoinCode = false
-            }
-        }
-
         DsmusicCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(19.dp)) {
             Column(
                 modifier = Modifier.padding(12.dp),
