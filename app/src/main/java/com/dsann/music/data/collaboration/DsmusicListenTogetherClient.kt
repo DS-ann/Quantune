@@ -919,7 +919,6 @@ class DsmusicListenTogetherClient {
                         return
                     }
 
-                    startPingJob()
                     val token = sessionToken
                     if (!token.isNullOrBlank()) {
                         reconnectHandshakePending = true
@@ -1490,6 +1489,7 @@ class DsmusicListenTogetherClient {
             "room_created" -> {
                 val code = fields.firstString(1) ?: return
                 _roomCode.value = code
+                startPingJob()
                 ownUserId = fields.firstString(2)
                 fields.firstString(3)?.takeIf { it.isNotBlank() }?.let { sessionToken = it }
                 pendingMessage = null
@@ -1504,6 +1504,7 @@ class DsmusicListenTogetherClient {
             "join_approved" -> {
                 val code = fields.firstString(1) ?: return
                 _joinPending.value = false
+                startPingJob()
                 _roomCode.value = code
                 ownUserId = fields.firstString(2)
                 fields.firstString(3)?.takeIf { it.isNotBlank() }?.let { sessionToken = it }
@@ -1519,6 +1520,7 @@ class DsmusicListenTogetherClient {
             "reconnected" -> {
                 val code = fields.firstString(1) ?: return
                 _roomCode.value = code
+                startPingJob()
                 ownUserId = fields.firstString(2) ?: ownUserId
                 val reconnectedAsHost = fields.firstVarint(4) == 1L
                 val localHostTrack = if (reconnectedAsHost) lastTrack else null
