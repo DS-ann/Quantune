@@ -21,9 +21,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -45,6 +48,9 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dsann.music.data.lyrics.LineSyncedLyricTimeline
+import com.dsann.music.data.lyrics.LyricLine
+import com.dsann.music.model.SongItem
 import com.dsann.music.service.AudioPlaybackService
 import com.dsann.music.service.PlaybackVisualizerController
 import com.dsann.music.ui.theme.DsmusicTheme
@@ -53,6 +59,7 @@ import com.dsann.music.ui.theme.DropdownMenuItem
 import com.dsann.music.ui.theme.Icon
 import com.dsann.music.ui.theme.dsmusicHomeStudioGradientBrush
 import com.dsann.music.ui.theme.Text
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.cos
 import kotlin.math.sin
@@ -64,6 +71,10 @@ fun FullscreenAudioVisualizerDialog(
     lyricsAccentColor: Color,
     lyricsTextColor: Color,
     visualizerColorStyle: String,
+    syncedLyrics: List<LyricLine>?,
+    currentSong: SongItem?,
+    currentPositionProvider: () -> Int,
+    isPlaying: Boolean,
     onVisualizerStyleChange: (String) -> Unit,
     onVisualizerColorStyleChange: (String) -> Unit,
     onDismissRequest: () -> Unit
@@ -81,6 +92,13 @@ fun FullscreenAudioVisualizerDialog(
         )
     }
     var showColorMenu by remember { mutableStateOf(false) }
+    var showLyrics by remember { mutableStateOf(false) }
+    val lyricBrush: Brush = when (visualizerColorStyle) {
+        "Gradient (Horizontal)" -> dsmusicHomeStudioGradientBrush()
+        "White" -> SolidColor(Color.White)
+        "UI Matching" -> SolidColor(lyricsAccentColor)
+        else -> Brush.verticalGradient(homeStudioGradientColors)
+    }
 
     Dialog(
         onDismissRequest = onDismissRequest,
@@ -310,84 +328,115 @@ fun FullscreenAudioVisualizerDialog(
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 10.dp, end = 10.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .background(Color(0xAA03050A), CircleShape)
-                        .clickable { showColorMenu = true },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.MoreVert,
-                        contentDescription = "Visualizer colour options",
-                        tint = Color.White,
-                        modifier = Modifier.size(21.dp)
-                    )
-                }
-                DropdownMenu(
-                    expanded = showColorMenu,
-                    onDismissRequest = { showColorMenu = false }
-                ) {
-                    listOf(
-                        "Gradient (Vertical)",
-                        "Gradient (Horizontal)",
-                        "White",
-                        "UI Matching"
-                    ).forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option, color = DsmusicTheme.colorScheme.onSurface) },
-                            trailingIcon = {
-                                if (visualizerColorStyle == option) {
-                                    Text("✓", color = DsmusicTheme.colorScheme.primary)
-                                }
-                            },
-                            onClick = {
-                                onVisualizerColorStyleChange(option)
-                                showColorMenu = false
-                            }
-                        )
-                    }
-                }
-            }
-
             Row(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 58.dp, end = 12.dp)
-                    .background(Color(0xAA03050A), RoundedCornerShape(24.dp))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(start = 60.dp, end = 10.dp, top = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                listOf(
-                    Triple("Bars (16)", Icons.Rounded.Equalizer, "16-bar visualizer"),
-                    Triple("Spectrum", Icons.Rounded.GraphicEq, "Spectrum visualizer"),
-                    Triple("Circular Spectrum", Icons.Rounded.DonutLarge, "Circular spectrum visualizer")
-                ).forEach { (style, icon, description) ->
+                if (showLyrics) {
+                    VisualizerSyncedLyricLine(
+                        lyrics = syncedLyrics,
+                        currentSong = currentSong,
+                        currentPositionProvider = currentPositionProvider,
+                        isPlaying = isPlaying,
+                        brush = lyricBrush,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                }
+
+                Row(
+                    modifier = Modifier
+                        .background(Color(0xAA03050A), RoundedCornerShape(22.dp))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(
+                        Triple("Bars (16)", Icons.Rounded.Equalizer, "16-bar visualizer"),
+                        Triple("Spectrum", Icons.Rounded.GraphicEq, "Spectrum visualizer"),
+                        Triple("Circular Spectrum", Icons.Rounded.DonutLarge, "Circular spectrum visualizer")
+                    ).forEach { (style, icon, description) ->
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(
+                                    color = if (visualizerStyle == style) {
+                                        lyricsAccentColor.copy(alpha = 0.92f)
+                                    } else {
+                                        Color.White.copy(alpha = 0.08f)
+                                    },
+                                    shape = CircleShape
+                                )
+                                .clickable { onVisualizerStyleChange(style) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = description,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+
+                Box {
                     Box(
                         modifier = Modifier
-                            .background(
-                                color = if (visualizerStyle == style) {
-                                    lyricsAccentColor.copy(alpha = 0.92f)
-                                } else {
-                                    Color.White.copy(alpha = 0.08f)
-                                },
-                                shape = RoundedCornerShape(18.dp)
-                            )
-                            .clickable { onVisualizerStyleChange(style) }
-                            .padding(10.dp),
+                            .size(36.dp)
+                            .background(Color(0xAA03050A), CircleShape)
+                            .clickable { showColorMenu = true },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = icon,
-                            contentDescription = description,
+                            imageVector = Icons.Rounded.MoreVert,
+                            contentDescription = "Visualizer options",
                             tint = Color.White,
                             modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showColorMenu,
+                        onDismissRequest = { showColorMenu = false }
+                    ) {
+                        listOf(
+                            "Gradient (Vertical)",
+                            "Gradient (Horizontal)",
+                            "White",
+                            "UI Matching"
+                        ).forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option, color = DsmusicTheme.colorScheme.onSurface) },
+                                trailingIcon = {
+                                    if (visualizerColorStyle == option) {
+                                        Text("✓", color = DsmusicTheme.colorScheme.primary)
+                                    }
+                                },
+                                onClick = {
+                                    onVisualizerColorStyleChange(option)
+                                    showColorMenu = false
+                                }
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (showLyrics) "Hide lyrics" else "Show lyrics",
+                                    color = DsmusicTheme.colorScheme.onSurface
+                                )
+                            },
+                            trailingIcon = {
+                                if (showLyrics) Text("✓", color = DsmusicTheme.colorScheme.primary)
+                            },
+                            onClick = {
+                                showLyrics = !showLyrics
+                                showColorMenu = false
+                            }
                         )
                     }
                 }
@@ -440,3 +489,77 @@ fun FullscreenAudioVisualizerDialog(
         }
     }
 }
+ 
+@Composable
+private fun VisualizerSyncedLyricLine(
+    lyrics: List<LyricLine>?,
+    currentSong: SongItem?,
+    currentPositionProvider: () -> Int,
+    isPlaying: Boolean,
+    brush: Brush,
+    modifier: Modifier = Modifier
+) {
+    val timeline = remember(lyrics) {
+        LineSyncedLyricTimeline.build(lyrics.orEmpty())
+    }
+    val songDurationMs = currentSong?.duration?.takeIf { it > 0L } ?: 0L
+    val activeLineText by produceState<String?>(
+        initialValue = null,
+        timeline,
+        currentSong?.id,
+        currentSong?.videoId,
+        songDurationMs,
+        currentPositionProvider,
+        isPlaying
+    ) {
+        if (timeline.isEmpty()) {
+            value = null
+            return@produceState
+        }
+
+        while (true) {
+            val positionMs = currentPositionProvider().coerceAtLeast(0).toLong()
+            val activeIndex = LineSyncedLyricTimeline.activeIndexAt(
+                timeline = timeline,
+                positionMs = positionMs,
+                durationMs = songDurationMs
+            )
+            val nextText = timeline.getOrNull(activeIndex)?.line?.content
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+            if (value != nextText) value = nextText
+
+            // Reuse the player's line-sync boundaries and native playback clock.
+            // Poll more gently on Android 6 to keep the visualizer lightweight.
+            delay(
+                if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.M) {
+                    84L
+                } else if (isPlaying) {
+                    64L
+                } else {
+                    100L
+                }
+            )
+        }
+    }
+
+    if (!activeLineText.isNullOrBlank()) {
+        LyricsText(
+            text = activeLineText.orEmpty(),
+            style = DsmusicTheme.typography.bodySmall.copy(
+                brush = brush,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                lineHeight = 17.sp
+            ),
+            color = Color.Unspecified,
+            modifier = modifier,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Start,
+            outlineWidth = 0.dp
+        )
+    }
+}
+

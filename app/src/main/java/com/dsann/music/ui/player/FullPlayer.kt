@@ -2290,6 +2290,10 @@ fun FullPlayer(
             lyricsAccentColor = lyricsAccentColor,
             lyricsTextColor = lyricsTextColor,
             visualizerColorStyle = visualizerColorStyle,
+            syncedLyrics = syncedLyrics,
+            currentSong = uiState.currentSong,
+            currentPositionProvider = currentPositionProvider,
+            isPlaying = uiState.isPlaying,
             onVisualizerStyleChange = onVisualizerStyleChange,
             onVisualizerColorStyleChange = onVisualizerColorStyleChange,
             onDismissRequest = { showFullScreenVisualizer = false }
