@@ -152,7 +152,7 @@ export class Connection extends DurableObject {
         let created=false;
         for(let i=0;i<5&&!created;i++) {
           const code=makeCode();
-          created=await this.env.ROOMS.getByName(code).createRoom(id,decoded.payload);
+          created=await this.env.ROOMS.getByName(code).createRoom(id,decoded.payload,code);
         }
         if(!created) await this.send(envelope("error",errorPayload("room_creation_failed","Could not allocate a room. Retry.")));
         return;
@@ -213,7 +213,7 @@ export class Room extends DurableObject {
     await Promise.all(ids.map(id=>this.send(id,type,payload)));
   }
   async fail(id,code,message) { await this.send(id,"error",errorPayload(code,message)); }
-  async createRoom(connectionId,payload) {
+  async createRoom(connectionId,payload,assignedCode) {
     if(this.stateData) return false;
     const f=decodeFields(payload), username=clean(str(f,1),MAX_NAME);
     if(!username) { await this.fail(connectionId,"missing_username","Username is required."); return true; }
