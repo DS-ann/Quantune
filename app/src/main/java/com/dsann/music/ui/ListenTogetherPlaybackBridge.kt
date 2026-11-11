@@ -272,12 +272,7 @@ private suspend fun applyRemotePlayback(
             viewModel.isPlaybackReady.first { ready -> ready }
         }
 
-        if (!isDifferentTrack && playback.action == "change_track") {
-            // The same video can occupy multiple queue positions. Restart that occurrence
-            // at the host's position without unnecessarily resolving the same stream again.
-            viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), fromListenTogether = true)
-            viewModel.pauseAudio(notifyListenTogether = false)
-        }
+
     }
 
     // A slow stream load adds time between receipt and playback. Advance the host's
