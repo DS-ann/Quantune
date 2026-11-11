@@ -1775,6 +1775,13 @@ class AudioPlaybackService : MediaSessionService() {
         }
         shouldAutoPlay = false
         pendingSeekPos = startPosition
+        // A paused track replacement must silence the previous item immediately rather
+        // than letting it play through the network stream-resolution delay.
+        player.pause()
+        if (isCrossfading) {
+            nextPlayer?.pause()
+            crossfadeAnimator?.pause()
+        }
         resolveAndLoad(uri)
     }
 

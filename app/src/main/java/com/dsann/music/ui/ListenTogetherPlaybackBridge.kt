@@ -14,6 +14,7 @@ import com.dsann.music.data.collaboration.SharedTrack
 import com.dsann.music.model.SongItem
 import com.dsann.music.viewmodel.PlayerSharedViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
@@ -29,8 +30,8 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
     val currentSongIndex by viewModel.currentSongIndex.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
     val currentPosition by viewModel.currentPosition.collectAsState()
-    val remotePlayback by client.remotePlayback.collectAsState()
-
+    val isLoading by viewModel.isLoading.collectAsState()
+    val latestCurrentSong by rememberUpdatedState(currentSong)
     val latestSong by rememberUpdatedState(currentSong)
     val latestPlaying by rememberUpdatedState(isPlaying)
     val latestPosition by rememberUpdatedState(currentPosition)
@@ -83,8 +84,8 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
 
     val lastAppliedGuestControlSequence = remember { mutableLongStateOf(-1L) }
 
-    LaunchedEffect(role, isPlaying, currentSong?.id) {
-        if (role == "HOST") {
+    LaunchedEffect(role, isPlaying, currentSong?.id, isLoading) {
+        if (role == "HOST" && !isLoading) {
             val incomingGuestControl = remotePlayback
             if (
                 incomingGuestControl != null &&
@@ -142,18 +143,19 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
         }
     }
 
-    LaunchedEffect(role, remotePlayback?.sequence) {
-        val playback = remotePlayback ?: return@LaunchedEffect
-        when {
-            role == "GUEST" -> applyRemotePlayback(playback, currentSong, viewModel)
-            role == "HOST" && playback.action in setOf("play", "pause") -> {
-                // Mark only requests that will actually change the host's local player.
-                // A duplicate pause/play while already in that state must not suppress
-                // the host's next unrelated manual playback action.
-                if (viewModel.isPlaying.value != playback.isPlaying) {
-                    lastAppliedGuestControlSequence.longValue = playback.sequence
+    // Serialize remote events. A new host event must not cancel a guest's in-flight
+    // stream resolution; otherwise the metadata changes but the previous song keeps playing.
+    LaunchedEffect(role) {
+        client.remotePlayback.collect { playback ->
+            when {
+                role == "GUEST" -> applyRemotePlayback(playback, latestCurrentSong, viewModel)
+                role == "HOST" && playback.action in setOf("play", "pause") -> {
+                    // Mark only requests that will actually change the host's local player.
+                    if (viewModel.isPlaying.value != playback.isPlaying) {
+                        lastAppliedGuestControlSequence.longValue = playback.sequence
+                    }
+                    applyRemotePlayback(playback, latestCurrentSong, viewModel)
                 }
-                applyRemotePlayback(playback, currentSong, viewModel)
             }
         }
     }
@@ -211,7 +213,7 @@ private suspend fun applyRemotePlayback(
                 thumbnailUrl = track.thumbnail.takeIf { it.startsWith("http") }
                 albumName = track.album
             }
-            viewModel.playSong(incoming)
+            viewModel.playListenTogetherTrack(incoming)
         }
 
         // The selected song is published before its stream is resolved. Wait for the
@@ -253,13 +255,18 @@ private suspend fun applyRemotePlayback(
                 viewModel.pauseAudio(notifyListenTogether = false)
             }
         }
-        "pause" -> {
+        "pause", "change_track" -> {
             val current = viewModel.currentPosition.value.toLong()
             if (abs(current - playback.positionMs) > 450L) {
                 viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
             }
+            // A host track change is loaded paused; the following host play event starts it.
             viewModel.pauseAudio(notifyListenTogether = false)
         }
-        "seek" -> viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+        "seek" -> {
+            viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            if (playback.isPlaying) viewModel.playAudio(notifyListenTogether = false)
+            else viewModel.pauseAudio(notifyListenTogether = false)
+        }
     }
 }

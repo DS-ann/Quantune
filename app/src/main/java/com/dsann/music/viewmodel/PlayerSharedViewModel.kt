@@ -1939,10 +1939,14 @@ class PlayerSharedViewModel @Inject constructor(
     fun playSongAtIndex(
         index: Int,
         preserveRepeatOnceCycle: Boolean = false,
-        debouncePlaybackLoadMs: Long = 0L
+        debouncePlaybackLoadMs: Long = 0L,
+        fromListenTogether: Boolean = false,
+        autoPlay: Boolean = true
     ) {
-        // Guests follow the host's queue and cannot select a different track.
-        if (listenTogetherQueueAuthoritative || isListenTogetherGuest) return
+        // Guest UI actions remain locked, but the room bridge may apply the host's
+        // authoritative track selection through this explicit internal path.
+        if ((listenTogetherQueueAuthoritative || isListenTogetherGuest) && !fromListenTogether) return
+        if (fromListenTogether && !isListenTogetherGuest) return
         // A direct queue selection takes priority over a pending Next/Previous burst.
         cancelPendingRapidNavigation()
         val songs = _songList.value
@@ -1997,7 +2001,7 @@ class PlayerSharedViewModel @Inject constructor(
 
 
 
-        dispatchSelectedSongPlayback(song, debouncePlaybackLoadMs)
+        dispatchSelectedSongPlayback(song, debouncePlaybackLoadMs, autoPlay)
     }
 
     /**
@@ -2006,7 +2010,7 @@ class PlayerSharedViewModel @Inject constructor(
      * spawning/cancelling several network resolvers, MediaSession updates and artwork jobs
      * for tracks the listener has already skipped past.
      */
-    private fun dispatchSelectedSongPlayback(song: SongItem, debounceMs: Long) {
+    private fun dispatchSelectedSongPlayback(song: SongItem, debounceMs: Long, autoPlay: Boolean) {
         pendingRapidSkipLoadJob?.cancel()
         pendingRapidSkipLoadJob = null
 
@@ -2015,17 +2019,18 @@ class PlayerSharedViewModel @Inject constructor(
                 delay(debounceMs)
                 val latestSong = _currentSong.value?.takeIf { it.id == song.id } ?: return@launch
                 pendingRapidSkipLoadJob = null
-                startSelectedSongPlayback(latestSong)
+                startSelectedSongPlayback(latestSong, autoPlay)
             }
         } else {
-            startSelectedSongPlayback(song)
+            startSelectedSongPlayback(song, autoPlay)
         }
     }
 
-    private fun startSelectedSongPlayback(song: SongItem) {
+    private fun startSelectedSongPlayback(song: SongItem, autoPlay: Boolean) {
         val selectedSong = _currentSong.value?.takeIf { it.id == song.id } ?: song
         audioService?.let { service ->
-            service.loadAndPlay(selectedSong.contentUri)
+            if (autoPlay) service.loadAndPlay(selectedSong.contentUri)
+            else service.loadAudio(selectedSong.contentUri)
             if (!selectedSong.thumbnailUrl.isNullOrBlank()) {
                 service.setSongMetadataByUrl(selectedSong.title, selectedSong.thumbnailUrl)
             } else {
@@ -2100,6 +2105,32 @@ class PlayerSharedViewModel @Inject constructor(
             val newIndex = findSongIndexById(song.id)
             if (newIndex != -1) playSongAtIndex(newIndex)
         }
+    }
+
+    /**
+     * Applies a host-selected track on a guest. This deliberately bypasses the guest's
+     * local track-selection lock, but never grants guests permission to choose tracks.
+     * The track is loaded paused; the host's following play/pause event decides its state.
+     */
+    fun playListenTogetherTrack(song: SongItem) {
+        if (!isListenTogetherGuest) return
+        val videoId = song.videoId?.takeIf { it.isNotBlank() } ?: return
+        val nextQueue = _songList.value.toMutableList()
+        val existingIndex = nextQueue.indexOfFirst { it.videoId == videoId }
+        val targetIndex = if (existingIndex >= 0) {
+            nextQueue[existingIndex] = song
+            existingIndex
+        } else {
+            nextQueue.add(song)
+            nextQueue.lastIndex
+        }
+        _songList.value = nextQueue
+        _currentSongIndex.value = targetIndex
+        playSongAtIndex(
+            index = targetIndex,
+            fromListenTogether = true,
+            autoPlay = false
+        )
     }
 
     fun findSongIndexById(songId: Long): Int = _songList.value.indexOfFirst { it.id == songId }
