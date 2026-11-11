@@ -71,6 +71,10 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
     val lastAppliedGuestControlSequence = remember { mutableLongStateOf(-1L) }
     val lastAnnouncedHostTrack = remember { mutableStateOf("") }
 
+    LaunchedEffect(role) {
+        if (role != "HOST") lastAnnouncedHostTrack.value = ""
+    }
+
     // Publish track changes and their resulting transport state in one ordered effect.
     // Sending these from separate effects let "play" overtake "change_track" on a host
     // skip; the later change_track then paused every guest until another host action.
