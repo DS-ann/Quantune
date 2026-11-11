@@ -567,7 +567,7 @@ class MainActivity : AppCompatActivity() {
                         "Tall" -> 76.dp
                         else -> 68.dp
                     }
-                    val railOuterGap = 0.dp
+                    val railOuterGap = if (navBarStyle == "Floating") 12.dp else 0.dp
                     val railStartPadding = railSystemInset + railOuterGap
                     val railInsetState = animateDpAsState(
                         targetValue = if (showNavigationRail) railSystemInset + railWidth + railOuterGap else 0.dp,
@@ -934,7 +934,14 @@ onNavigateToLibrary = {
                                 animationSpec = if (isLegacyAndroid6) snap() else spring(stiffness = Spring.StiffnessMediumLow),
                                 label = "RailIconSize"
                             )
-                            val railShape = RoundedCornerShape(topEnd = 18.dp, bottomEnd = 18.dp)
+                            val isDockedRail = navBarStyle == "Docked"
+                            val isFloatingRail = navBarStyle == "Floating"
+                            val isMinimalRail = navBarStyle == "Minimal"
+                            val railShape = when (navBarStyle) {
+                                "Docked" -> RoundedCornerShape(topEnd = 18.dp, bottomEnd = 18.dp)
+                                "Minimal" -> RoundedCornerShape(0.dp)
+                                else -> RoundedCornerShape(26.dp)
+                            }
                             val railSurface = DsmusicTheme.colorScheme.surfaceContainer
                             val railBorderBase = if (railSurface.luminance() > 0.5f) {
                                 androidx.compose.ui.graphics.Color.Black
@@ -945,24 +952,42 @@ onNavigateToLibrary = {
                             Column(
                                 modifier = Modifier
                                     .align(Alignment.CenterStart)
-                                    .padding(start = railStartPadding)
+                                    .padding(
+                                        start = railStartPadding,
+                                        top = if (isFloatingRail) 12.dp else 0.dp,
+                                        bottom = if (isFloatingRail) 12.dp else 0.dp
+                                    )
                                     .width(railWidth)
+                                    .then(if (isDockedRail) Modifier.fillMaxHeight() else Modifier)
+                                    .then(
+                                        if (isFloatingRail) Modifier.shadow(12.dp, railShape, clip = false)
+                                        else Modifier
+                                    )
                                     .clip(railShape)
                                     .background(
-                                        if (navBarStyle == "Minimal") androidx.compose.ui.graphics.Color.Transparent
+                                        if (isMinimalRail) androidx.compose.ui.graphics.Color.Transparent
                                         else railSurface
                                     )
-                                    .border(
-                                        width = 0.75.dp,
-                                        color = railBorder,
-                                        shape = railShape
+                                    .then(
+                                        if (isMinimalRail) Modifier
+                                        else Modifier.border(
+                                            width = 0.75.dp,
+                                            color = railBorder,
+                                            shape = railShape
+                                        )
                                     )
                                     .padding(
-                                        vertical = if (navBarSize == "Compact") 6.dp else 8.dp,
-                                        horizontal = 6.dp
+                                        vertical = when {
+                                            isDockedRail -> if (navBarSize == "Compact") 12.dp else 18.dp
+                                            navBarSize == "Compact" -> 6.dp
+                                            else -> 8.dp
+                                        },
+                                        horizontal = if (isMinimalRail) 2.dp else 6.dp
                                     ),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                verticalArrangement = if (isDockedRail) Arrangement.Center else Arrangement.spacedBy(
+                                    if (isFloatingRail) 6.dp else 4.dp
+                                )
                             ) {
                                     val items = listOf(
                                         Triple("explore", "Explore", R.drawable.ic_explore),

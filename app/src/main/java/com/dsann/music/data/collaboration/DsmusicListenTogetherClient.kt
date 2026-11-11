@@ -1068,6 +1068,11 @@ class DsmusicListenTogetherClient {
     }
 
     fun leaveRoom() {
+        val wasJoinPending = _joinPending.value
+        val hadRoom = _roomCode.value != null
+        val previousRole = _role.value
+        val wasLocalMode = localMode
+
         _joinPending.value = false
         manualDisconnect = true
         connectionGeneration += 1L
@@ -1126,6 +1131,14 @@ class DsmusicListenTogetherClient {
         lastPlaybackPositionMs = 0L
         lastPlaybackIsPlaying = false
         _connectionState.value = "Disconnected"
+        _message.value = when {
+            wasJoinPending && !hadRoom -> "Join request cancelled."
+            hadRoom && previousRole == "HOST" && wasLocalMode -> "Local room closed."
+            hadRoom && previousRole == "HOST" -> "Room closed."
+            hadRoom && wasLocalMode -> "You left the local room."
+            hadRoom -> "You left the listening room."
+            else -> _message.value
+        }
     }
 
     fun disconnect() = leaveRoom()
