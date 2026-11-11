@@ -1,6 +1,9 @@
 package com.dsann.music.ui
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
@@ -56,6 +59,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.ChatBubbleOutline
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Send
 import com.dsann.music.data.collaboration.DsmusicListenTogetherClient
@@ -79,6 +83,16 @@ import java.util.Locale
 fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
     val client = DsmusicListenTogetherSession.client
     val context = LocalContext.current
+    val copyValue: (String, String) -> Unit = { value, label ->
+        runCatching {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
+        }.onSuccess {
+            SnackbarController.showMessage("$label copied")
+        }.onFailure {
+            SnackbarController.showMessage("Could not copy $label")
+        }
+    }
     val currentSong by viewModel.currentSong.collectAsStateWithLifecycle()
     val songList by viewModel.songList.collectAsStateWithLifecycle()
     val currentSongIndex by viewModel.currentSongIndex.collectAsStateWithLifecycle()
@@ -404,12 +418,22 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                         color = DsmusicTheme.colorScheme.onSurfaceVariant
                     )
                     if (networkMode == "DIFFERENT_NETWORK" && joinCode.isNotBlank()) {
-                        Text(
-                            "ROOM  ·  ${joinCode.uppercase()}",
-                            style = DsmusicTheme.typography.labelMedium,
-                            color = DsmusicTheme.colorScheme.primary,
-                            letterSpacing = 1.sp
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                "ROOM  ·  ${joinCode.uppercase()}",
+                                modifier = Modifier.weight(1f),
+                                style = DsmusicTheme.typography.labelMedium,
+                                color = DsmusicTheme.colorScheme.primary,
+                                letterSpacing = 1.sp
+                            )
+                            ListenTogetherCopyButton("Copy room code") {
+                                copyValue(joinCode.uppercase(), "Room code")
+                            }
+                        }
                     }
                     DsmusicOutlinedButton(
                         onClick = {
@@ -440,11 +464,24 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                                     color = DsmusicTheme.colorScheme.primary,
                                     letterSpacing = 1.sp
                                 )
-                                Text(
-                                    roomCode.orEmpty(),
-                                    style = DsmusicTheme.typography.headlineSmall,
-                                    color = DsmusicTheme.colorScheme.onSurface
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        roomCode.orEmpty(),
+                                        style = DsmusicTheme.typography.headlineSmall,
+                                        color = DsmusicTheme.colorScheme.onSurface
+                                    )
+                                    ListenTogetherCopyButton(
+                                        if (client.isLocalRoom) "Copy room PIN" else "Copy room code"
+                                    ) {
+                                        copyValue(
+                                            roomCode.orEmpty(),
+                                            if (client.isLocalRoom) "Room PIN" else "Room code"
+                                        )
+                                    }
+                                }
                             }
                             ListenTogetherStatusPill(statusLabel = role, active = true)
                         }
@@ -460,11 +497,23 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                                 color = DsmusicTheme.colorScheme.primary
                             )
                             if (showHostAddressFallback) {
-                                Text(
-                                    localAddress ?: "Local IP address unavailable",
-                                    style = DsmusicTheme.typography.bodySmall,
-                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        localAddress ?: "Local IP address unavailable",
+                                        modifier = Modifier.weight(1f),
+                                        style = DsmusicTheme.typography.bodySmall,
+                                        color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (!localAddress.isNullOrBlank()) {
+                                        ListenTogetherCopyButton("Copy host address") {
+                                            copyValue(localAddress.orEmpty(), "Host address")
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -630,13 +679,24 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                     }
 
                     if (showLocalJoinPin && selectedLocalRoomEndpoint != null) {
-                        OutlinedTextField(
-                            value = localJoinPin,
-                            onValueChange = { localJoinPin = it.filter(Char::isDigit).take(6) },
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            label = { Text("6-digit room PIN") }
-                        )
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = localJoinPin,
+                                onValueChange = { localJoinPin = it.filter(Char::isDigit).take(6) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                label = { Text("6-digit room PIN") }
+                            )
+                            if (localJoinPin.isNotBlank()) {
+                                ListenTogetherCopyButton("Copy room PIN") {
+                                    copyValue(localJoinPin, "Room PIN")
+                                }
+                            }
+                        }
                     }
 
                     Text(
@@ -649,14 +709,25 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                         color = DsmusicTheme.colorScheme.primary
                     )
                     if (showManualLocalAddress) {
-                        OutlinedTextField(
-                            value = localHostAddress,
-                            onValueChange = { localHostAddress = it.trim().take(80) },
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            label = { Text("Host address (IP:port)") },
-                            placeholder = { Text("192.168.1.10:42173") }
-                        )
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = localHostAddress,
+                                onValueChange = { localHostAddress = it.trim().take(80) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                label = { Text("Host address (IP:port)") },
+                                placeholder = { Text("192.168.1.10:42173") }
+                            )
+                            if (localHostAddress.isNotBlank()) {
+                                ListenTogetherCopyButton("Copy host address") {
+                                    copyValue(localHostAddress, "Host address")
+                                }
+                            }
+                        }
                         DsmusicOutlinedButton(
                             onClick = {
                                 actionMessage = null
@@ -713,6 +784,11 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                                 singleLine = true,
                                 label = { Text("Room code") }
                             )
+                            if (joinCode.isNotBlank()) {
+                                ListenTogetherCopyButton("Copy room code") {
+                                    copyValue(joinCode.uppercase(), "Room code")
+                                }
+                            }
                             DsmusicOutlinedButton(
                                 onClick = {
                                     showInternetJoinCode = false
@@ -1044,6 +1120,30 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ListenTogetherCopyButton(
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    DsmusicIconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(32.dp)
+            .background(
+                DsmusicTheme.colorScheme.surfaceContainerLow,
+                CircleShape
+            ),
+        shape = CircleShape
+    ) {
+        Icon(
+            Icons.Rounded.ContentCopy,
+            contentDescription = contentDescription,
+            tint = DsmusicTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 
