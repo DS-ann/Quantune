@@ -81,7 +81,8 @@ data class RemotePlaybackState(
     val positionMs: Long,
     val isPlaying: Boolean,
     val queue: List<SharedTrack> = emptyList(),
-    val queueTitle: String? = null
+    val queueTitle: String? = null,
+    val receivedAtElapsedMs: Long = 0L
 )
 
 /**
@@ -1754,7 +1755,7 @@ class DsmusicListenTogetherClient {
             ?: fields.firstString(2)?.let { id ->
                 lastTrack?.takeIf { it.id == id }
             }
-        if (action == "change_track" && track != null) lastTrack = track
+        if (track != null) lastTrack = track
         val rawPosition = fields.firstVarint(3) ?: 0L
         val queueWasSent = fields.any { it.number == 6 && it.wireType == 2 } ||
             fields.firstVarint(12) == 1L || action == "sync_queue"
@@ -1793,7 +1794,8 @@ class DsmusicListenTogetherClient {
             positionMs = position.coerceAtLeast(0L),
             isPlaying = playing,
             queue = lastSharedQueue,
-            queueTitle = queueTitle
+            queueTitle = queueTitle,
+            receivedAtElapsedMs = remotePlaybackReceivedAtElapsedMs
         )
     }
 
