@@ -248,7 +248,7 @@ private suspend fun applyRemotePlayback(
         if (!isDifferentTrack && playback.action == "change_track") {
             // The same video can occupy multiple queue positions. Restart that occurrence
             // at the host's position without unnecessarily resolving the same stream again.
-            viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), fromListenTogether = true)
             viewModel.pauseAudio(notifyListenTogether = false)
         }
     }
@@ -267,7 +267,7 @@ private suspend fun applyRemotePlayback(
         "play", "sync_state" -> {
             val current = viewModel.currentPosition.value.toLong()
             if (abs(current - playback.positionMs) > 1_500L) {
-                viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), fromListenTogether = true)
             }
             if (playback.isPlaying) {
                 viewModel.playAudio(notifyListenTogether = false)
@@ -278,13 +278,13 @@ private suspend fun applyRemotePlayback(
         "pause", "change_track" -> {
             val current = viewModel.currentPosition.value.toLong()
             if (abs(current - playback.positionMs) > 450L) {
-                viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), fromListenTogether = true)
             }
             // A host track change is loaded paused; the following host play event starts it.
             viewModel.pauseAudio(notifyListenTogether = false)
         }
         "seek" -> {
-            viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), fromListenTogether = true)
             if (playback.isPlaying) viewModel.playAudio(notifyListenTogether = false)
             else viewModel.pauseAudio(notifyListenTogether = false)
         }
