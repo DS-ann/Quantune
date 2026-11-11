@@ -1,5 +1,6 @@
 package com.dsann.music.ui
 
+import com.dsann.music.data.collaboration.DsmusicListenTogetherSession
 import com.dsann.music.ui.theme.DsmusicIconButton
 import com.dsann.music.ui.theme.DsmusicSurface
 import com.dsann.music.ui.theme.DsmusicTextButton
@@ -1260,6 +1261,8 @@ fun PlayerBottomSheetCompose(
             derivedStateOf { playerContentExpansionFraction.value > 0.95f }
         }
         val isPlaybackReady by viewModel.isPlaybackReady.collectAsStateWithLifecycle()
+        val listenTogetherRole by DsmusicListenTogetherSession.client.role.collectAsStateWithLifecycle()
+        val canSkipTracks = listenTogetherRole != "GUEST"
 
         var currentSheetContentState by remember(viewModel) {
             mutableStateOf(
@@ -2480,26 +2483,27 @@ private fun MiniPlayerContentInternal(
         ) {
             DsmusicIconButton(
                 onClick = { viewModel.playPreviousSong() },
+                enabled = canSkipTracks,
                 modifier = controlModifier(sideControlWidth)
             ) {
                 if (controlIconSet == "Classic") {
                     Icon(
                         painter = painterResource(R.drawable.ic_skip_previous),
                         contentDescription = "Previous",
-                        tint = playerButtonContentColor,
+                        tint = playerButtonContentColor.copy(alpha = if (canSkipTracks) 1f else 0.38f),
                         modifier = Modifier.size(24.dp)
                     )
                 } else if (controlIconSet == "Seek") {
                     MiniPlayerSeekGlyph(
                         isForward = false,
-                        tint = playerButtonContentColor,
+                        tint = playerButtonContentColor.copy(alpha = if (canSkipTracks) 1f else 0.38f),
                         modifier = Modifier.size(26.dp)
                     )
                 } else {
                     Icon(
                         imageVector = Icons.Rounded.ChevronLeft,
                         contentDescription = "Previous",
-                        tint = playerButtonContentColor,
+                        tint = playerButtonContentColor.copy(alpha = if (canSkipTracks) 1f else 0.38f),
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -2557,26 +2561,27 @@ private fun MiniPlayerContentInternal(
 
             DsmusicIconButton(
                 onClick = { viewModel.playNextSong() },
+                enabled = canSkipTracks,
                 modifier = controlModifier(sideControlWidth)
             ) {
                 if (controlIconSet == "Classic") {
                     Icon(
                         painter = painterResource(R.drawable.ic_skip_next),
                         contentDescription = "Next",
-                        tint = playerButtonContentColor,
+                        tint = playerButtonContentColor.copy(alpha = if (canSkipTracks) 1f else 0.38f),
                         modifier = Modifier.size(24.dp)
                     )
                 } else if (controlIconSet == "Seek") {
                     MiniPlayerSeekGlyph(
                         isForward = true,
-                        tint = playerButtonContentColor,
+                        tint = playerButtonContentColor.copy(alpha = if (canSkipTracks) 1f else 0.38f),
                         modifier = Modifier.size(26.dp)
                     )
                 } else {
                     Icon(
                         imageVector = Icons.Rounded.ChevronRight,
                         contentDescription = "Next",
-                        tint = playerButtonContentColor,
+                        tint = playerButtonContentColor.copy(alpha = if (canSkipTracks) 1f else 0.38f),
                         modifier = Modifier.size(24.dp)
                     )
                 }
