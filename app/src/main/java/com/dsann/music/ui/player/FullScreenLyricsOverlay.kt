@@ -362,7 +362,17 @@ internal fun FullScreenLyricsOverlay(
     val consumeClicks = remember { MutableInteractionSource() }
     var showProvidersSheet by remember { mutableStateOf(false) }
     var syncOffsetMs by remember(currentSong?.id) { mutableStateOf(0L) }
+    var lyricsContentReady by remember { mutableStateOf(false) }
+
+    // Let the platform Dialog finish its entrance transition before creating the
+    // first populated lyrics text layout and karaoke geometry.
+    LaunchedEffect(Unit) {
+        delay(200L)
+        lyricsContentReady = true
+    }
+
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
 
     DisposableEffect(Unit) {
         CrashDiagnostics.updateOverlayScreen("Full-screen Lyrics")
@@ -373,8 +383,12 @@ internal fun FullScreenLyricsOverlay(
         }
     }
     SideEffect {
+        val orientation = if (
+            configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        ) "landscape" else "portrait"
         CrashDiagnostics.updateUiDetails(
-            "Lyrics full-screen dialog; loading=$isLoading; playing=$isPlaying; " +
+            "Lyrics full-screen dialog; window=${configuration.screenWidthDp}x${configuration.screenHeightDp}dp; " +
+                "orientation=$orientation; loading=$isLoading; playing=$isPlaying; " +
                 "synced=${!syncedLyrics.isNullOrEmpty()}; plain=${!plainLyrics.isNullOrBlank()}; " +
                 "providers=${providerResults.size}"
         )
@@ -746,7 +760,7 @@ internal fun FullScreenLyricsOverlay(
                 lyricsError = lyricsError,
                 currentPositionProvider = effectivePositionProvider,
                 playbackSpeedProvider = playbackSpeedProvider,
-                contentReady = contentReady,
+                contentReady = contentReady && lyricsContentReady,
                 contentColor = contentColor,
                 dynamicAccentColor = dynamicAccentColor,
                 lyricsColorStyle = lyricsColorStyle,
