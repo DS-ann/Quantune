@@ -605,8 +605,7 @@ fun FullPlayerScreen(
     dragModifier: Modifier = Modifier,
     isPlayerVisible: Boolean,
     modifier: Modifier = Modifier,
-    onVisualizerVisibilityChanged: (Boolean) -> Unit = {},
-    canSkipTracks: Boolean = true
+    onVisualizerVisibilityChanged: (Boolean) -> Unit = {}
 ) {
     val listenTogetherRole by DsmusicListenTogetherSession.client.role.collectAsStateWithLifecycle()
     val canSkipTracks = listenTogetherRole != "GUEST"
@@ -795,7 +794,8 @@ fun FullPlayer(
     onArtistClick: (String?, String) -> Unit = { _, _ -> },
     dragModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
-    onVisualizerVisibilityChanged: (Boolean) -> Unit = {}
+    onVisualizerVisibilityChanged: (Boolean) -> Unit = {},
+    canSkipTracks: Boolean = true
 ) {
     val isDark = DsmusicTheme.colorScheme.background.luminance() < 0.5f
     val contentColor = if (isDark) Color.White else Color.Black
