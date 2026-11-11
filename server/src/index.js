@@ -363,7 +363,9 @@ export class Room extends DurableObject {
       // Capture the live host timeline before changing the playing flag or resetting
       // lastUpdate. Guest requests and queue-only updates must never rewind the room.
       const livePositionBeforeAction=livePosition(s);
-      if(isHost && trackField?.b) s.track=decodeTrack(trackField.b);
+      if(isHost && trackField?.b && action!=="sync_queue" && action!=="queue_clear") {
+        s.track=decodeTrack(trackField.b);
+      }
       if(isHost && hasQueue) s.queue=queueFields.map(decodeTrack).filter(Boolean);
       if(action==="play") s.playing=true;
       else if(action==="pause") s.playing=false;
