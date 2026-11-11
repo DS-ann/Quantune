@@ -606,6 +606,22 @@ class DsmusicListenTogetherClient {
                             broadcastLocalMessage(localChatMessageJson(chat))
                         }
                     }
+                    "playback_control" -> {
+                        // Only an approved guest may request the two shared transport actions.
+                        if (localPeers[activePeer.id] !== activePeer) continue
+                        val action = message.optString("action")
+                        if (action != "play" && action != "pause") continue
+                        val requestedPosition = message.optLong("positionMs", lastPlaybackPositionMs)
+                            .coerceAtLeast(0L)
+                        val duration = lastTrack?.durationMs ?: 0L
+                        val position = if (duration > 0L) requestedPosition.coerceAtMost(duration) else requestedPosition
+                        val playing = action == "play"
+                        lastPlaybackPositionMs = position
+                        lastPlaybackIsPlaying = playing
+                        val currentTrack = lastTrack
+                        publishRemote(action, currentTrack, position, playing)
+                        broadcastLocalMessage(localPlaybackMessage(action, currentTrack, position, playing))
+                    }
                 }
             }
         } catch (error: Exception) {
