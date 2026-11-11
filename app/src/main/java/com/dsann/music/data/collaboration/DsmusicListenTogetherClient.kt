@@ -1398,7 +1398,7 @@ class DsmusicListenTogetherClient {
         if (_role.value != "HOST") return
         sendPlayback(
             action = "sync_queue",
-            track = lastTrack,
+            track = null,
             positionMs = estimatedPlaybackPositionMs(),
             queue = upcomingQueue,
             queueTitle = queueTitle,
