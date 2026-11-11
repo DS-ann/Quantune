@@ -874,8 +874,8 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                                 color = DsmusicTheme.colorScheme.onSurface
                             )
                             Text(
-                                if (chatSupported) "${roomUsers.size} listeners · Same Wi-Fi"
-                                else "Internet room",
+                                if (chatSupported) "${roomUsers.size} listeners · ${if (client.isLocalRoom) "Same Wi-Fi" else "Internet"}"
+                                else "Not connected",
                                 style = DsmusicTheme.typography.labelSmall,
                                 color = DsmusicTheme.colorScheme.onSurfaceVariant
                             )
@@ -918,13 +918,13 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                                     modifier = Modifier.size(34.dp)
                                 )
                                 Text(
-                                    "Internet chat isn't supported by this room server yet.",
+                                    "Join a listening room to use messages.",
                                     style = DsmusicTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = DsmusicTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    "The current internet relay has no room-message event. Same-Wi-Fi rooms can use chat.",
+                                    "Messages are available while you are connected to a room.",
                                     style = DsmusicTheme.typography.bodySmall,
                                     color = DsmusicTheme.colorScheme.onSurfaceVariant
                                 )
