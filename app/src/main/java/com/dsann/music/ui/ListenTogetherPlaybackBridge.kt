@@ -209,7 +209,9 @@ private suspend fun applyRemotePlayback(
     currentSong: SongItem?,
     viewModel: PlayerSharedViewModel
 ) {
-    val track = playback.track
+    val track = playback.track.takeUnless {
+        playback.action == "sync_queue" || playback.action == "queue_clear"
+    }
     if (track != null) {
         val isDifferentTrack = currentSong?.videoId != track.id
         if (isDifferentTrack) {
