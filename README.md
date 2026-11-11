@@ -43,6 +43,15 @@
   <a href="https://github.com/DS-ann/Quantune/issues">Report an issue</a>
 </p>
 
+
+<p align="center">
+  <a href="Screenshots/Explore.png">
+    <img src="Screenshots/Explore.png" alt="Quantune Explore screen — first look at the app" width="245">
+  </a>
+  <br>
+  <strong>Start with Explore.</strong> Browse the real app screen above, then see the rest of Quantune below.
+</p>
+
 <p align="center">
   <a href="https://github.com/DS-ann/Quantune">
     <img src="https://img.shields.io/github/stars/DS-ann/Quantune?style=for-the-badge&logo=github&logoColor=white&label=STAR%20THIS%20PROJECT&color=F5B942" alt="Star Quantune on GitHub">
@@ -86,48 +95,163 @@ The app combines online playback with local music, playlists, favourites, listen
 
 ## Screenshots
 
-These are real Quantune app captures, not concept mockups. Select an image to view it at full size.
+**All 19 screenshots are displayed below automatically.** Nothing is hidden behind a dropdown. Select any image to open the original capture.
 
-<p align="center">
-  <a href="Screenshots/Listen%20together.png"><img src="Screenshots/Listen%20together.png" alt="Quantune Listen Together screen" width="180"></a>
-  <a href="Screenshots/Full%20Screen%20Player.png"><img src="Screenshots/Full%20Screen%20Player.png" alt="Quantune full-screen player" width="180"></a>
-  <a href="Screenshots/Full%20screen%20lyrics.png"><img src="Screenshots/Full%20screen%20lyrics.png" alt="Quantune synchronized lyrics" width="180"></a>
-  <a href="Screenshots/Song%20recognizer.png"><img src="Screenshots/Song%20recognizer.png" alt="Quantune song recognizer" width="180"></a>
-</p>
+<table>
+  <tbody>
+  <tr>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Explore.png">
+        <img src="Screenshots/Explore.png" alt="Quantune Explore" width="155">
+      </a>
+      <br><strong>Explore</strong>
+      <br><sub>The Explore screen — your starting point for discovering music.</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Search.png">
+        <img src="Screenshots/Search.png" alt="Quantune Search" width="155">
+      </a>
+      <br><strong>Search</strong>
+      <br><sub>Search for tracks and artists.</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Search%20results.png">
+        <img src="Screenshots/Search%20results.png" alt="Quantune Search results" width="155">
+      </a>
+      <br><strong>Search results</strong>
+      <br><sub>Browse matching music.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Genre.png">
+        <img src="Screenshots/Genre.png" alt="Quantune Genres" width="155">
+      </a>
+      <br><strong>Genres</strong>
+      <br><sub>Explore music by genre.</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Library.png">
+        <img src="Screenshots/Library.png" alt="Quantune Library" width="155">
+      </a>
+      <br><strong>Library</strong>
+      <br><sub>Your personal music library.</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Local%20music.png">
+        <img src="Screenshots/Local%20music.png" alt="Quantune Local music" width="155">
+      </a>
+      <br><strong>Local music</strong>
+      <br><sub>Browse audio stored on your device.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Full%20Screen%20Player.png">
+        <img src="Screenshots/Full%20Screen%20Player.png" alt="Quantune Full-screen player" width="155">
+      </a>
+      <br><strong>Full-screen player</strong>
+      <br><sub>The main playback experience.</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Full%20screen%20lyrics.png">
+        <img src="Screenshots/Full%20screen%20lyrics.png" alt="Quantune Full-screen lyrics" width="155">
+      </a>
+      <br><strong>Full-screen lyrics</strong>
+      <br><sub>Follow lyrics while listening.</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Full%20screen%20player%20landscape.png">
+        <img src="Screenshots/Full%20screen%20player%20landscape.png" alt="Quantune Landscape player" width="155">
+      </a>
+      <br><strong>Landscape player</strong>
+      <br><sub>The player in landscape orientation.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Listen%20together.png">
+        <img src="Screenshots/Listen%20together.png" alt="Quantune Listen Together" width="155">
+      </a>
+      <br><strong>Listen Together</strong>
+      <br><sub>Create or join a shared listening room.</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Song%20recognizer.png">
+        <img src="Screenshots/Song%20recognizer.png" alt="Quantune Song recognizer" width="155">
+      </a>
+      <br><strong>Song recognizer</strong>
+      <br><sub>Identify music playing around you.</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Visualizer%20bar.png">
+        <img src="Screenshots/Visualizer%20bar.png" alt="Quantune Bar visualizer" width="155">
+      </a>
+      <br><strong>Bar visualizer</strong>
+      <br><sub>A bar-style audio visualizer.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Visualizer%20Spectrum.png">
+        <img src="Screenshots/Visualizer%20Spectrum.png" alt="Quantune Spectrum visualizer" width="155">
+      </a>
+      <br><strong>Spectrum visualizer</strong>
+      <br><sub>A spectrum-style audio visualizer.</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Visualizer%20ring.png">
+        <img src="Screenshots/Visualizer%20ring.png" alt="Quantune Ring visualizer" width="155">
+      </a>
+      <br><strong>Ring visualizer</strong>
+      <br><sub>A circular audio visualizer.</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Customize%20settings.png">
+        <img src="Screenshots/Customize%20settings.png" alt="Quantune Player customization" width="155">
+      </a>
+      <br><strong>Player customization</strong>
+      <br><sub>Personalize the player appearance.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Playback%20Settings.png">
+        <img src="Screenshots/Playback%20Settings.png" alt="Quantune Playback settings" width="155">
+      </a>
+      <br><strong>Playback settings</strong>
+      <br><sub>Configure playback behaviour.</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Settings%201.png">
+        <img src="Screenshots/Settings%201.png" alt="Quantune Settings · 1" width="155">
+      </a>
+      <br><strong>Settings · 1</strong>
+      <br><sub>App settings.</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Settings%202.png">
+        <img src="Screenshots/Settings%202.png" alt="Quantune Settings · 2" width="155">
+      </a>
+      <br><strong>Settings · 2</strong>
+      <br><sub>More app settings.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="33%">
+      <a href="Screenshots/Account%20settings.png">
+        <img src="Screenshots/Account%20settings.png" alt="Quantune Account settings" width="155">
+      </a>
+      <br><strong>Account settings</strong>
+      <br><sub>Account-related preferences.</sub>
+    </td>
+    <td width="33%"></td>
+    <td width="33%"></td>
+  </tr>
+  </tbody>
+</table>
 
-<details>
-  <summary><strong>Explore all 19 app screenshots</strong></summary>
-
-  ### Discovery and library
-  <p align="center">
-    <a href="Screenshots/Explore.png"><img src="Screenshots/Explore.png" alt="Explore screen" width="170"></a>
-    <a href="Screenshots/Search.png"><img src="Screenshots/Search.png" alt="Search screen" width="170"></a>
-    <a href="Screenshots/Search%20results.png"><img src="Screenshots/Search results.png" alt="Search results screen" width="170"></a>
-    <a href="Screenshots/Genre.png"><img src="Screenshots/Genre.png" alt="Genre screen" width="170"></a>
-    <a href="Screenshots/Library.png"><img src="Screenshots/Library.png" alt="Library screen" width="170"></a>
-    <a href="Screenshots/Local%20music.png"><img src="Screenshots/Local music.png" alt="Local music screen" width="170"></a>
-  </p>
-
-  ### Player and visualizers
-  <p align="center">
-    <a href="Screenshots/Full%20screen%20player%20landscape.png"><img src="Screenshots/Full screen player landscape.png" alt="Landscape player" width="330"></a>
-    <a href="Screenshots/Visualizer%20bar.png"><img src="Screenshots/Visualizer bar.png" alt="Bar visualizer" width="170"></a>
-    <a href="Screenshots/Visualizer%20Spectrum.png"><img src="Screenshots/Visualizer Spectrum.png" alt="Spectrum visualizer" width="170"></a>
-    <a href="Screenshots/Visualizer%20ring.png"><img src="Screenshots/Visualizer ring.png" alt="Ring visualizer" width="170"></a>
-  </p>
-
-  ### Customization and settings
-  <p align="center">
-    <a href="Screenshots/Customize%20settings.png"><img src="Screenshots/Customize settings.png" alt="Player customization settings" width="170"></a>
-    <a href="Screenshots/Playback%20Settings.png"><img src="Screenshots/Playback Settings.png" alt="Playback settings" width="170"></a>
-    <a href="Screenshots/Settings%201.png"><img src="Screenshots/Settings 1.png" alt="Settings screen one" width="170"></a>
-    <a href="Screenshots/Settings%202.png"><img src="Screenshots/Settings 2.png" alt="Settings screen two" width="170"></a>
-    <a href="Screenshots/Account%20settings.png"><img src="Screenshots/Account settings.png" alt="Account settings" width="170"></a>
-  </p>
-</details>
-
-<p align="center"><sub>Screen layout and appearance may vary by device, Android version and app settings.</sub></p>
-
+<p align="center"><sub>Actual Quantune app captures. Appearance can vary by device, Android version and settings.</sub></p>
 
 ## What's new
 

@@ -3,312 +3,259 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b0a13">
-  <meta name="robots" content="index, follow">
-  <meta name="description" content="Discover music, follow synchronized lyrics, recognize songs and listen together with Quantune — an open-source Android music player for Android 6.0 and newer.">
-  <meta name="keywords" content="Quantune, Android music player, synchronized lyrics, karaoke, Listen Together, song recognition, open source music app">
+  <meta name="theme-color" content="#090913">
+  <meta name="description" content="Meet Quantune: an open-source Android music app for music discovery, your local library, synchronized lyrics, song recognition and shared listening. Android 6.0+.">
+  <meta name="keywords" content="Quantune, Android music player, synchronized lyrics, karaoke, Listen Together, song recognition, local music, open source Android app">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Quantune — Discover. Sync. Play.">
-  <meta property="og:description" content="One Android music app for discovery, synchronized lyrics, song recognition and shared listening.">
+  <meta property="og:title" content="Quantune — Your music, in motion">
+  <meta property="og:description" content="Discover music. Follow every line. Listen together. Explore the real Quantune app screenshots.">
   <meta property="og:url" content="https://ds-ann.github.io/Quantune/">
   <meta property="og:image" content="https://ds-ann.github.io/Quantune/assets/quantune-social-card.svg">
-  <meta property="og:image:type" content="image/svg+xml">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Quantune — Your music, in motion">
+  <meta name="twitter:description" content="An open-source Android music player for discovery, lyrics and shared listening.">
   <meta name="twitter:image" content="https://ds-ann.github.io/Quantune/assets/quantune-social-card.svg">
-  <meta name="twitter:title" content="Quantune — Discover. Sync. Play.">
-  <meta name="twitter:description" content="Discover music, follow lyrics and listen together. An open-source Android music app.">
   <link rel="icon" type="image/webp" href="https://raw.githubusercontent.com/DS-ann/Quantune/main/assets/quantune-app-icon.webp">
   <link rel="canonical" href="https://ds-ann.github.io/Quantune/">
-  <title>Quantune — Discover. Sync. Play.</title>
+  <title>Quantune — Your music, in motion</title>
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0b0a13;
-      --panel: #13121e;
-      --panel-2: #191827;
-      --panel-3: #211e34;
-      --text: #f7f4ff;
-      --muted: #aaa6bb;
-      --soft: #777287;
-      --line: rgba(221, 211, 255, .12);
-      --violet: #a78bfa;
-      --violet-2: #7857e8;
-      --cyan: #6ee7e0;
-      --pink: #f0a6d8;
-      --green: #a7f3d0;
-      --radius: 24px;
-      --max: 1160px;
+      --bg: #090913;
+      --bg-2: #0d1020;
+      --panel: #131629;
+      --panel-2: #191d34;
+      --ink: #f8f7ff;
+      --muted: #b4b3c7;
+      --subtle: #777d99;
+      --line: rgba(222,218,255,.13);
+      --violet: #aa91ff;
+      --violet-2: #795cf4;
+      --cyan: #78e7df;
+      --pink: #f3a8dc;
+      --lime: #c5f3c8;
+      --max: 1200px;
+      --radius: 28px;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       scroll-behavior: smooth;
     }
     * { box-sizing: border-box; }
-    html { background: var(--bg); scroll-padding-top: 90px; }
+    html { background: var(--bg); scroll-padding-top: 92px; }
     body {
-      margin: 0;
-      color: var(--text);
+      margin: 0; color: var(--ink); line-height: 1.65; overflow-x: hidden;
       background:
-        radial-gradient(900px 620px at 86% 4%, rgba(104, 76, 193, .18), transparent 65%),
-        radial-gradient(720px 500px at 0% 43%, rgba(39, 149, 154, .09), transparent 66%),
-        var(--bg);
-      line-height: 1.6;
+        radial-gradient(850px 620px at 90% 2%, rgba(115,82,222,.19), transparent 67%),
+        radial-gradient(720px 590px at -10% 36%, rgba(44,180,176,.10), transparent 67%),
+        linear-gradient(180deg,#090913,#0b0d18 55%,#090913);
       -webkit-font-smoothing: antialiased;
     }
-    a { color: inherit; text-decoration: none; }
-    a:focus-visible, button:focus-visible { outline: 3px solid var(--cyan); outline-offset: 4px; }
-    button { font: inherit; }
-    .wrap { width: min(var(--max), calc(100% - 44px)); margin-inline: auto; }
-    .icon { width: 20px; height: 20px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-    .topbar {
-      position: sticky; top: 0; z-index: 20;
-      backdrop-filter: blur(18px);
-      background: rgba(11, 10, 19, .78);
-      border-bottom: 1px solid var(--line);
+    body:before { content:""; position:fixed; inset:0; pointer-events:none; z-index:-1; opacity:.18; background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px); background-size:54px 54px; mask-image:linear-gradient(to bottom,black,transparent 78%); }
+    a { color:inherit; text-decoration:none; }
+    img { display:block; max-width:100%; }
+    button { font:inherit; color:inherit; }
+    a:focus-visible,button:focus-visible { outline:3px solid var(--cyan); outline-offset:4px; }
+    .wrap { width:min(var(--max),calc(100% - 48px)); margin-inline:auto; }
+    .topbar { position:sticky; top:0; z-index:50; background:rgba(9,9,19,.79); border-bottom:1px solid var(--line); backdrop-filter:blur(20px); }
+    .nav { min-height:78px; display:flex; align-items:center; justify-content:space-between; gap:24px; }
+    .brand { display:inline-flex; align-items:center; gap:11px; font-size:1.25rem; font-weight:850; letter-spacing:-.06em; }
+    .brand img { width:42px; height:42px; border-radius:14px; box-shadow:0 7px 26px rgba(130,99,240,.28); }
+    .brand em { color:var(--violet); font-style:normal; }
+    .nav-links { display:flex; align-items:center; gap:27px; color:var(--muted); font-size:.9rem; }
+    .nav-links a:not(.nav-button):hover { color:#fff; }
+    .nav-button { padding:10px 17px; color:#171426; background:linear-gradient(115deg,#d6c8ff,#9bece4); border-radius:999px; font-weight:820; box-shadow:0 7px 22px rgba(133,112,234,.18); }
+    .menu-button { display:none; border:1px solid var(--line); border-radius:12px; background:var(--panel); padding:10px 13px; cursor:pointer; }
+    .hero { position:relative; padding:82px 0 72px; overflow:hidden; }
+    .hero:before { content:""; position:absolute; width:620px; height:620px; border-radius:50%; top:-270px; right:-180px; background:radial-gradient(circle,rgba(129,94,247,.22),transparent 68%); filter:blur(15px); animation:ambient-drift 13s ease-in-out infinite alternate; pointer-events:none; }
+    .hero-grid { position:relative; display:grid; grid-template-columns:1.02fr .98fr; align-items:center; gap:34px; }
+    .eyebrow { display:inline-flex; align-items:center; gap:10px; color:#c9bbff; font-size:.75rem; font-weight:850; letter-spacing:.16em; text-transform:uppercase; }
+    .eyebrow:before { content:""; width:25px; height:1px; background:var(--cyan); box-shadow:0 0 12px var(--cyan); }
+    h1 { max-width:700px; margin:21px 0 22px; font-size:clamp(3.4rem,7vw,6.25rem); line-height:.94; letter-spacing:-.085em; }
+    .gradient { color:transparent; background:linear-gradient(102deg,#e3d8ff 3%,#a88fff 48%,#81e5dd 100%); background-clip:text; -webkit-background-clip:text; }
+    .hero-copy { max-width:570px; margin:0; color:var(--muted); font-size:clamp(1.02rem,1.5vw,1.17rem); line-height:1.8; }
+    .hero-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:30px; }
+    .button { min-height:51px; display:inline-flex; align-items:center; justify-content:center; gap:10px; padding:13px 20px; border-radius:999px; font-size:.92rem; font-weight:820; transition:transform .2s ease,box-shadow .2s ease,background .2s ease; }
+    .button:hover { transform:translateY(-3px); }
+    .button-primary { color:#171426; background:linear-gradient(110deg,#d6c8ff,#8ee7df); box-shadow:0 12px 32px rgba(132,105,238,.24); }
+    .button-primary:hover { box-shadow:0 16px 42px rgba(132,105,238,.34); }
+    .button-secondary { border:1px solid var(--line); color:var(--ink); background:rgba(255,255,255,.035); }
+    .button-secondary:hover { background:rgba(255,255,255,.075); }
+    .hero-meta { display:flex; flex-wrap:wrap; gap:12px 20px; margin-top:25px; color:var(--subtle); font-size:.82rem; }
+    .hero-meta span { display:inline-flex; align-items:center; gap:8px; }
+    .meta-check { color:var(--cyan); font-weight:900; }
+    .hero-visual { min-height:600px; position:relative; display:grid; place-items:center; isolation:isolate; }
+    .hero-halo { position:absolute; width:92%; aspect-ratio:1; border-radius:50%; background:radial-gradient(circle,rgba(126,95,231,.25),rgba(58,173,174,.08) 48%,transparent 72%); filter:blur(16px); animation:halo-pulse 6s ease-in-out infinite; }
+    .orbit { position:absolute; width:490px; height:490px; border:1px solid rgba(181,165,255,.16); border-radius:50%; transform:rotate(-24deg) scaleY(.55); animation:orbit-drift 18s linear infinite; }
+    .orbit:before,.orbit:after { content:""; position:absolute; inset:28px; border:1px solid rgba(117,231,223,.12); border-radius:50%; }
+    .orbit:after { inset:70px; border-color:rgba(243,168,220,.12); }
+    .device-shot { position:absolute; display:block; overflow:hidden; padding:9px; border:1px solid rgba(236,230,255,.28); border-radius:31px; background:linear-gradient(145deg,#29263e,#10111b 70%); box-shadow:0 35px 100px rgba(0,0,0,.56),0 0 0 6px rgba(255,255,255,.025); }
+    .device-shot img { width:100%; height:100%; object-fit:contain; border-radius:22px; background:#090a13; }
+    .device-shot.explore { width:min(45%,260px); height:510px; left:15%; top:4%; z-index:3; transform:rotate(-5deg); animation:float-main 7s ease-in-out infinite; }
+    .device-shot.together { width:min(38%,218px); height:420px; right:7%; bottom:7%; z-index:4; transform:rotate(6deg); animation:float-side 8s ease-in-out infinite; }
+    .device-shot.lyrics { width:min(32%,180px); height:340px; right:5%; top:3%; z-index:2; transform:rotate(8deg); opacity:.88; animation:float-lyrics 9s ease-in-out infinite; }
+    .visual-label { position:absolute; left:3%; bottom:3%; z-index:8; padding:12px 15px; border:1px solid var(--line); border-radius:16px; background:rgba(17,19,34,.91); box-shadow:0 16px 44px rgba(0,0,0,.32); backdrop-filter:blur(15px); color:var(--muted); font-size:.75rem; animation:label-enter .9s .3s both; }
+    .visual-label strong { display:block; color:var(--ink); font-size:.88rem; }
+    .live-dot { display:inline-block; width:7px; height:7px; margin-right:6px; border-radius:50%; background:var(--lime); box-shadow:0 0 12px rgba(197,243,200,.7); animation:dot-pulse 1.8s ease-in-out infinite; }
+    .soundbars { display:flex; align-items:center; gap:4px; height:34px; margin-top:18px; }
+    .soundbars i { width:4px; height:10px; border-radius:5px; background:linear-gradient(180deg,var(--cyan),var(--violet)); animation:equalize .9s ease-in-out infinite alternate; }
+    .soundbars i:nth-child(2n) { animation-delay:-.4s; }
+    .soundbars i:nth-child(3n) { animation-delay:-.7s; }
+    .soundbars i:nth-child(4n) { animation-delay:-.2s; }
+    .soundbars i:nth-child(5n) { animation-delay:-.55s; }
+    .soundbars i:nth-child(4n+1) { height:23px; }
+    .soundbars i:nth-child(3n+2) { height:17px; }
+    .marquee { overflow:hidden; border-block:1px solid var(--line); background:rgba(255,255,255,.022); }
+    .marquee-track { display:flex; width:max-content; gap:34px; padding:17px 0; color:#c6c0dc; font-size:.77rem; font-weight:800; letter-spacing:.16em; text-transform:uppercase; animation:marquee-scroll 35s linear infinite; }
+    .marquee-track span { display:inline-flex; align-items:center; gap:34px; }
+    .marquee-track b { color:var(--cyan); font-size:1rem; }
+    .section { padding:88px 0; }
+    .section-head { max-width:720px; margin-bottom:35px; }
+    .section-head.center { margin-inline:auto; text-align:center; }
+    .section-kicker { color:var(--cyan); font-size:.73rem; font-weight:850; letter-spacing:.17em; text-transform:uppercase; }
+    h2 { margin:12px 0 13px; font-size:clamp(2.1rem,4.3vw,3.55rem); line-height:1.04; letter-spacing:-.065em; }
+    .section-head p { margin:0; color:var(--muted); font-size:1rem; }
+    .feature-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:15px; }
+    .feature-card { min-height:220px; padding:25px; border:1px solid var(--line); border-radius:23px; background:linear-gradient(145deg,rgba(28,30,53,.85),rgba(17,19,33,.75)); transition:transform .25s ease,border-color .25s ease,background .25s ease; }
+    .feature-card:hover { transform:translateY(-6px); border-color:rgba(170,145,255,.45); background:linear-gradient(145deg,rgba(39,37,70,.9),rgba(17,19,33,.85)); }
+    .feature-icon { width:46px; height:46px; display:grid; place-items:center; border:1px solid rgba(170,145,255,.24); border-radius:15px; color:var(--cyan); background:rgba(170,145,255,.09); font-size:1.28rem; }
+    .feature-card h3 { margin:18px 0 8px; font-size:1.07rem; letter-spacing:-.025em; }
+    .feature-card p { margin:0; color:var(--muted); font-size:.9rem; line-height:1.75; }
+    .gallery-section { padding-top:88px; }
+    .gallery-filter { display:flex; flex-wrap:wrap; justify-content:center; gap:9px; margin:0 auto 30px; }
+    .filter-chip { padding:9px 15px; border:1px solid var(--line); border-radius:999px; color:var(--muted); background:rgba(255,255,255,.025); font-size:.82rem; cursor:pointer; transition:all .2s ease; }
+    .filter-chip:hover,.filter-chip[aria-pressed="true"] { border-color:rgba(170,145,255,.6); color:var(--ink); background:rgba(170,145,255,.15); box-shadow:0 0 22px rgba(128,95,233,.11); }
+    .gallery-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:17px; }
+    .gallery-card { overflow:hidden; border:1px solid var(--line); border-radius:22px; background:linear-gradient(150deg,rgba(25,28,49,.96),rgba(14,16,29,.98)); transition:transform .24s ease,border-color .24s ease,box-shadow .24s ease; }
+    .gallery-card:hover { transform:translateY(-6px); border-color:rgba(170,145,255,.48); box-shadow:0 18px 42px rgba(0,0,0,.26),0 0 28px rgba(130,99,230,.08); }
+    .gallery-card[hidden] { display:none; }
+    .gallery-card--wide { grid-column:span 2; }
+    .gallery-image { position:relative; height:355px; display:grid; place-items:center; overflow:hidden; padding:12px; background:radial-gradient(ellipse at 50% 42%,rgba(126,95,231,.13),transparent 68%),#090b14; }
+    .gallery-image img { width:100%; height:100%; object-fit:contain; border-radius:9px; transition:transform .4s cubic-bezier(.2,.7,.2,1),filter .4s ease; }
+    .gallery-card:hover .gallery-image img { transform:scale(1.035); filter:brightness(1.08); }
+    .image-open { position:absolute; right:13px; bottom:13px; padding:7px 10px; border:1px solid rgba(255,255,255,.15); border-radius:999px; background:rgba(7,8,15,.86); color:#fff; font-size:.69rem; opacity:0; transform:translateY(6px); transition:opacity .2s ease,transform .2s ease; }
+    .gallery-card:hover .image-open,.gallery-image:focus-visible .image-open { opacity:1; transform:translateY(0); }
+    .gallery-caption { min-height:92px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:15px 16px; }
+    .gallery-caption strong { display:block; font-size:.92rem; }
+    .gallery-caption span:not(.gallery-number) { display:block; margin-top:3px; color:var(--muted); font-size:.76rem; line-height:1.48; }
+    .gallery-number { flex:0 0 auto; color:var(--subtle); font-size:.68rem; font-variant-numeric:tabular-nums; }
+    .story-band { display:grid; grid-template-columns:1fr 1fr; gap:30px; align-items:center; padding:36px; border:1px solid var(--line); border-radius:30px; background:radial-gradient(450px 260px at 4% 10%,rgba(128,93,227,.18),transparent 75%),linear-gradient(120deg,rgba(29,31,55,.96),rgba(15,21,31,.96)); }
+    .story-band p { margin:0; color:var(--muted); }
+    .story-list { display:grid; gap:13px; }
+    .story-item { display:flex; align-items:flex-start; gap:12px; color:var(--muted); font-size:.89rem; }
+    .story-item b { color:var(--ink); }
+    .story-check { flex:0 0 auto; color:var(--cyan); font-weight:900; }
+    .download-section { padding:82px 0; }
+    .download-panel { padding:clamp(24px,4vw,43px); border:1px solid rgba(170,145,255,.25); border-radius:31px; background:radial-gradient(700px 320px at 96% 0%,rgba(127,91,225,.18),transparent 70%),linear-gradient(145deg,#191b30,#101321 72%); box-shadow:0 28px 90px rgba(0,0,0,.2); }
+    .download-head { display:flex; align-items:flex-end; justify-content:space-between; gap:22px; margin-bottom:28px; }
+    .download-head p { max-width:640px; margin:0; color:var(--muted); }
+    .release-note { flex:0 0 auto; padding:9px 13px; border:1px solid var(--line); border-radius:999px; color:var(--lime); font-size:.75rem; }
+    .apk-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+    .apk-card { min-height:248px; display:flex; flex-direction:column; align-items:flex-start; padding:22px; border:1px solid var(--line); border-radius:21px; background:rgba(7,8,15,.28); }
+    .apk-card.recommended { border-color:rgba(170,145,255,.55); background:rgba(128,94,229,.10); }
+    .apk-kicker { margin-bottom:13px; color:var(--cyan); font-size:.7rem; font-weight:850; letter-spacing:.13em; text-transform:uppercase; }
+    .apk-card h3 { margin:0 0 7px; font-size:1.18rem; }
+    .apk-card p { min-height:65px; margin:0 0 18px; color:var(--muted); font-size:.84rem; }
+    .apk-card .button { width:100%; margin-top:auto; }
+    .checksum { margin-top:10px; color:var(--subtle); font-size:.75rem; }
+    .download-note { margin:20px 0 0; color:var(--muted); font-size:.83rem; }
+    .faq-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px; }
+    .faq { padding:19px 21px; border:1px solid var(--line); border-radius:18px; background:rgba(255,255,255,.025); }
+    .faq summary { cursor:pointer; font-weight:760; }
+    .faq p { margin:10px 0 0; color:var(--muted); font-size:.88rem; }
+    .final-cta { padding:68px 0 86px; text-align:center; }
+    .final-panel { padding:clamp(35px,5vw,58px) 24px; border:1px solid rgba(170,145,255,.2); border-radius:32px; background:radial-gradient(500px 250px at 50% 0%,rgba(128,97,230,.2),transparent 75%),#131629; overflow:hidden; }
+    .final-panel p { max-width:650px; margin:0 auto; color:var(--muted); }
+    .final-panel .hero-actions { justify-content:center; }
+    footer { padding:31px 0 38px; border-top:1px solid var(--line); background:rgba(0,0,0,.18); }
+    .footer-top { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:22px; }
+    .footer-links { display:flex; flex-wrap:wrap; gap:20px; color:var(--muted); font-size:.86rem; }
+    .footer-links a:hover { color:var(--ink); }
+    .fine-print { max-width:950px; margin:18px 0 0; color:var(--subtle); font-size:.76rem; }
+    .js .reveal { opacity:0; transform:translateY(24px); transition:opacity .72s cubic-bezier(.2,.65,.25,1),transform .72s cubic-bezier(.2,.65,.25,1); transition-delay:calc(var(--card-index,0) * 35ms); }
+    .js .reveal.visible { opacity:1; transform:translateY(0); }
+    .js .hero-copy.reveal { transform:translateY(18px); }
+    .js .hero-copy.reveal.visible { transform:translateY(0); }
+    @keyframes ambient-drift { from { transform:translate3d(0,0,0) scale(1); } to { transform:translate3d(-45px,35px,0) scale(1.12); } }
+    @keyframes halo-pulse { 0%,100% { opacity:.68; transform:scale(.94); } 50% { opacity:1; transform:scale(1.06); } }
+    @keyframes orbit-drift { from { transform:rotate(-24deg) scaleY(.55); } to { transform:rotate(336deg) scaleY(.55); } }
+    @keyframes float-main { 0%,100% { translate:0 0; rotate:-5deg; } 50% { translate:0 -13px; rotate:-3.5deg; } }
+    @keyframes float-side { 0%,100% { translate:0 0; rotate:6deg; } 50% { translate:0 15px; rotate:4deg; } }
+    @keyframes float-lyrics { 0%,100% { translate:0 0; rotate:8deg; } 50% { translate:0 -10px; rotate:6deg; } }
+    @keyframes label-enter { from { opacity:0; translate:0 12px; } to { opacity:1; translate:0 0; } }
+    @keyframes dot-pulse { 0%,100% { opacity:.55; box-shadow:0 0 0 0 rgba(197,243,200,.45); } 50% { opacity:1; box-shadow:0 0 0 7px rgba(197,243,200,0); } }
+    @keyframes equalize { from { transform:scaleY(.38); } to { transform:scaleY(1.15); } }
+    @keyframes marquee-scroll { from { transform:translateX(0); } to { transform:translateX(-50%); } }
+    @media (max-width:1050px) {
+      .hero-grid { grid-template-columns:1fr .92fr; gap:14px; }
+      .hero-visual { min-height:530px; }
+      .device-shot.explore { height:455px; }
+      .device-shot.together { height:370px; }
+      .device-shot.lyrics { height:300px; }
+      .orbit { width:410px; height:410px; }
+      .gallery-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .feature-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     }
-    .nav { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
-    .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 750; letter-spacing: -.04em; font-size: 1.2rem; }
-    .brand img { width: 39px; height: 39px; border-radius: 12px; box-shadow: 0 5px 22px rgba(123, 91, 230, .25); }
-    .brand span span { color: var(--violet); }
-    .navlinks { display: flex; align-items: center; gap: 28px; color: var(--muted); font-size: .92rem; }
-    .navlinks a:hover { color: var(--text); }
-    .nav-cta { padding: 10px 16px; border-radius: 999px; background: var(--text); color: #191426; font-weight: 750; }
-    .nav-cta:hover { background: #ded4ff; color: #191426 !important; }
-    .menu-toggle { display: none; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 12px; padding: 9px; }
-    .hero { padding: 88px 0 76px; overflow: hidden; }
-    .hero-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 55px; align-items: center; }
-    .eyebrow { display: inline-flex; align-items: center; gap: 9px; color: #d4c7ff; font-size: .78rem; text-transform: uppercase; letter-spacing: .14em; font-weight: 800; }
-    .eyebrow:before { content: ""; width: 25px; height: 1px; background: var(--violet); }
-    h1 { font-size: clamp(3.2rem, 6.5vw, 5.8rem); letter-spacing: -.075em; line-height: .98; margin: 22px 0 23px; max-width: 700px; }
-    .gradient-text { background: linear-gradient(100deg, #d7c8ff 0%, #a78bfa 43%, #6ee7e0 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
-    .hero-copy { color: var(--muted); font-size: clamp(1.04rem, 1.5vw, 1.18rem); max-width: 570px; margin: 0; }
-    .hero-actions { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; margin-top: 32px; }
-    .btn { display: inline-flex; justify-content: center; align-items: center; gap: 10px; border-radius: 999px; padding: 14px 21px; font-weight: 780; transition: transform .18s ease, background .18s ease, border-color .18s ease; }
-    .btn:hover { transform: translateY(-2px); }
-    .btn-primary { color: #171321; background: linear-gradient(110deg, #d8c9ff, #9f88f4); box-shadow: 0 12px 35px rgba(142, 112, 239, .23); }
-    .btn-primary:hover { background: #e5dcff; }
-    .btn-secondary { border: 1px solid var(--line); color: var(--text); background: rgba(255,255,255,.035); }
-    .btn-secondary:hover { border-color: rgba(206, 187, 255, .45); background: rgba(255,255,255,.07); }
-    .hero-meta { display: flex; flex-wrap: wrap; gap: 16px 22px; margin-top: 27px; color: var(--soft); font-size: .84rem; }
-    .hero-meta span { display: inline-flex; align-items: center; gap: 7px; }
-    .hero-meta .icon { width: 16px; height: 16px; color: var(--cyan); }
-    .visual-stage { min-height: 490px; position: relative; display: grid; place-items: center; isolation: isolate; }
-    .orb { position: absolute; width: 380px; height: 380px; border-radius: 50%; background: radial-gradient(circle, rgba(125, 95, 226, .31), rgba(52, 168, 164, .08) 50%, transparent 72%); filter: blur(10px); z-index: -1; }
-    .ring { position: absolute; width: 390px; height: 390px; border-radius: 50%; border: 1px solid rgba(190, 173, 255, .12); transform: rotate(-22deg) scaleY(.58); }
-    .ring:after { content: ""; position: absolute; inset: 28px; border: 1px solid rgba(110, 231, 224, .12); border-radius: 50%; }
-    .phone {
-      position: relative; width: min(310px, 72vw); min-height: 435px;
-      border: 1px solid rgba(231, 221, 255, .25); border-radius: 38px;
-      padding: 12px; background: linear-gradient(145deg, #29243e, #10101a 62%);
-      box-shadow: 0 38px 95px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.12);
-      transform: rotate(-5deg); z-index: 2;
+    @media (max-width:760px) {
+      .wrap { width:min(var(--max),calc(100% - 30px)); }
+      .nav { min-height:68px; }
+      .menu-button { display:block; }
+      .nav-links { display:none; position:absolute; top:68px; left:15px; right:15px; flex-direction:column; align-items:stretch; gap:0; padding:10px; border:1px solid var(--line); border-radius:18px; background:#121528; box-shadow:0 18px 55px rgba(0,0,0,.5); }
+      .nav-links.open { display:flex; }
+      .nav-links a { padding:12px 14px; }
+      .nav-button { margin-top:5px; text-align:center; }
+      .hero { padding:54px 0 42px; }
+      .hero-grid { grid-template-columns:1fr; gap:5px; }
+      h1 { font-size:clamp(3.1rem,14vw,5rem); }
+      .hero-visual { width:min(100%,500px); min-height:510px; margin:8px auto 0; }
+      .device-shot.explore { height:430px; left:14%; }
+      .device-shot.together { height:355px; right:7%; }
+      .device-shot.lyrics { height:290px; right:4%; }
+      .visual-label { left:1%; bottom:1%; }
+      .orbit { width:390px; height:390px; }
+      .section { padding:66px 0; }
+      .gallery-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
+      .gallery-image { height:300px; padding:9px; }
+      .gallery-caption { display:block; min-height:108px; padding:12px; }
+      .gallery-number { display:block; margin-top:8px; }
+      .story-band { grid-template-columns:1fr; padding:25px; }
+      .download-head { display:block; }
+      .release-note { display:inline-block; margin-top:16px; }
+      .apk-grid { grid-template-columns:1fr; }
+      .apk-card { min-height:0; }
+      .apk-card p { min-height:0; }
+      .faq-grid { grid-template-columns:1fr; }
+      .footer-top { align-items:flex-start; flex-direction:column; }
     }
-    .phone-screen { min-height: 409px; border-radius: 28px; padding: 19px 17px; background: linear-gradient(160deg, #19172a, #0d111c 80%); overflow: hidden; }
-    .phone-top { display: flex; justify-content: space-between; align-items: center; font-size: .73rem; color: #c6c1d7; }
-    .phone-brand { display: flex; align-items: center; gap: 7px; font-size: .82rem; font-weight: 800; color: #f4f0ff; }
-    .phone-brand img { width: 23px; height: 23px; border-radius: 7px; }
-    .phone-kicker { margin-top: 23px; color: #a9a1c2; font-size: .68rem; letter-spacing: .13em; text-transform: uppercase; font-weight: 800; }
-    .album-art {
-      margin-top: 11px; height: 175px; border-radius: 20px; position: relative; overflow: hidden;
-      background: radial-gradient(circle at 68% 28%, rgba(255,255,255,.55), transparent 8%),
-        radial-gradient(ellipse at 45% 110%, #33a8a3 0%, transparent 45%),
-        radial-gradient(ellipse at 20% 0%, #9c70ec, transparent 48%),
-        linear-gradient(135deg, #33224b, #16162b 58%, #1e5c61);
+    @media (max-width:410px) {
+      .hero-visual { min-height:430px; }
+      .device-shot.explore { height:360px; left:11%; }
+      .device-shot.together { height:300px; right:4%; }
+      .device-shot.lyrics { height:245px; right:2%; }
+      .gallery-image { height:250px; }
+      .gallery-caption { font-size:.82rem; }
+      .orbit { width:330px; height:330px; }
+      .gallery-grid { gap:9px; }
     }
-    .album-art:before, .album-art:after { content: ""; position: absolute; border: 1px solid rgba(255,255,255,.26); border-radius: 50%; transform: rotate(-28deg) scaleY(.48); }
-    .album-art:before { width: 250px; height: 250px; left: 10px; top: -43px; }
-    .album-art:after { width: 180px; height: 180px; left: 46px; top: -7px; border-color: rgba(255,255,255,.4); }
-    .track-title { margin-top: 14px; font-size: 1rem; font-weight: 780; letter-spacing: -.02em; }
-    .track-sub { color: #aaa4bd; font-size: .78rem; margin-top: 1px; }
-    .wave { height: 43px; display: flex; align-items: center; justify-content: center; gap: 3px; margin: 14px 0 5px; }
-    .wave i { display: block; width: 3px; border-radius: 5px; background: linear-gradient(180deg, #a78bfa, #6ee7e0); opacity: .92; }
-    .wave i:nth-child(7n+1) { height: 13px; }.wave i:nth-child(7n+2) { height: 22px; }.wave i:nth-child(7n+3) { height: 31px; }.wave i:nth-child(7n+4) { height: 18px; }.wave i:nth-child(7n+5) { height: 37px; }.wave i:nth-child(7n+6) { height: 25px; }.wave i:nth-child(7n) { height: 10px; }
-    .phone-controls { display: flex; justify-content: center; align-items: center; gap: 28px; color: #d7d0ea; }
-    .phone-controls .play { display: grid; place-items: center; width: 42px; height: 42px; color: #181424; background: #d3c4ff; border-radius: 50%; }
-    .lyric-chip { position: absolute; bottom: 24px; left: -50px; width: 188px; padding: 14px; border: 1px solid rgba(255,255,255,.15); border-radius: 17px; background: rgba(27, 25, 43, .88); backdrop-filter: blur(16px); box-shadow: 0 20px 45px rgba(0,0,0,.32); transform: rotate(4deg); z-index: 4; }
-    .lyric-chip small { display: block; color: var(--cyan); text-transform: uppercase; font-size: .61rem; letter-spacing: .12em; font-weight: 800; margin-bottom: 5px; }
-    .lyric-chip strong { font-size: .83rem; line-height: 1.35; }
-    .room-chip { position: absolute; top: 42px; right: -20px; padding: 13px 15px; border: 1px solid rgba(255,255,255,.14); border-radius: 17px; background: rgba(27,25,43,.88); backdrop-filter: blur(14px); display: flex; align-items: center; gap: 10px; box-shadow: 0 18px 45px rgba(0,0,0,.27); z-index: 4; transform: rotate(4deg); }
-    .avatars { display: flex; }
-    .avatars i { width: 24px; height: 24px; margin-left: -5px; border-radius: 50%; border: 2px solid #211e34; background: linear-gradient(135deg, #7ddbd4, #8772d7); }
-    .avatars i:first-child { margin-left: 0; background: linear-gradient(135deg, #f4b5d9, #9978e7); }
-    .avatars i:last-child { background: linear-gradient(135deg, #f2d18d, #db8caa); }
-    .room-chip b { display: block; font-size: .74rem; }.room-chip small { color: var(--muted); font-size: .64rem; }
-    .section { padding: 82px 0; }
-    .section-head { max-width: 680px; margin-bottom: 34px; }
-    .section-kicker { color: var(--cyan); font-size: .77rem; text-transform: uppercase; letter-spacing: .15em; font-weight: 850; }
-    h2 { font-size: clamp(2.1rem, 4vw, 3.35rem); line-height: 1.08; letter-spacing: -.055em; margin: 12px 0 14px; }
-    .section-head p { margin: 0; color: var(--muted); font-size: 1.03rem; }
-    .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
-    .feature {
-      min-height: 225px; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius);
-      background: linear-gradient(145deg, rgba(255,255,255,.045), rgba(255,255,255,.015));
-      transition: border-color .2s ease, transform .2s ease;
+    @media (prefers-reduced-motion:reduce) {
+      *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+      .js .reveal { opacity:1; transform:none; }
     }
-    .feature:hover { border-color: rgba(167,139,250,.4); transform: translateY(-3px); }
-    .feature-icon { width: 43px; height: 43px; display: grid; place-items: center; border-radius: 14px; color: #d9ceff; background: rgba(167,139,250,.13); }
-    .feature:nth-child(2) .feature-icon, .feature:nth-child(5) .feature-icon { color: var(--cyan); background: rgba(110,231,224,.1); }
-    .feature h3 { font-size: 1.12rem; margin: 19px 0 7px; letter-spacing: -.025em; }
-    .feature p { margin: 0; color: var(--muted); font-size: .92rem; }
-    .split-band { border: 1px solid var(--line); border-radius: 30px; padding: clamp(28px, 5vw, 52px); display: grid; grid-template-columns: .95fr 1.05fr; gap: 38px; align-items: center; background: radial-gradient(700px 300px at 4% 0%, rgba(122,92,210,.18), transparent 70%), var(--panel); }
-    .split-band p { color: var(--muted); margin: 0 0 17px; }
-    .check-list { display: grid; gap: 11px; padding: 0; margin: 22px 0 0; list-style: none; color: #ded9ec; font-size: .92rem; }
-    .check-list li { display: flex; gap: 10px; align-items: flex-start; }
-    .check-list .icon { width: 18px; height: 18px; color: var(--cyan); margin-top: 3px; }
-    .lyrics-demo { border-radius: 23px; padding: 25px; background: linear-gradient(145deg, #26213e, #151824); border: 1px solid rgba(255,255,255,.1); box-shadow: 0 23px 60px rgba(0,0,0,.2); }
-    .lyrics-demo .demo-label { color: #a89be0; text-transform: uppercase; letter-spacing: .13em; font-size: .68rem; font-weight: 850; }
-    .lyrics-demo .line { font-size: clamp(1.08rem, 2.4vw, 1.7rem); font-weight: 750; letter-spacing: -.04em; line-height: 1.25; margin: 19px 0; color: rgba(246,243,255,.42); }
-    .lyrics-demo .line.active { color: #e4d9ff; text-shadow: 0 0 27px rgba(167,139,250,.22); }
-    .lyrics-demo .progress { height: 4px; border-radius: 9px; background: rgba(255,255,255,.12); overflow: hidden; }
-    .lyrics-demo .progress:after { content: ""; display: block; height: 100%; width: 46%; background: linear-gradient(90deg, var(--violet), var(--cyan)); }
-    .download { padding-top: 25px; }
-    .download-panel { border-radius: 32px; padding: clamp(28px, 5.5vw, 58px); border: 1px solid rgba(200,183,255,.2); background: radial-gradient(620px 360px at 100% 0%, rgba(117,91,207,.25), transparent 68%), linear-gradient(145deg, #171525, #11111b); }
-    .download-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 25px; margin-bottom: 27px; }
-    .download-head p { max-width: 470px; color: var(--muted); margin: 0; }
-    .version-pill { white-space: nowrap; color: #cfc2ff; border: 1px solid rgba(167,139,250,.3); border-radius: 999px; padding: 8px 12px; font-size: .78rem; font-weight: 750; }
-    .apk-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; }
-    .apk-card { position: relative; padding: 22px; border-radius: 21px; border: 1px solid var(--line); background: rgba(8,8,15,.5); display: flex; flex-direction: column; min-height: 226px; }
-    .apk-card.recommended { border-color: rgba(167,139,250,.65); background: linear-gradient(150deg, rgba(167,139,250,.13), rgba(8,8,15,.52) 72%); }
-    .apk-badge { color: #d4c7ff; font-size: .65rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 900; }
-    .apk-card h3 { margin: 9px 0 4px; font-size: 1.08rem; }
-    .apk-card p { margin: 0 0 18px; color: var(--muted); font-size: .84rem; }
-    .apk-card .btn { width: 100%; margin-top: auto; padding: 11px 13px; font-size: .88rem; }
-    .apk-card .checksum { display: block; margin-top: 10px; color: var(--soft); text-align: center; font-size: .75rem; }
-    .download-note { color: var(--soft); font-size: .84rem; margin: 19px 0 0; }
-    .trust-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 25px; }
-    .trust-item { padding: 19px; border-radius: 18px; background: rgba(255,255,255,.035); border: 1px solid var(--line); }
-    .trust-item b { display: block; font-size: .91rem; margin-bottom: 4px; }
-    .trust-item span { color: var(--muted); font-size: .82rem; }
-    .faq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
-    details { padding: 20px 22px; border-radius: 17px; background: var(--panel); border: 1px solid var(--line); }
-    summary { cursor: pointer; font-weight: 750; list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    summary::-webkit-details-marker { display: none; }
-    summary:after { content: "+"; color: var(--violet); font-size: 1.3rem; line-height: 1; }
-    details[open] summary:after { content: "−"; }
-    details p { margin: 12px 0 0; color: var(--muted); font-size: .9rem; }
-    .final-cta { padding: 48px 0 92px; }
-    .final-box { text-align: center; padding: 48px 25px; border-radius: 29px; border: 1px solid var(--line); background: radial-gradient(600px 230px at 50% 0%, rgba(130,99,222,.2), transparent 72%), var(--panel); }
-    .final-box p { color: var(--muted); margin: 0 auto 23px; max-width: 560px; }
-    .final-box .hero-actions { justify-content: center; margin-top: 24px; }
-    footer { border-top: 1px solid var(--line); padding: 27px 0 35px; color: var(--soft); font-size: .82rem; }
-    .footer-inner { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
-    .footer-links { display: flex; gap: 18px; flex-wrap: wrap; }
-    .footer-links a:hover { color: var(--text); }
-    .fine-print { max-width: 780px; margin-top: 17px; color: #777287; font-size: .75rem; }
-    @media (max-width: 900px) {
-      .hero-grid { grid-template-columns: 1fr; gap: 10px; }
-      .hero { padding-top: 67px; }
-      .visual-stage { min-height: 470px; }
-      .feature-grid { grid-template-columns: repeat(2, 1fr); }
-      .split-band { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 680px) {
-      .wrap { width: min(100% - 30px, var(--max)); }
-      .nav { min-height: 66px; }
-      .menu-toggle { display: inline-flex; }
-      .navlinks { display: none; position: absolute; top: 65px; left: 15px; right: 15px; padding: 15px; border: 1px solid var(--line); border-radius: 18px; background: #171523; flex-direction: column; align-items: stretch; gap: 0; box-shadow: 0 18px 50px rgba(0,0,0,.4); }
-      .navlinks.open { display: flex; }
-      .navlinks a { padding: 12px; }
-      .nav-cta { text-align: center; margin-top: 7px; }
-      .hero { padding: 58px 0 48px; }
-      h1 { font-size: clamp(3rem, 15vw, 4.6rem); }
-      .visual-stage { min-height: 425px; transform: scale(.93); margin: -5px -15px -10px; }
-      .phone { transform: rotate(-3deg) scale(.9); }
-      .room-chip { right: 0; top: 22px; }
-      .lyric-chip { left: -5px; bottom: 25px; }
-      .section { padding: 62px 0; }
-      .feature-grid, .apk-grid, .trust-grid, .faq-grid { grid-template-columns: 1fr; }
-      .feature { min-height: 0; }
-      .download-head { display: block; }
-      .version-pill { display: inline-block; margin-top: 16px; }
-      .download-panel { padding: 25px 18px; }
-      .apk-card { min-height: 0; }
-      .final-cta { padding-bottom: 65px; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      *, *:before, *:after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
-    }
-  
-    /* Real screenshot hero and responsive gallery */
-    .real-showcase { position: relative; }
-    .real-glow { position:absolute; width:78%; aspect-ratio:1; border-radius:50%; background:radial-gradient(circle,rgba(128,91,228,.34),rgba(61,177,174,.08) 52%,transparent 73%); filter:blur(14px); }
-    .real-screen { position:absolute; overflow:hidden; display:block; border:1px solid rgba(228,224,255,.24); border-radius:23px; background:#090a12; box-shadow:0 28px 88px rgba(0,0,0,.48),0 0 0 7px rgba(255,255,255,.025); }
-    .real-screen img { width:100%; height:100%; object-fit:contain; background:#090a12; }
-    .real-screen.main { width:min(48%,260px); height:460px; left:10%; top:7%; transform:rotate(-5deg); z-index:2; }
-    .real-screen.secondary { width:min(43%,232px); height:408px; right:8%; bottom:6%; transform:rotate(5deg); z-index:3; }
-    .real-label { position:absolute; top:2%; right:0; z-index:4; padding:11px 15px; border:1px solid var(--line); border-radius:14px; background:rgba(17,20,33,.9); color:var(--muted); font-size:.76rem; backdrop-filter:blur(12px); }
-    .real-label strong { display:block; color:var(--text); font-size:.85rem; }
-    .real-foot { position:absolute; left:4%; bottom:4%; z-index:4; padding:11px 14px; border:1px solid var(--line); border-radius:14px; background:rgba(17,20,33,.92); box-shadow:0 12px 42px rgba(0,0,0,.28); color:var(--muted); font-size:.75rem; backdrop-filter:blur(14px); }
-    .real-foot b { color:var(--text); }
-    .gallery-toolbar { display:flex; flex-wrap:wrap; justify-content:center; gap:9px; margin:0 auto 28px; }
-    .filter-btn { padding:9px 14px; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,.025); color:var(--muted); font-size:.82rem; cursor:pointer; }
-    .filter-btn:hover,.filter-btn[aria-pressed="true"] { border-color:rgba(167,139,250,.6); background:rgba(167,139,250,.14); color:var(--text); }
-    .gallery-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
-    .shot-card { overflow:hidden; border:1px solid var(--line); border-radius:20px; background:linear-gradient(150deg,rgba(23,27,43,.96),rgba(15,17,28,.96)); transition:transform .2s ease,border-color .2s ease; }
-    .shot-card:hover { transform:translateY(-4px); border-color:rgba(167,139,250,.42); }
-    .shot-card[hidden] { display:none; }
-    .shot-image { height:350px; position:relative; display:grid; place-items:center; padding:12px; overflow:hidden; background:radial-gradient(ellipse at 50% 40%,rgba(116,94,196,.13),transparent 68%),#0a0c15; }
-    .shot-image img { width:100%; height:100%; object-fit:contain; border-radius:9px; }
-    .shot-card.wide { grid-column:span 2; }
-    .shot-card.wide .shot-image { height:260px; }
-    .zoom-hint { position:absolute; right:14px; bottom:13px; padding:6px 9px; border:1px solid rgba(255,255,255,.13); border-radius:999px; background:rgba(8,9,16,.8); color:#eeeaff; font-size:.68rem; opacity:0; transform:translateY(4px); transition:opacity .18s ease,transform .18s ease; }
-    .shot-image:hover .zoom-hint,.shot-image:focus-visible .zoom-hint { opacity:1; transform:translateY(0); }
-    .shot-caption { min-height:88px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:14px 15px 16px; }
-    .shot-caption strong { font-size:.91rem; }
-    .shot-caption p { margin:3px 0 0; color:var(--muted); font-size:.77rem; line-height:1.45; }
-    .shot-tag { flex:0 0 auto; margin-top:1px; padding:4px 7px; border:1px solid var(--line); border-radius:999px; color:var(--soft); font-size:.62rem; text-transform:capitalize; }
-    @media (max-width:980px) { .gallery-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
-    @media (max-width:700px) {
-      .real-screen.main { height:372px; left:12%; }
-      .real-screen.secondary { height:333px; right:8%; }
-      .gallery-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-      .shot-image { height:285px; padding:9px; }
-      .shot-caption { display:block; min-height:105px; padding:12px; }
-      .shot-tag { display:inline-block; margin-top:8px; }
-      .shot-card.wide { grid-column:span 2; }
-      .shot-card.wide .shot-image { height:210px; }
-    }
-    @media (max-width:390px) {
-      .shot-image { height:245px; }
-      .real-screen.main { height:330px; }
-      .real-screen.secondary { height:298px; }
-    }
-
   </style>
+  <script>document.documentElement.classList.add("js");</script>
 </head>
 <body>
-  <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
-    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></symbol>
-    <symbol id="i-github" viewBox="0 0 24 24"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 6v-3.9a3.4 3.4 0 0 0-.9-2.7c3-.3 6.2-1.5 6.2-6.7a5.2 5.2 0 0 0-1.4-3.6 4.8 4.8 0 0 0-.1-3.6s-1.2-.4-3.8 1.4a13.2 13.2 0 0 0-7 0C5.4 1.1 4.2 1.5 4.2 1.5a4.8 4.8 0 0 0-.1 3.6 5.2 5.2 0 0 0-1.4 3.6c0 5.2 3.2 6.4 6.2 6.7A3.4 3.4 0 0 0 8 18v4"/></symbol>
-    <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
-    <symbol id="i-lyrics" viewBox="0 0 24 24"><path d="M8 18V5l12-2v13"/><circle cx="5" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></symbol>
-    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h2m10 0h2a1 1 0 0 1 1 1v2M4 17v2a1 1 0 0 0 1 1h2m10 0h2a1 1 0 0 0 1-1v-2M7 12h10"/></symbol>
-    <symbol id="i-library" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/><path d="M8 7h8m-8 4h8"/></symbol>
-    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M2 14h4m4-6h4m4 8h4"/></symbol>
-    <symbol id="i-widget" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/></symbol>
-    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
-    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-7-7 7 7-7 7"/></symbol>
-    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
-    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 12 7-12 7z" fill="currentColor" stroke="none"/></symbol>
-    <symbol id="i-android" viewBox="0 0 24 24"><path d="M7 8 5 4m12 4 2-4M4 10h16v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM8 20v2m8-2v2M2 11v6m20-6v6M9 12h.01M15 12h.01"/></symbol>
-  </svg>
-
   <header class="topbar">
     <div class="wrap nav">
       <a class="brand" href="#top" aria-label="Quantune home">
         <img src="https://raw.githubusercontent.com/DS-ann/Quantune/main/assets/quantune-app-icon.webp" alt="">
-        <span>quan<span>tune</span></span>
+        <span>quan<em>tune</em></span>
       </a>
-      <button class="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="navlinks">
-        <svg class="icon"><use href="#i-menu"></use></svg>
-      </button>
-      <nav class="navlinks" id="navlinks" aria-label="Main navigation">
+      <button class="menu-button" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="nav-links">Menu</button>
+      <nav class="nav-links" id="nav-links" aria-label="Main navigation">
         <a href="#features">Features</a>
         <a href="#screenshots">Screenshots</a>
-        <a href="#lyrics">Lyrics</a>
         <a href="#download">Download</a>
         <a href="https://github.com/DS-ann/Quantune" target="_blank" rel="noopener">Source code</a>
-        <a class="nav-cta" href="#download">Get Quantune <svg class="icon" style="width:16px;height:16px;display:inline-block;vertical-align:middle"><use href="#i-arrow"></use></svg></a>
+        <a class="nav-button" href="#download">Get Quantune ↗</a>
       </nav>
     </div>
   </header>
@@ -316,350 +263,340 @@
   <main id="top">
     <section class="hero">
       <div class="wrap hero-grid">
-        <div>
+        <div class="hero-copy-block">
           <div class="eyebrow">An open-source Android music app</div>
-          <h1>Music that moves <span class="gradient-text">with you.</span></h1>
-          <p class="hero-copy">Discover music, follow synchronized lyrics, recognize songs and listen together. Bring your online listening and personal music library into one customizable player.</p>
-          <div class="hero-actions">
-            <a class="btn btn-primary" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-Universal.apk">
-              <svg class="icon"><use href="#i-download"></use></svg> Download for Android
-            </a>
-            <a class="btn btn-secondary" href="https://github.com/DS-ann/Quantune" target="_blank" rel="noopener">
-              <svg class="icon"><use href="#i-github"></use></svg> Explore the project
-            </a>
+          <h1>Your music.<br><span class="gradient">Your rhythm.</span></h1>
+          <p class="hero-copy reveal">Discover music, keep your local collection close, follow synchronized lyrics and listen together. Quantune brings different ways of listening into one customizable Android player.</p>
+          <div class="hero-actions reveal">
+            <a class="button button-primary" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-Universal.apk">↓ &nbsp; Download for Android</a>
+            <a class="button button-secondary" href="#screenshots">Explore the real app ↗</a>
           </div>
-          <div class="hero-meta">
-            <span><svg class="icon"><use href="#i-android"></use></svg> Android 6.0+</span>
-            <span><svg class="icon"><use href="#i-check"></use></svg> Open source · Apache 2.0</span>
-            <span><svg class="icon"><use href="#i-check"></use></svg> ARMv7a + ARM64</span>
+          <div class="hero-meta reveal">
+            <span><b class="meta-check">✓</b> Android 6.0+</span>
+            <span><b class="meta-check">✓</b> ARMv7a + ARM64</span>
+            <span><b class="meta-check">✓</b> Apache 2.0</span>
+          </div>
+          <div class="soundbars reveal" aria-label="Animated equalizer decoration">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
           </div>
         </div>
 
-        <div class="visual-stage real-showcase" aria-label="Real screenshots from Quantune">
-          <div class="real-glow"></div>
-          <div class="real-label"><strong>Real app screens</strong>Captured from Quantune</div>
-          <a class="real-screen main" href="assets/screenshots/Full%20Screen%20Player.png" target="_blank" rel="noopener">
-            <img src="assets/screenshots/Full%20Screen%20Player.png" alt="Quantune full-screen music player" fetchpriority="high">
+        <div class="hero-visual" aria-label="Real Quantune app screenshots">
+          <div class="hero-halo"></div>
+          <div class="orbit"></div>
+          <a class="device-shot explore" href="assets/screenshots/Explore.png" target="_blank" rel="noopener" aria-label="Open Explore screenshot">
+            <img src="assets/screenshots/Explore.png" alt="Quantune Explore screen" fetchpriority="high">
           </a>
-          <a class="real-screen secondary" href="assets/screenshots/Listen%20together.png" target="_blank" rel="noopener">
-            <img src="assets/screenshots/Listen%20together.png" alt="Quantune Listen Together screen" loading="eager">
+          <a class="device-shot lyrics" href="assets/screenshots/Full%20screen%20lyrics.png" target="_blank" rel="noopener" aria-label="Open synchronized lyrics screenshot">
+            <img src="assets/screenshots/Full%20screen%20lyrics.png" alt="Quantune full-screen synchronized lyrics" loading="lazy">
           </a>
-          <div class="real-foot"><b>Discover. Sync. Play.</b><br>One listening space.</div>
+          <a class="device-shot together" href="assets/screenshots/Listen%20together.png" target="_blank" rel="noopener" aria-label="Open Listen Together screenshot">
+            <img src="assets/screenshots/Listen%20together.png" alt="Quantune Listen Together screen" loading="lazy">
+          </a>
+          <div class="visual-label"><strong><span class="live-dot"></span>Real app screenshots</strong>Explore is the first look.</div>
         </div>
       </div>
     </section>
+
+    <div class="marquee" aria-label="Quantune features">
+      <div class="marquee-track" aria-hidden="true">
+        <span>Music discovery <b>✳</b> Synchronized lyrics <b>✳</b> Listen Together <b>✳</b> Song recognition <b>✳</b> Local library <b>✳</b> Player customization <b>✳</b></span>
+        <span>Music discovery <b>✳</b> Synchronized lyrics <b>✳</b> Listen Together <b>✳</b> Song recognition <b>✳</b> Local library <b>✳</b> Player customization <b>✳</b></span>
+      </div>
+    </div>
 
     <section class="section" id="features">
       <div class="wrap">
-        <div class="section-head">
-          <div class="section-kicker">More than playback</div>
-          <h2>Your music, connected.</h2>
-          <p>Tools for the way you listen: alone, with friends, with lyrics on screen, or with your own library close at hand.</p>
+        <div class="section-head center reveal">
+          <div class="section-kicker">One app · more ways to listen</div>
+          <h2>Made around the music.</h2>
+          <p>Move between discovery, your own collection, synchronized lyrics and shared sessions without leaving your listening flow.</p>
         </div>
         <div class="feature-grid">
-          <article class="feature">
-            <div class="feature-icon"><svg class="icon"><use href="#i-users"></use></svg></div>
-            <h3>Listen Together</h3>
-            <p>Create online or same-Wi-Fi rooms, approve guests, share playback and chat while listening. The host leads track changes; guests can control play and pause.</p>
-          </article>
-          <article class="feature">
-            <div class="feature-icon"><svg class="icon"><use href="#i-lyrics"></use></svg></div>
-            <h3>Lyrics that follow</h3>
-            <p>Follow line-synchronized lyrics or word-timed karaoke, adjust timing and use translation controls from the listening experience.</p>
-          </article>
-          <article class="feature">
-            <div class="feature-icon"><svg class="icon"><use href="#i-scan"></use></svg></div>
-            <h3>Recognize a song</h3>
-            <p>Identify nearby music with audio-fingerprint matching, then try opening the match in Quantune playback when a playable result is available.</p>
-          </article>
-          <article class="feature">
-            <div class="feature-icon"><svg class="icon"><use href="#i-library"></use></svg></div>
-            <h3>Your personal library</h3>
-            <p>Keep local tracks, playlists, favourites and listening history alongside supported online music and cached tracks.</p>
-          </article>
-          <article class="feature">
-            <div class="feature-icon"><svg class="icon"><use href="#i-sliders"></use></svg></div>
-            <h3>Make the player yours</h3>
-            <p>Customize themes, typography, artwork, playback controls, gestures, visualizer styles and lyrics presentation.</p>
-          </article>
-          <article class="feature">
-            <div class="feature-icon"><svg class="icon"><use href="#i-widget"></use></svg></div>
-            <h3>Music at a glance</h3>
-            <p>Use resizable home-screen widgets to see track details and reach playback controls without opening the app.</p>
-          </article>
+          <article class="feature-card reveal"><div class="feature-icon">⇄</div><h3>Listen Together</h3><p>Create or join online or same-Wi-Fi rooms, manage join requests, synchronize shared playback and chat with participants.</p></article>
+          <article class="feature-card reveal"><div class="feature-icon">♫</div><h3>Lyrics that follow</h3><p>Read line-synchronized lyrics or word-timed karaoke, with timing and presentation controls.</p></article>
+          <article class="feature-card reveal"><div class="feature-icon">◎</div><h3>Recognize a song</h3><p>Use audio-fingerprint matching to identify nearby music and try to open a playable match.</p></article>
+          <article class="feature-card reveal"><div class="feature-icon">⌕</div><h3>Discover and search</h3><p>Explore the online catalogue, search for tracks and artists, and browse music by genre.</p></article>
+          <article class="feature-card reveal"><div class="feature-icon">▤</div><h3>Your personal library</h3><p>Keep local tracks, playlists, favourites and listening history alongside supported cached music.</p></article>
+          <article class="feature-card reveal"><div class="feature-icon">✳</div><h3>Make it yours</h3><p>Adjust player layouts, artwork, typography, colours, gestures, controls and visualizer presentation.</p></article>
+          <article class="feature-card reveal"><div class="feature-icon">文</div><h3>Optional translation</h3><p>Configure a lyrics translation provider, model and target language. Some providers require their own API key.</p></article>
+          <article class="feature-card reveal"><div class="feature-icon">▦</div><h3>Home-screen widgets</h3><p>Use resizable playback widgets to see track details and reach controls from your home screen.</p></article>
+          <article class="feature-card reveal"><div class="feature-icon">♫</div><h3>Offline options</h3><p>Cache supported tracks for later listening and manage your saved music from the library.</p></article>
         </div>
       </div>
     </section>
 
-    
-    <section class="section screenshot-gallery" id="screenshots">
+    <section class="section gallery-section" id="screenshots">
       <div class="wrap">
-        <div class="section-head">
-          <div class="section-kicker">Captured in the app</div>
-          <h2>See Quantune in action.</h2>
-          <p>Browse the actual app screens. Choose a category to focus the gallery, or open any image to inspect it at full size.</p>
+        <div class="section-head center reveal">
+          <div class="section-kicker">The real interface</div>
+          <h2>Take a closer look.</h2>
+          <p>Every image below is an actual Quantune screen. All screenshots load in the gallery by default; filters are optional.</p>
         </div>
-        <div class="gallery-toolbar" role="group" aria-label="Filter screenshots">
-          <button class="filter-btn" type="button" data-filter="all" aria-pressed="true">All screens</button>
-          <button class="filter-btn" type="button" data-filter="discovery" aria-pressed="false">Discovery</button>
-          <button class="filter-btn" type="button" data-filter="player" aria-pressed="false">Player</button>
-          <button class="filter-btn" type="button" data-filter="lyrics" aria-pressed="false">Lyrics</button>
-          <button class="filter-btn" type="button" data-filter="sharing" aria-pressed="false">Listen Together</button>
-          <button class="filter-btn" type="button" data-filter="recognition" aria-pressed="false">Recognition</button>
-          <button class="filter-btn" type="button" data-filter="visualizer" aria-pressed="false">Visualizers</button>
-          <button class="filter-btn" type="button" data-filter="settings" aria-pressed="false">Settings</button>
-          <button class="filter-btn" type="button" data-filter="library" aria-pressed="false">Library</button>
+        <div class="gallery-filter reveal" role="group" aria-label="Filter screenshots">
+          <button class="filter-chip" type="button" data-filter="all" aria-pressed="true">All 19</button>
+          <button class="filter-chip" type="button" data-filter="discover" aria-pressed="false">Explore & search</button>
+          <button class="filter-chip" type="button" data-filter="player" aria-pressed="false">Player</button>
+          <button class="filter-chip" type="button" data-filter="lyrics" aria-pressed="false">Lyrics</button>
+          <button class="filter-chip" type="button" data-filter="together" aria-pressed="false">Listen Together</button>
+          <button class="filter-chip" type="button" data-filter="recognizer" aria-pressed="false">Recognition</button>
+          <button class="filter-chip" type="button" data-filter="visualizer" aria-pressed="false">Visualizers</button>
+          <button class="filter-chip" type="button" data-filter="settings" aria-pressed="false">Settings</button>
+          <button class="filter-chip" type="button" data-filter="library" aria-pressed="false">Library</button>
         </div>
         <div class="gallery-grid">
-          <article class="shot-card" data-category="discovery">
-            <a class="shot-image" href="assets/screenshots/Explore.png" target="_blank" rel="noopener" aria-label="Open Explore screenshot at full size">
-              <img src="assets/screenshots/Explore.png" alt="Quantune Explore screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Explore</strong><p>Browse the music discovery view.</p></div><span class="shot-tag">discovery</span></div>
-          </article>
-          <article class="shot-card" data-category="discovery">
-            <a class="shot-image" href="assets/screenshots/Search.png" target="_blank" rel="noopener" aria-label="Open Search screenshot at full size">
-              <img src="assets/screenshots/Search.png" alt="Quantune Search screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Search</strong><p>Find music with the search screen.</p></div><span class="shot-tag">discovery</span></div>
-          </article>
-          <article class="shot-card" data-category="discovery">
-            <a class="shot-image" href="assets/screenshots/Search%20results.png" target="_blank" rel="noopener" aria-label="Open Search results screenshot at full size">
-              <img src="assets/screenshots/Search%20results.png" alt="Quantune Search results screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Search results</strong><p>Browse matching tracks and results.</p></div><span class="shot-tag">discovery</span></div>
-          </article>
-          <article class="shot-card" data-category="discovery">
-            <a class="shot-image" href="assets/screenshots/Genre.png" target="_blank" rel="noopener" aria-label="Open Genres screenshot at full size">
-              <img src="assets/screenshots/Genre.png" alt="Quantune Genres screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Genres</strong><p>Explore music by genre.</p></div><span class="shot-tag">discovery</span></div>
-          </article>
-          <article class="shot-card" data-category="library">
-            <a class="shot-image" href="assets/screenshots/Library.png" target="_blank" rel="noopener" aria-label="Open Library screenshot at full size">
-              <img src="assets/screenshots/Library.png" alt="Quantune Library screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Library</strong><p>Keep playlists and listening history together.</p></div><span class="shot-tag">library</span></div>
-          </article>
-          <article class="shot-card" data-category="library">
-            <a class="shot-image" href="assets/screenshots/Local%20music.png" target="_blank" rel="noopener" aria-label="Open Local music screenshot at full size">
-              <img src="assets/screenshots/Local%20music.png" alt="Quantune Local music screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Local music</strong><p>Browse music stored on the device.</p></div><span class="shot-tag">library</span></div>
-          </article>
-          <article class="shot-card" data-category="player">
-            <a class="shot-image" href="assets/screenshots/Full%20Screen%20Player.png" target="_blank" rel="noopener" aria-label="Open Full-screen player screenshot at full size">
-              <img src="assets/screenshots/Full%20Screen%20Player.png" alt="Quantune Full-screen player screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Full-screen player</strong><p>The main playback experience.</p></div><span class="shot-tag">player</span></div>
-          </article>
-          <article class="shot-card" data-category="lyrics">
-            <a class="shot-image" href="assets/screenshots/Full%20screen%20lyrics.png" target="_blank" rel="noopener" aria-label="Open Full-screen lyrics screenshot at full size">
-              <img src="assets/screenshots/Full%20screen%20lyrics.png" alt="Quantune Full-screen lyrics screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Full-screen lyrics</strong><p>Follow lyrics while listening.</p></div><span class="shot-tag">lyrics</span></div>
-          </article>
-          <article class="shot-card wide" data-category="player">
-            <a class="shot-image" href="assets/screenshots/Full%20screen%20player%20landscape.png" target="_blank" rel="noopener" aria-label="Open Landscape player screenshot at full size">
-              <img src="assets/screenshots/Full%20screen%20player%20landscape.png" alt="Quantune Landscape player screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Landscape player</strong><p>A wide player layout for landscape screens.</p></div><span class="shot-tag">player</span></div>
-          </article>
-          <article class="shot-card" data-category="sharing">
-            <a class="shot-image" href="assets/screenshots/Listen%20together.png" target="_blank" rel="noopener" aria-label="Open Listen Together screenshot at full size">
-              <img src="assets/screenshots/Listen%20together.png" alt="Quantune Listen Together screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Listen Together</strong><p>Create or join a shared listening room.</p></div><span class="shot-tag">sharing</span></div>
-          </article>
-          <article class="shot-card" data-category="recognition">
-            <a class="shot-image" href="assets/screenshots/Song%20recognizer.png" target="_blank" rel="noopener" aria-label="Open Song recognizer screenshot at full size">
-              <img src="assets/screenshots/Song%20recognizer.png" alt="Quantune Song recognizer screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Song recognizer</strong><p>Identify nearby music with song recognition.</p></div><span class="shot-tag">recognition</span></div>
-          </article>
-          <article class="shot-card" data-category="visualizer">
-            <a class="shot-image" href="assets/screenshots/Visualizer%20bar.png" target="_blank" rel="noopener" aria-label="Open Bar visualizer screenshot at full size">
-              <img src="assets/screenshots/Visualizer%20bar.png" alt="Quantune Bar visualizer screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Bar visualizer</strong><p>One of Quantune's visualizer styles.</p></div><span class="shot-tag">visualizer</span></div>
-          </article>
-          <article class="shot-card" data-category="visualizer">
-            <a class="shot-image" href="assets/screenshots/Visualizer%20Spectrum.png" target="_blank" rel="noopener" aria-label="Open Spectrum visualizer screenshot at full size">
-              <img src="assets/screenshots/Visualizer%20Spectrum.png" alt="Quantune Spectrum visualizer screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Spectrum visualizer</strong><p>A spectrum-style visualizer.</p></div><span class="shot-tag">visualizer</span></div>
-          </article>
-          <article class="shot-card" data-category="visualizer">
-            <a class="shot-image" href="assets/screenshots/Visualizer%20ring.png" target="_blank" rel="noopener" aria-label="Open Ring visualizer screenshot at full size">
-              <img src="assets/screenshots/Visualizer%20ring.png" alt="Quantune Ring visualizer screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Ring visualizer</strong><p>A circular visualizer style.</p></div><span class="shot-tag">visualizer</span></div>
-          </article>
-          <article class="shot-card" data-category="settings">
-            <a class="shot-image" href="assets/screenshots/Customize%20settings.png" target="_blank" rel="noopener" aria-label="Open Player customization screenshot at full size">
-              <img src="assets/screenshots/Customize%20settings.png" alt="Quantune Player customization screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Player customization</strong><p>Adjust the player presentation.</p></div><span class="shot-tag">settings</span></div>
-          </article>
-          <article class="shot-card" data-category="settings">
-            <a class="shot-image" href="assets/screenshots/Playback%20Settings.png" target="_blank" rel="noopener" aria-label="Open Playback settings screenshot at full size">
-              <img src="assets/screenshots/Playback%20Settings.png" alt="Quantune Playback settings screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Playback settings</strong><p>Configure playback preferences.</p></div><span class="shot-tag">settings</span></div>
-          </article>
-          <article class="shot-card" data-category="settings">
-            <a class="shot-image" href="assets/screenshots/Settings%201.png" target="_blank" rel="noopener" aria-label="Open Settings · 1 screenshot at full size">
-              <img src="assets/screenshots/Settings%201.png" alt="Quantune Settings · 1 screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Settings · 1</strong><p>Explore the app settings.</p></div><span class="shot-tag">settings</span></div>
-          </article>
-          <article class="shot-card" data-category="settings">
-            <a class="shot-image" href="assets/screenshots/Settings%202.png" target="_blank" rel="noopener" aria-label="Open Settings · 2 screenshot at full size">
-              <img src="assets/screenshots/Settings%202.png" alt="Quantune Settings · 2 screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Settings · 2</strong><p>More app settings.</p></div><span class="shot-tag">settings</span></div>
-          </article>
-          <article class="shot-card" data-category="settings">
-            <a class="shot-image" href="assets/screenshots/Account%20settings.png" target="_blank" rel="noopener" aria-label="Open Account settings screenshot at full size">
-              <img src="assets/screenshots/Account%20settings.png" alt="Quantune Account settings screenshot" loading="lazy" decoding="async">
-              <span class="zoom-hint">View full size ↗</span>
-            </a>
-            <div class="shot-caption"><div><strong>Account settings</strong><p>Account-related settings.</p></div><span class="shot-tag">settings</span></div>
-          </article>
+        <article class="gallery-card reveal gallery-card--featured" data-category="discover" style="--card-index:0">
+          <a class="gallery-image" href="assets/screenshots/Explore.png" target="_blank" rel="noopener" aria-label="Open Explore screenshot in full size">
+            <img src="assets/screenshots/Explore.png" alt="Quantune Explore screenshot" fetchpriority="high" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Explore</strong><span>The Explore screen — your starting point for discovering music.</span></div>
+            <span class="gallery-number">01</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="discover" style="--card-index:1">
+          <a class="gallery-image" href="assets/screenshots/Search.png" target="_blank" rel="noopener" aria-label="Open Search screenshot in full size">
+            <img src="assets/screenshots/Search.png" alt="Quantune Search screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Search</strong><span>Search for tracks and artists.</span></div>
+            <span class="gallery-number">02</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="discover" style="--card-index:2">
+          <a class="gallery-image" href="assets/screenshots/Search%20results.png" target="_blank" rel="noopener" aria-label="Open Search results screenshot in full size">
+            <img src="assets/screenshots/Search%20results.png" alt="Quantune Search results screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Search results</strong><span>Browse matching music.</span></div>
+            <span class="gallery-number">03</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="discover" style="--card-index:3">
+          <a class="gallery-image" href="assets/screenshots/Genre.png" target="_blank" rel="noopener" aria-label="Open Genres screenshot in full size">
+            <img src="assets/screenshots/Genre.png" alt="Quantune Genres screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Genres</strong><span>Explore music by genre.</span></div>
+            <span class="gallery-number">04</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="library" style="--card-index:4">
+          <a class="gallery-image" href="assets/screenshots/Library.png" target="_blank" rel="noopener" aria-label="Open Library screenshot in full size">
+            <img src="assets/screenshots/Library.png" alt="Quantune Library screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Library</strong><span>Your personal music library.</span></div>
+            <span class="gallery-number">05</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="library" style="--card-index:5">
+          <a class="gallery-image" href="assets/screenshots/Local%20music.png" target="_blank" rel="noopener" aria-label="Open Local music screenshot in full size">
+            <img src="assets/screenshots/Local%20music.png" alt="Quantune Local music screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Local music</strong><span>Browse audio stored on your device.</span></div>
+            <span class="gallery-number">06</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="player" style="--card-index:6">
+          <a class="gallery-image" href="assets/screenshots/Full%20Screen%20Player.png" target="_blank" rel="noopener" aria-label="Open Full-screen player screenshot in full size">
+            <img src="assets/screenshots/Full%20Screen%20Player.png" alt="Quantune Full-screen player screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Full-screen player</strong><span>The main playback experience.</span></div>
+            <span class="gallery-number">07</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="lyrics" style="--card-index:7">
+          <a class="gallery-image" href="assets/screenshots/Full%20screen%20lyrics.png" target="_blank" rel="noopener" aria-label="Open Full-screen lyrics screenshot in full size">
+            <img src="assets/screenshots/Full%20screen%20lyrics.png" alt="Quantune Full-screen lyrics screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Full-screen lyrics</strong><span>Follow lyrics while listening.</span></div>
+            <span class="gallery-number">08</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal gallery-card--wide" data-category="player" style="--card-index:8">
+          <a class="gallery-image" href="assets/screenshots/Full%20screen%20player%20landscape.png" target="_blank" rel="noopener" aria-label="Open Landscape player screenshot in full size">
+            <img src="assets/screenshots/Full%20screen%20player%20landscape.png" alt="Quantune Landscape player screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Landscape player</strong><span>The player in landscape orientation.</span></div>
+            <span class="gallery-number">09</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="together" style="--card-index:9">
+          <a class="gallery-image" href="assets/screenshots/Listen%20together.png" target="_blank" rel="noopener" aria-label="Open Listen Together screenshot in full size">
+            <img src="assets/screenshots/Listen%20together.png" alt="Quantune Listen Together screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Listen Together</strong><span>Create or join a shared listening room.</span></div>
+            <span class="gallery-number">10</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="recognizer" style="--card-index:10">
+          <a class="gallery-image" href="assets/screenshots/Song%20recognizer.png" target="_blank" rel="noopener" aria-label="Open Song recognizer screenshot in full size">
+            <img src="assets/screenshots/Song%20recognizer.png" alt="Quantune Song recognizer screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Song recognizer</strong><span>Identify music playing around you.</span></div>
+            <span class="gallery-number">11</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="visualizer" style="--card-index:11">
+          <a class="gallery-image" href="assets/screenshots/Visualizer%20bar.png" target="_blank" rel="noopener" aria-label="Open Bar visualizer screenshot in full size">
+            <img src="assets/screenshots/Visualizer%20bar.png" alt="Quantune Bar visualizer screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Bar visualizer</strong><span>A bar-style audio visualizer.</span></div>
+            <span class="gallery-number">12</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="visualizer" style="--card-index:12">
+          <a class="gallery-image" href="assets/screenshots/Visualizer%20Spectrum.png" target="_blank" rel="noopener" aria-label="Open Spectrum visualizer screenshot in full size">
+            <img src="assets/screenshots/Visualizer%20Spectrum.png" alt="Quantune Spectrum visualizer screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Spectrum visualizer</strong><span>A spectrum-style audio visualizer.</span></div>
+            <span class="gallery-number">13</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="visualizer" style="--card-index:13">
+          <a class="gallery-image" href="assets/screenshots/Visualizer%20ring.png" target="_blank" rel="noopener" aria-label="Open Ring visualizer screenshot in full size">
+            <img src="assets/screenshots/Visualizer%20ring.png" alt="Quantune Ring visualizer screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Ring visualizer</strong><span>A circular audio visualizer.</span></div>
+            <span class="gallery-number">14</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="settings" style="--card-index:14">
+          <a class="gallery-image" href="assets/screenshots/Customize%20settings.png" target="_blank" rel="noopener" aria-label="Open Player customization screenshot in full size">
+            <img src="assets/screenshots/Customize%20settings.png" alt="Quantune Player customization screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Player customization</strong><span>Personalize the player appearance.</span></div>
+            <span class="gallery-number">15</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="settings" style="--card-index:15">
+          <a class="gallery-image" href="assets/screenshots/Playback%20Settings.png" target="_blank" rel="noopener" aria-label="Open Playback settings screenshot in full size">
+            <img src="assets/screenshots/Playback%20Settings.png" alt="Quantune Playback settings screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Playback settings</strong><span>Configure playback behaviour.</span></div>
+            <span class="gallery-number">16</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="settings" style="--card-index:16">
+          <a class="gallery-image" href="assets/screenshots/Settings%201.png" target="_blank" rel="noopener" aria-label="Open Settings · 1 screenshot in full size">
+            <img src="assets/screenshots/Settings%201.png" alt="Quantune Settings · 1 screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Settings · 1</strong><span>App settings.</span></div>
+            <span class="gallery-number">17</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="settings" style="--card-index:17">
+          <a class="gallery-image" href="assets/screenshots/Settings%202.png" target="_blank" rel="noopener" aria-label="Open Settings · 2 screenshot in full size">
+            <img src="assets/screenshots/Settings%202.png" alt="Quantune Settings · 2 screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Settings · 2</strong><span>More app settings.</span></div>
+            <span class="gallery-number">18</span>
+          </div>
+        </article>
+        <article class="gallery-card reveal" data-category="settings" style="--card-index:18">
+          <a class="gallery-image" href="assets/screenshots/Account%20settings.png" target="_blank" rel="noopener" aria-label="Open Account settings screenshot in full size">
+            <img src="assets/screenshots/Account%20settings.png" alt="Quantune Account settings screenshot" loading="lazy" decoding="async">
+            <span class="image-open">Open full size <span aria-hidden="true">↗</span></span>
+          </a>
+          <div class="gallery-caption">
+            <div><strong>Account settings</strong><span>Account-related preferences.</span></div>
+            <span class="gallery-number">19</span>
+          </div>
+        </article>
         </div>
       </div>
     </section>
 
-<section class="section" id="lyrics">
+    <section class="section">
       <div class="wrap">
-        <div class="split-band">
+        <div class="story-band reveal">
           <div>
-            <div class="section-kicker">Stay with the song</div>
-            <h2>Hear it. Read it. Feel the timing.</h2>
-            <p>Quantune supports plain lyrics, line-synchronized lyrics and word-timed karaoke formats. You can adjust synchronization and configure translation options from the app.</p>
-            <ul class="check-list">
-              <li><svg class="icon"><use href="#i-check"></use></svg><span>Timed lyrics support including LRC, TTML, QRC and YRC.</span></li>
-              <li><svg class="icon"><use href="#i-check"></use></svg><span>Multiple lyrics-provider integrations, subject to availability.</span></li>
-              <li><svg class="icon"><use href="#i-check"></use></svg><span>Optional translation through a provider and model you configure.</span></li>
-            </ul>
+            <div class="section-kicker">Listen together, with clarity</div>
+            <h2>Share the session.<br>Keep your own audio.</h2>
+            <p>Listen Together coordinates track information and playback state. It does not relay the host's audio to other devices; each participant resolves and plays the shared track on their own device.</p>
           </div>
-          <div class="lyrics-demo" aria-label="Illustrative synchronized lyrics visual">
-            <div class="demo-label">A little closer to the music</div>
-            <div class="line">Let the melody take you</div>
-            <div class="line active">One line at a time.</div>
-            <div class="line">Keep your place in the song</div>
-            <div class="progress"></div>
+          <div class="story-list">
+            <div class="story-item"><span class="story-check">✓</span><span><b>Internet rooms</b><br>Join a shared session using a room code.</span></div>
+            <div class="story-item"><span class="story-check">✓</span><span><b>Nearby rooms</b><br>Connect over the same Wi-Fi network or hotspot.</span></div>
+            <div class="story-item"><span class="story-check">✓</span><span><b>Room chat</b><br>Exchange messages during supported sessions.</span></div>
+            <div class="story-item"><span class="story-check">✓</span><span><b>Playback coordination</b><br>Follow shared track and playback updates.</span></div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="section download" id="download">
+    <section class="download-section" id="download">
       <div class="wrap">
-        <div class="download-panel">
+        <div class="download-panel reveal">
           <div class="download-head">
-            <div>
-              <div class="section-kicker">Get started</div>
-              <h2>Bring Quantune along.</h2>
-              <p>Download the latest published Android release. Choose the Universal ARM build if you are unsure which architecture your device uses.</p>
-            </div>
-            <div class="version-pill">Latest published release</div>
+            <div><div class="section-kicker">Get started</div><h2>Bring Quantune along.</h2><p>Download the latest published Android release. Choose Universal ARM if you are unsure which supported architecture your device uses.</p></div>
+            <div class="release-note">Latest published release</div>
           </div>
           <div class="apk-grid">
-            <article class="apk-card recommended">
-              <div class="apk-badge">Recommended</div>
-              <h3>Universal ARM</h3>
-              <p>Includes both supported ARM architectures. The simplest choice for most Android phones and tablets.</p>
-              <a class="btn btn-primary" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-Universal.apk"><svg class="icon"><use href="#i-download"></use></svg> Download APK</a>
-              <a class="checksum" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-Universal.apk.sha256">SHA-256 checksum</a>
-            </article>
-            <article class="apk-card">
-              <div class="apk-badge">32-bit ARM</div>
-              <h3>ARMv7a</h3>
-              <p>For 32-bit ARM Android devices using the <code>armeabi-v7a</code> architecture.</p>
-              <a class="btn btn-secondary" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-armeabi-v7a.apk"><svg class="icon"><use href="#i-download"></use></svg> Download APK</a>
-              <a class="checksum" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-armeabi-v7a.apk.sha256">SHA-256 checksum</a>
-            </article>
-            <article class="apk-card">
-              <div class="apk-badge">64-bit ARM</div>
-              <h3>ARM64</h3>
-              <p>For 64-bit ARM Android devices using the <code>arm64-v8a</code> architecture.</p>
-              <a class="btn btn-secondary" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-arm64-v8a.apk"><svg class="icon"><use href="#i-download"></use></svg> Download APK</a>
-              <a class="checksum" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-arm64-v8a.apk.sha256">SHA-256 checksum</a>
-            </article>
+            <article class="apk-card recommended"><div class="apk-kicker">Recommended · Universal</div><h3>Universal ARM</h3><p>Includes both supported ARM architectures. The simplest choice for most ARM Android phones and tablets.</p><a class="button button-primary" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-Universal.apk">↓ &nbsp; Download APK</a><a class="checksum" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-Universal.apk.sha256">SHA-256 checksum</a></article>
+            <article class="apk-card"><div class="apk-kicker">32-bit ARM</div><h3>ARMv7a</h3><p>For 32-bit ARM Android devices using the <code>armeabi-v7a</code> architecture.</p><a class="button button-secondary" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-armeabi-v7a.apk">↓ &nbsp; Download APK</a><a class="checksum" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-armeabi-v7a.apk.sha256">SHA-256 checksum</a></article>
+            <article class="apk-card"><div class="apk-kicker">64-bit ARM</div><h3>ARM64</h3><p>For 64-bit ARM Android devices using the <code>arm64-v8a</code> architecture.</p><a class="button button-secondary" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-arm64-v8a.apk">↓ &nbsp; Download APK</a><a class="checksum" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-arm64-v8a.apk.sha256">SHA-256 checksum</a></article>
           </div>
-          <p class="download-note">Minimum Android version: 6.0 (Marshmallow). These packages support ARM devices, not x86 or x86_64. Install only one variant; all variants use the same package ID and release signing key.</p>
-          <div class="trust-grid">
-            <div class="trust-item"><b>Open source</b><span>Read the code and license on GitHub.</span></div>
-            <div class="trust-item"><b>Checksums included</b><span>Verify the APK against its published SHA-256 file.</span></div>
-            <div class="trust-item"><b>One app identity</b><span>All three APK variants update the same Quantune installation.</span></div>
-          </div>
+          <p class="download-note">Minimum Android version: 6.0 (Marshmallow). These packages support ARM devices; x86 and x86_64 packages are not currently provided. Install only one variant at a time. All variants use the same application ID and release signing key.</p>
         </div>
       </div>
     </section>
 
     <section class="section" id="about">
       <div class="wrap">
-        <div class="section-head">
-          <div class="section-kicker">Good to know</div>
-          <h2>Clear answers before you install.</h2>
-        </div>
+        <div class="section-head center reveal"><div class="section-kicker">Before you install</div><h2>Good to know.</h2></div>
         <div class="faq-grid">
-          <details>
-            <summary>Which Android versions are supported?</summary>
-            <p>Quantune's minimum supported version is Android 6.0 (API 23). The published APKs are built for ARMv7a and ARM64 devices. x86 and x86_64 packages are not provided.</p>
-          </details>
-          <details>
-            <summary>Does Listen Together stream the host's audio?</summary>
-            <p>No. Listen Together synchronizes track information and playback state; it does not relay the host's audio. Each participant resolves and plays the shared track on their own device.</p>
-          </details>
-          <details>
-            <summary>Does Song Recognizer upload my microphone recording?</summary>
-            <p>The feature creates a compact audio fingerprint on the device and sends that fingerprint for matching. The raw microphone recording is not uploaded by this feature. Microphone permission is needed when recognition is used.</p>
-          </details>
-          <details>
-            <summary>Do lyrics translation and online music need other services?</summary>
-            <p>Yes. Online music, lyrics and recognition depend on third-party services and their availability. AI lyrics translation uses the provider you configure; some providers require their own API key or paid account.</p>
-          </details>
-          <details>
-            <summary>Can I use my local music?</summary>
-            <p>Yes. Quantune can browse and play supported local audio files and organize playlists, favourites and listening history. Offline caching depends on the track, provider and successful cache or download operation.</p>
-          </details>
-          <details>
-            <summary>Where can I report a problem?</summary>
-            <p>Open a GitHub issue and include your device model, Android version, Quantune release, APK architecture and steps to reproduce the problem. Remove private information from logs before sharing.</p>
-          </details>
+          <details class="faq reveal"><summary>Which Android versions are supported?</summary><p>Quantune's minimum supported version is Android 6.0 (API 23). Published APKs support ARMv7a and ARM64 devices.</p></details>
+          <details class="faq reveal"><summary>Does Listen Together stream the host's audio?</summary><p>No. It synchronizes track information and playback state. Each participant resolves and plays the track on their own device.</p></details>
+          <details class="faq reveal"><summary>Does Song Recognition upload my recording?</summary><p>The recognition flow creates a compact audio fingerprint on the device and sends that fingerprint for matching. The raw microphone recording is not uploaded by this feature.</p></details>
+          <details class="faq reveal"><summary>Can I play local music?</summary><p>Yes. Quantune can browse and play supported local audio files and organize playlists, favourites and listening history.</p></details>
+          <details class="faq reveal"><summary>Do online music and lyrics depend on other services?</summary><p>Yes. Online music, lyrics, recognition and translation depend on third-party services and their availability. Some translation providers require their own API key or paid account.</p></details>
+          <details class="faq reveal"><summary>Where can I report a problem?</summary><p>Open a GitHub issue with your device model, Android version, Quantune release, APK architecture and steps to reproduce. Remove private information from logs before sharing.</p></details>
         </div>
       </div>
     </section>
 
     <section class="final-cta">
       <div class="wrap">
-        <div class="final-box">
+        <div class="final-panel reveal">
           <div class="section-kicker">Discover. Sync. Play.</div>
-          <h2>A different kind of listening flow.</h2>
-          <p>Try Quantune, explore the source code, or help improve the project by reporting what works and what does not on your device.</p>
+          <h2>Make room for more music.</h2>
+          <p>Try Quantune, explore the source code or help improve compatibility by sharing clear feedback from your Android device.</p>
           <div class="hero-actions">
-            <a class="btn btn-primary" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-Universal.apk"><svg class="icon"><use href="#i-download"></use></svg> Get Quantune</a>
-            <a class="btn btn-secondary" href="https://github.com/DS-ann/Quantune/issues" target="_blank" rel="noopener">Help test the app <svg class="icon"><use href="#i-arrow"></use></svg></a>
+            <a class="button button-primary" href="https://github.com/DS-ann/Quantune/releases/latest/download/Quantune-Universal.apk">↓ &nbsp; Get Quantune</a>
+            <a class="button button-secondary" href="https://github.com/DS-ann/Quantune/issues" target="_blank" rel="noopener">Help test the app ↗</a>
           </div>
         </div>
       </div>
@@ -668,22 +605,18 @@
 
   <footer>
     <div class="wrap">
-      <div class="footer-inner">
-        <a class="brand" href="#top"><img src="https://raw.githubusercontent.com/DS-ann/Quantune/main/assets/quantune-app-icon.webp" alt=""><span>quan<span>tune</span></span></a>
-        <div class="footer-links">
-          <a href="https://github.com/DS-ann/Quantune" target="_blank" rel="noopener">GitHub</a>
-          <a href="https://github.com/DS-ann/Quantune/releases" target="_blank" rel="noopener">Releases</a>
-          <a href="https://github.com/DS-ann/Quantune/issues" target="_blank" rel="noopener">Issues</a>
-          <a href="https://github.com/DS-ann/Quantune/blob/main/LICENSE" target="_blank" rel="noopener">Apache 2.0</a>
-        </div>
+      <div class="footer-top">
+        <a class="brand" href="#top"><img src="https://raw.githubusercontent.com/DS-ann/Quantune/main/assets/quantune-app-icon.webp" alt=""><span>quan<em>tune</em></span></a>
+        <div class="footer-links"><a href="https://github.com/DS-ann/Quantune" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/DS-ann/Quantune/releases" target="_blank" rel="noopener">Releases</a><a href="https://github.com/DS-ann/Quantune/issues" target="_blank" rel="noopener">Issues</a><a href="https://github.com/DS-ann/Quantune/blob/main/LICENSE" target="_blank" rel="noopener">Apache 2.0</a></div>
       </div>
-      <p class="fine-print">Quantune is an independent open-source project and is not affiliated with or endorsed by Google, YouTube or YouTube Music. Online catalogue access, lyrics, recognition and translation depend on third-party services and may change. Please use those services in accordance with their terms and applicable rights.</p>
+      <p class="fine-print">Quantune is an independent open-source project and is not affiliated with or endorsed by Google, YouTube or YouTube Music. Online catalogue access, lyrics, recognition and translation depend on third-party services and may change. Use those services in accordance with their terms and applicable rights.</p>
       <p class="fine-print">© <span id="year">2026</span> Quantune contributors. Built for music lovers.</p>
     </div>
   </footer>
+
   <script>
-    const menuButton = document.querySelector(".menu-toggle");
-    const nav = document.querySelector("#navlinks");
+    const menuButton = document.querySelector(".menu-button");
+    const nav = document.querySelector("#nav-links");
     menuButton.addEventListener("click", () => {
       const expanded = menuButton.getAttribute("aria-expanded") === "true";
       menuButton.setAttribute("aria-expanded", String(!expanded));
@@ -692,17 +625,29 @@
     });
     nav.querySelectorAll("a").forEach(link => link.addEventListener("click", () => {
       nav.classList.remove("open");
-      menuButton.setAttribute("aria-expanded", "false");
-      menuButton.setAttribute("aria-label", "Open navigation");
+      menuButton.setAttribute("aria-expanded","false");
+      menuButton.setAttribute("aria-label","Open navigation");
     }));
 
-    const filterButtons = document.querySelectorAll(".filter-btn");
-    const screenshotCards = document.querySelectorAll(".shot-card");
-    filterButtons.forEach(button => button.addEventListener("click", () => {
-      const filter = button.dataset.filter;
-      filterButtons.forEach(item => item.setAttribute("aria-pressed", String(item === button)));
-      screenshotCards.forEach(card => { card.hidden = filter !== "all" && card.dataset.category !== filter; });
+    const filters = document.querySelectorAll(".filter-chip");
+    const screenshotCards = document.querySelectorAll(".gallery-card");
+    filters.forEach(button => button.addEventListener("click", () => {
+      const category = button.dataset.filter;
+      filters.forEach(item => item.setAttribute("aria-pressed",String(item === button)));
+      screenshotCards.forEach(card => { card.hidden = category !== "all" && card.dataset.category !== category; });
     }));
+
+    const revealItems = document.querySelectorAll(".reveal");
+    if ("IntersectionObserver" in window && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const observer = new IntersectionObserver((entries,instance) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) { entry.target.classList.add("visible"); instance.unobserve(entry.target); }
+        });
+      },{threshold:.12,rootMargin:"0px 0px -35px 0px"});
+      revealItems.forEach(item => observer.observe(item));
+    } else {
+      revealItems.forEach(item => item.classList.add("visible"));
+    }
 
     document.querySelector("#year").textContent = new Date().getFullYear();
   </script>
