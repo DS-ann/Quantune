@@ -2447,14 +2447,16 @@ private fun MiniPlayerContentInternal(
 
         Spacer(modifier = Modifier.width(if (compactLandscape) 1.2.dp else 2.dp))
 
-        // Song Info
-        Column(modifier = Modifier.weight(1f)) {
+        // The weighted text slot must end before the transport controls. Fill the
+        // allocated width so long titles are ellipsized instead of drawing beneath actions.
+        Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
             Text(
                 text = currentSong.title,
                 style = DsmusicTheme.typography.bodyMedium.copy(
                     fontWeight = FontWeight.Bold,
                     color = contentColor
                 ),
+                modifier = Modifier.fillMaxWidth(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -2464,15 +2466,16 @@ private fun MiniPlayerContentInternal(
                 style = DsmusicTheme.typography.bodySmall.copy(
                     color = contentSecondary
                 ),
+                modifier = Modifier.fillMaxWidth(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
 
-        // Keep a visible gap so adjacent rounded backgrounds never merge into one shape.
-        // Shift the complete transport-control group left without moving song information.
+        // Keep a small separation between the ellipsized text and fixed-width controls.
+        Spacer(modifier = Modifier.width(6.dp))
         Row(
-            modifier = Modifier.offset(x = (-5).dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

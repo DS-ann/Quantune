@@ -1351,7 +1351,10 @@ fun FullPlayer(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 48.dp),
+                        .padding(
+                            start = if (titleIsLeftAligned) 0.dp else 48.dp,
+                            end = 48.dp
+                        ),
                     horizontalAlignment = if (titleIsLeftAligned) Alignment.Start else Alignment.CenterHorizontally
                 ) {
                     val titleSize = when (playerTitleSize) {
