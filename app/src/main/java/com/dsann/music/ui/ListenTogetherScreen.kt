@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -1153,6 +1154,9 @@ private fun ListenTogetherChatMessageRow(
     isMine: Boolean
 ) {
     val colors = DsmusicTheme.colorScheme
+    val timestamp = remember(message.timestampMs) {
+        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.timestampMs))
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
@@ -1171,28 +1175,34 @@ private fun ListenTogetherChatMessageRow(
                 .background(
                     if (isMine) colors.primaryContainer else colors.surfaceContainerHigh
                 )
-                .padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(horizontal = 13.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            if (!isMine) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
                 Text(
-                    message.senderName,
+                    if (isMine) "You" else message.senderName,
                     style = DsmusicTheme.typography.labelSmall,
-                    color = colors.primary,
-                    fontWeight = FontWeight.Bold
+                    color = if (isMine) colors.onPrimaryContainer.copy(alpha = 0.82f) else colors.primary,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    timestamp,
+                    style = DsmusicTheme.typography.labelSmall,
+                    color = if (isMine) colors.onPrimaryContainer.copy(alpha = 0.68f)
+                        else colors.onSurfaceVariant,
+                    maxLines = 1
                 )
             }
             Text(
                 message.text,
                 style = DsmusicTheme.typography.bodyMedium,
-                color = if (isMine) colors.onPrimaryContainer else colors.onSurface
-            )
-            Text(
-                SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.timestampMs)),
-                modifier = Modifier.align(Alignment.End),
-                style = DsmusicTheme.typography.labelSmall,
-                color = if (isMine) colors.onPrimaryContainer.copy(alpha = 0.72f)
-                    else colors.onSurfaceVariant
+                color = if (isMine) colors.onPrimaryContainer else colors.onSurface,
+                softWrap = true
             )
         }
     }

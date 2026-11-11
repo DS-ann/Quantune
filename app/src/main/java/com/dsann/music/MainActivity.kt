@@ -103,6 +103,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.dsann.music.data.collaboration.DsmusicListenTogetherSession
 import com.dsann.music.model.SongItem
 import com.dsann.music.service.AudioPlaybackService
 import com.dsann.music.ui.CachedRootTabLifecycle
@@ -236,6 +237,15 @@ class MainActivity : AppCompatActivity() {
 
             DsmusicAppTheme(darkTheme = isDarkTheme, dynamicAlbumColor = dynamicAlbumColor) {
                 ListenTogetherPlaybackBridge(viewModel = playerViewModel)
+                // Observe room messages at the app root so notifications work on every screen,
+                // not only while the Listen Together page is open.
+                LaunchedEffect(Unit) {
+                    DsmusicListenTogetherSession.client.incomingChatMessages.collect { message ->
+                        com.dsann.music.ui.SnackbarController.showMessage(
+                            "${message.senderName}: ${message.text}"
+                        )
+                    }
+                }
                 // The platform splash is a solid colour. Follow it with a short branded
                 // gradient layer so the opening transition matches the launcher artwork.
                 var showStartupOverlay by remember { mutableStateOf(savedInstanceState == null) }

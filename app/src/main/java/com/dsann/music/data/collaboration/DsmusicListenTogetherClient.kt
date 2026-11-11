@@ -13,8 +13,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -135,6 +138,11 @@ class DsmusicListenTogetherClient {
     val chatMessages: StateFlow<List<RoomChatMessage>> = _chatMessages.asStateFlow()
     private val _unreadChatCount = MutableStateFlow(0)
     val unreadChatCount: StateFlow<Int> = _unreadChatCount.asStateFlow()
+    private val _incomingChatMessages = MutableSharedFlow<RoomChatMessage>(
+        extraBufferCapacity = 16
+    )
+    /** Emits only messages received from another participant, for app-wide notifications. */
+    val incomingChatMessages: SharedFlow<RoomChatMessage> = _incomingChatMessages.asSharedFlow()
 
     val isChatAvailable: Boolean
         get() = isInRoom && _connectionState.value == "Connected"
@@ -671,6 +679,7 @@ class DsmusicListenTogetherClient {
             _chatMessages.value = (current + message).takeLast(MAX_ROOM_CHAT_MESSAGES)
             if (countAsUnread && message.senderId != currentUserId) {
                 _unreadChatCount.value = (_unreadChatCount.value + 1).coerceAtMost(99)
+                _incomingChatMessages.tryEmit(message)
             }
         }
     }
