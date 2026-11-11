@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberUpdatedState
@@ -59,22 +60,6 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
         viewModel.setListenTogetherQueueAuthoritative(role == "GUEST")
     }
 
-    // Track changes include a complete upcoming queue snapshot, so late joiners and
-    // newly selected songs receive the same ordered queue as existing listeners.
-    LaunchedEffect(role, currentSong?.id, currentSong?.videoId) {
-        if (role == "HOST") {
-            val song = currentSong
-            val videoId = song?.videoId
-            if (song != null && !videoId.isNullOrBlank()) {
-                client.sendTrackChange(
-                    track = song.toSharedTrack(videoId),
-                    positionMs = currentPosition.toLong(),
-                    upcomingQueue = latestQueue
-                )
-            }
-        }
-    }
-
     // Queue edits (add, remove, clear, or reorder) are sent independently of track changes.
     LaunchedEffect(role, upcomingSharedQueue) {
         if (role == "HOST") {
@@ -84,7 +69,11 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
     }
 
     val lastAppliedGuestControlSequence = remember { mutableLongStateOf(-1L) }
+    val lastAnnouncedHostTrack = remember { mutableStateOf("") }
 
+    // Publish track changes and their resulting transport state in one ordered effect.
+    // Sending these from separate effects let "play" overtake "change_track" on a host
+    // skip; the later change_track then paused every guest until another host action.
     LaunchedEffect(role, isPlaying, currentSong?.id, currentSong?.videoId, isLoading) {
         if (role == "HOST" && !isLoading) {
             val incomingGuestControl = remotePlayback
@@ -98,10 +87,26 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
                 lastAppliedGuestControlSequence.longValue = -1L
                 return@LaunchedEffect
             }
+
             val song = currentSong
+            val videoId = song?.videoId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+            val trackKey = song.id.toString() + ":" + videoId
+            val sharedTrack = song.toSharedTrack(videoId)
+
+            if (lastAnnouncedHostTrack.value != trackKey) {
+                client.sendTrackChange(
+                    track = sharedTrack,
+                    positionMs = currentPosition.toLong(),
+                    upcomingQueue = latestQueue
+                )
+                lastAnnouncedHostTrack.value = trackKey
+            }
+
+            // WebSocket sends are ordered, and the local-room outbox below preserves
+            // the same ordering: change_track is always delivered before play/pause.
             client.sendHostPlayback(
                 isPlaying = isPlaying,
-                track = song?.videoId?.takeIf { it.isNotBlank() }?.let { song.toSharedTrack(it) },
+                track = sharedTrack,
                 positionMs = currentPosition.toLong()
             )
         }
