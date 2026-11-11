@@ -171,6 +171,7 @@ class DsmusicListenTogetherClient {
     private var leavingLocalMode = false
     private var lastPlaybackPositionMs = 0L
     private var lastPlaybackIsPlaying = false
+    @Volatile private var lastPlaybackUpdatedAtElapsedMs = 0L
     private val localPeers = ConcurrentHashMap<String, LocalPeer>()
     private val pendingLocalPeers = ConcurrentHashMap<String, LocalPeer>()
     private var nsdManager: NsdManager? = null
@@ -611,16 +612,19 @@ class DsmusicListenTogetherClient {
                         if (localPeers[activePeer.id] !== activePeer) continue
                         val action = message.optString("action")
                         if (action != "play" && action != "pause") continue
-                        val requestedPosition = message.optLong("positionMs", lastPlaybackPositionMs)
-                            .coerceAtLeast(0L)
-                        val duration = lastTrack?.durationMs ?: 0L
-                        val position = if (duration > 0L) requestedPosition.coerceAtMost(duration) else requestedPosition
+                        // A guest may request play/pause only. Keep the host's own timeline;
+                        // never trust a guest's independently drifting position as a seek.
+                        val position = estimatedPlaybackPositionMs()
                         val playing = action == "play"
                         lastPlaybackPositionMs = position
                         lastPlaybackIsPlaying = playing
+                        lastPlaybackUpdatedAtElapsedMs = SystemClock.elapsedRealtime()
                         val currentTrack = lastTrack
                         publishRemote(action, currentTrack, position, playing)
-                        broadcastLocalMessage(localPlaybackMessage(action, currentTrack, position, playing))
+                        broadcastLocalMessage(
+                            localPlaybackMessage(action, currentTrack, position, playing),
+                            exceptPeerId = activePeer.id
+                        )
                     }
                 }
             }
@@ -773,6 +777,17 @@ class DsmusicListenTogetherClient {
         return users.distinct()
     }
 
+    private fun estimatedPlaybackPositionMs(): Long {
+        val elapsed = if (lastPlaybackIsPlaying && lastPlaybackUpdatedAtElapsedMs > 0L) {
+            (SystemClock.elapsedRealtime() - lastPlaybackUpdatedAtElapsedMs).coerceAtLeast(0L)
+        } else {
+            0L
+        }
+        val position = (lastPlaybackPositionMs + elapsed).coerceAtLeast(0L)
+        val duration = lastTrack?.durationMs ?: 0L
+        return if (duration > 0L) position.coerceAtMost(duration) else position
+    }
+
     private fun writeLocalLine(writer: BufferedWriter, message: JSONObject) {
         synchronized(writer) {
             writer.write(message.toString())
@@ -786,8 +801,10 @@ class DsmusicListenTogetherClient {
             .onFailure { Log.w(TAG, "Could not send to local listener " + peer.name, it) }
     }
 
-    private fun broadcastLocalMessage(message: JSONObject) {
-        localPeers.values.forEach { sendLocalMessage(it, message) }
+    private fun broadcastLocalMessage(message: JSONObject, exceptPeerId: String? = null) {
+        localPeers.values
+            .filterNot { it.id == exceptPeerId }
+            .forEach { sendLocalMessage(it, message) }
     }
 
     private fun localTrackJson(track: SharedTrack?): Any {
@@ -854,6 +871,7 @@ class DsmusicListenTogetherClient {
         val position = message.optLong("positionMs", 0L).coerceAtLeast(0L)
         lastPlaybackPositionMs = position
         lastPlaybackIsPlaying = playing
+        lastPlaybackUpdatedAtElapsedMs = SystemClock.elapsedRealtime()
         publishRemote(action, track ?: lastTrack, position, playing, queue, message.optString("queueTitle").takeIf { it.isNotBlank() })
     }
 
@@ -1374,7 +1392,7 @@ class DsmusicListenTogetherClient {
         sendPlayback(
             action = "sync_queue",
             track = lastTrack,
-            positionMs = lastPlaybackPositionMs,
+            positionMs = estimatedPlaybackPositionMs(),
             queue = upcomingQueue,
             queueTitle = queueTitle,
             replaceQueue = true
@@ -1441,17 +1459,23 @@ class DsmusicListenTogetherClient {
             "pause", "change_track" -> false
             else -> lastPlaybackIsPlaying
         }
-        lastPlaybackPositionMs = positionMs.coerceAtLeast(0L)
+        val effectivePosition = if (action == "sync_queue") {
+            estimatedPlaybackPositionMs()
+        } else {
+            positionMs.coerceAtLeast(0L)
+        }
+        lastPlaybackPositionMs = effectivePosition
         lastPlaybackIsPlaying = playing
+        lastPlaybackUpdatedAtElapsedMs = SystemClock.elapsedRealtime()
         if (queue != null) lastSharedQueue = queue
         if (localMode) {
-            val message = localPlaybackMessage(action, track, positionMs, playing, queue, queueTitle)
+            val message = localPlaybackMessage(action, track, effectivePosition, playing, queue, queueTitle)
             scope.launch { broadcastLocalMessage(message) }
             return
         }
         val writer = ProtoWriter()
             .string(1, action)
-            .varint(3, positionMs.coerceAtLeast(0L))
+            .varint(3, effectivePosition)
         if (hasServerClockOffset) {
             writer.varint(11, serverNowMs())
         }
