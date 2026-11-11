@@ -137,7 +137,10 @@ class DsmusicListenTogetherClient {
     val unreadChatCount: StateFlow<Int> = _unreadChatCount.asStateFlow()
 
     val isChatAvailable: Boolean
-        get() = localMode && isInRoom && _connectionState.value == "Connected"
+        get() = isInRoom && _connectionState.value == "Connected"
+
+    val isLocalRoom: Boolean
+        get() = localMode
 
     val currentUserId: String?
         get() = if (localMode) localUserId else ownUserId
@@ -693,13 +696,17 @@ class DsmusicListenTogetherClient {
     }
 
     /**
-     * Sends a message over a room hosted on the same Wi-Fi or hotspot.
-     * The current internet relay does not implement a chat event, so this returns false
-     * for internet rooms instead of claiming that an undeliverable message was sent.
+     * Sends a room message over either the local socket protocol or the internet relay.
      */
     fun sendChatMessage(rawText: String): Boolean {
         val text = rawText.trim().take(MAX_CHAT_MESSAGE_LENGTH)
         if (text.isBlank() || !isChatAvailable) return false
+
+        if (!localMode) {
+            if (ownUserId.isNullOrBlank()) return false
+            send("chat", ProtoWriter().string(1, text).toByteArray())
+            return true
+        }
 
         val senderId = localUserId ?: return false
         val senderName = localUserName ?: "Listener"
@@ -1618,6 +1625,22 @@ class DsmusicListenTogetherClient {
                 socket = null
                 clearRoomState()
                 _connectionState.value = "Disconnected"
+            }
+            "chat_message" -> {
+                val id = fields.firstString(1) ?: return
+                val senderId = fields.firstString(2) ?: return
+                val text = fields.firstString(4)?.trim()?.take(MAX_CHAT_MESSAGE_LENGTH)
+                    ?.takeIf { it.isNotBlank() } ?: return
+                appendChatMessage(
+                    RoomChatMessage(
+                        id = id,
+                        senderId = senderId,
+                        senderName = fields.firstString(3)?.take(32).orEmpty().ifBlank { "Listener" },
+                        text = text,
+                        timestampMs = (fields.firstVarint(5) ?: System.currentTimeMillis()).coerceAtLeast(0L)
+                    ),
+                    countAsUnread = senderId != currentUserId
+                )
             }
             "host_changed" -> {
                 val hostId = fields.firstString(1)
