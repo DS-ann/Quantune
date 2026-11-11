@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -201,6 +200,13 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
             if (chatMessages.isNotEmpty()) {
                 chatListState.animateScrollToItem(chatMessages.lastIndex)
             }
+        }
+    }
+
+    LaunchedEffect(roomCode) {
+        if (roomCode.isNullOrBlank()) {
+            showChatPanel = false
+            chatDraft = ""
         }
     }
 
