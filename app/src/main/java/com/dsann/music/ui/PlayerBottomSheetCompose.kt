@@ -391,6 +391,9 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
     val currentSong = uiState.currentSong ?: return
     val isPlaying = uiState.isPlaying
     val fullPlayerStateHolder = rememberSaveableStateHolder()
+    // The compact controls and full player must both respect the room host's queue authority.
+    val listenTogetherRole by DsmusicListenTogetherSession.client.role.collectAsStateWithLifecycle()
+    val canSkipTracks = listenTogetherRole != "GUEST"
     val isLyricsModeEnabled by viewModel.isLyricsModeEnabled.collectAsStateWithLifecycle()
     val isQueueExpanded by viewModel.isQueueExpanded.collectAsStateWithLifecycle()
     // Overlays such as Queue are only allowed once the sheet has actually settled open.
