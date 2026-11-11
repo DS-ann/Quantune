@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberUpdatedState
@@ -80,8 +81,22 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
         }
     }
 
+    val lastAppliedGuestControlSequence = remember { mutableLongStateOf(-1L) }
+
     LaunchedEffect(role, isPlaying, currentSong?.id) {
         if (role == "HOST") {
+            val incomingGuestControl = remotePlayback
+            if (
+                incomingGuestControl != null &&
+                incomingGuestControl.action in setOf("play", "pause") &&
+                incomingGuestControl.sequence != lastAppliedGuestControlSequence.longValue &&
+                incomingGuestControl.isPlaying == isPlaying
+            ) {
+                // The host is applying a guest's accepted play/pause request. Do not
+                // echo the same state back as a second host-originated command.
+                lastAppliedGuestControlSequence.longValue = incomingGuestControl.sequence
+                return@LaunchedEffect
+            }
             val song = currentSong
             client.sendHostPlayback(
                 isPlaying = isPlaying,
@@ -129,10 +144,11 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
     }
 
     LaunchedEffect(role, remotePlayback?.sequence) {
-        if (role == "GUEST") {
-            remotePlayback?.let { playback ->
+        val playback = remotePlayback ?: return@LaunchedEffect
+        when {
+            role == "GUEST" -> applyRemotePlayback(playback, currentSong, viewModel)
+            role == "HOST" && playback.action in setOf("play", "pause") ->
                 applyRemotePlayback(playback, currentSong, viewModel)
-            }
         }
     }
 }
@@ -205,7 +221,7 @@ private suspend fun applyRemotePlayback(
             // The same video can occupy multiple queue positions. Restart that occurrence
             // at the host's position without unnecessarily resolving the same stream again.
             viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
-            viewModel.pauseAudio()
+            viewModel.pauseAudio(notifyListenTogether = false)
         }
     }
 
@@ -225,14 +241,18 @@ private suspend fun applyRemotePlayback(
             if (abs(current - playback.positionMs) > 1_500L) {
                 viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
             }
-            if (playback.isPlaying) viewModel.playAudio() else viewModel.pauseAudio()
+            if (playback.isPlaying) {
+                viewModel.playAudio(notifyListenTogether = false)
+            } else {
+                viewModel.pauseAudio(notifyListenTogether = false)
+            }
         }
         "pause" -> {
             val current = viewModel.currentPosition.value.toLong()
             if (abs(current - playback.positionMs) > 450L) {
                 viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
             }
-            viewModel.pauseAudio()
+            viewModel.pauseAudio(notifyListenTogether = false)
         }
         "seek" -> viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
     }
