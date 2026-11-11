@@ -25,6 +25,7 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
     // This bridge must keep observing playback while the activity is backgrounded.
     // Lifecycle-aware collectors stop at STARTED/STOPPED and silently break room sync.
     val role by client.role.collectAsState()
+    val remotePlayback by client.remotePlayback.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
     val songList by viewModel.songList.collectAsState()
     val currentSongIndex by viewModel.currentSongIndex.collectAsState()
@@ -84,7 +85,7 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
 
     val lastAppliedGuestControlSequence = remember { mutableLongStateOf(-1L) }
 
-    LaunchedEffect(role, isPlaying, currentSong?.id, isLoading) {
+    LaunchedEffect(role, isPlaying, currentSong?.id, isLoading, remotePlayback?.sequence) {
         if (role == "HOST" && !isLoading) {
             val incomingGuestControl = remotePlayback
             if (
@@ -147,14 +148,16 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
     // stream resolution; otherwise the metadata changes but the previous song keeps playing.
     LaunchedEffect(role) {
         client.remotePlayback.collect { playback ->
-            when {
-                role == "GUEST" -> applyRemotePlayback(playback, latestCurrentSong, viewModel)
-                role == "HOST" && playback.action in setOf("play", "pause") -> {
-                    // Mark only requests that will actually change the host's local player.
-                    if (viewModel.isPlaying.value != playback.isPlaying) {
-                        lastAppliedGuestControlSequence.longValue = playback.sequence
+            if (playback != null) {
+                when {
+                    role == "GUEST" -> applyRemotePlayback(playback, latestCurrentSong, viewModel)
+                    role == "HOST" && playback.action in setOf("play", "pause") -> {
+                        // Mark only requests that will actually change the host's local player.
+                        if (viewModel.isPlaying.value != playback.isPlaying) {
+                            lastAppliedGuestControlSequence.longValue = playback.sequence
+                        }
+                        applyRemotePlayback(playback, latestCurrentSong, viewModel)
                     }
-                    applyRemotePlayback(playback, latestCurrentSong, viewModel)
                 }
             }
         }
