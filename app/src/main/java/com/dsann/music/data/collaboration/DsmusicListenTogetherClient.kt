@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -174,6 +175,12 @@ class DsmusicListenTogetherClient {
     @Volatile private var lastPlaybackUpdatedAtElapsedMs = 0L
     private val localPeers = ConcurrentHashMap<String, LocalPeer>()
     private val pendingLocalPeers = ConcurrentHashMap<String, LocalPeer>()
+    private val localPlaybackOutbox = Channel<JSONObject>(Channel.UNLIMITED)
+    private val localPlaybackOutboxJob = scope.launch(Dispatchers.IO) {
+        for (message in localPlaybackOutbox) {
+            broadcastLocalMessage(message)
+        }
+    }
     private var nsdManager: NsdManager? = null
     private var localServiceRegistration: NsdManager.RegistrationListener? = null
     private var localDiscoveryListener: NsdManager.DiscoveryListener? = null
@@ -1470,7 +1477,7 @@ class DsmusicListenTogetherClient {
         if (queue != null) lastSharedQueue = queue
         if (localMode) {
             val message = localPlaybackMessage(action, track, effectivePosition, playing, queue, queueTitle)
-            scope.launch { broadcastLocalMessage(message) }
+            localPlaybackOutbox.trySend(message)
             return
         }
         val writer = ProtoWriter()
