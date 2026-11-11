@@ -28,8 +28,6 @@
 </p>
 
 <p align="center">
-  <a href="https://ds-ann.github.io/Quantune/"><strong>Quantune Website</strong></a>
-  &nbsp;·&nbsp;
   <a href="https://github.com/DS-ann/Quantune/releases/latest"><strong>Download Quantune</strong></a>
   &nbsp;·&nbsp;
   <a href="#whats-new">What's new</a>
