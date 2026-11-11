@@ -1489,7 +1489,6 @@ class DsmusicListenTogetherClient {
             "room_created" -> {
                 val code = fields.firstString(1) ?: return
                 _roomCode.value = code
-                startPingJob()
                 ownUserId = fields.firstString(2)
                 fields.firstString(3)?.takeIf { it.isNotBlank() }?.let { sessionToken = it }
                 pendingMessage = null
@@ -1500,11 +1499,11 @@ class DsmusicListenTogetherClient {
                 _roomUsers.value = listOf("You (host)")
                 _connectionState.value = "Connected"
                 _message.value = "Room created. Share this code with friends."
+                startPingJob()
             }
             "join_approved" -> {
                 val code = fields.firstString(1) ?: return
                 _joinPending.value = false
-                startPingJob()
                 _roomCode.value = code
                 ownUserId = fields.firstString(2)
                 fields.firstString(3)?.takeIf { it.isNotBlank() }?.let { sessionToken = it }
@@ -1516,11 +1515,11 @@ class DsmusicListenTogetherClient {
                 fields.firstBytes(4)?.let { updateRoomStateFromSnapshot(it, "sync_state") }
                 _connectionState.value = "Connected"
                 _message.value = "You joined the listening room."
+                startPingJob()
             }
             "reconnected" -> {
                 val code = fields.firstString(1) ?: return
                 _roomCode.value = code
-                startPingJob()
                 ownUserId = fields.firstString(2) ?: ownUserId
                 val reconnectedAsHost = fields.firstVarint(4) == 1L
                 val localHostTrack = if (reconnectedAsHost) lastTrack else null
@@ -1541,6 +1540,7 @@ class DsmusicListenTogetherClient {
                 }
                 _connectionState.value = "Connected"
                 _message.value = "Connection restored. Your listening room is synchronized."
+                startPingJob()
             }
             "pong" -> handlePong(fields)
             "server_restarting" -> {
