@@ -562,6 +562,8 @@ class PlayerSharedViewModel @Inject constructor(
     private var autoplayFetchJob: Job? = null
     private var autoplayQueueGeneration = 0L
     @Volatile private var listenTogetherQueueAuthoritative = false
+    private val isListenTogetherGuest: Boolean
+        get() = DsmusicListenTogetherSession.client.role.value == "GUEST"
     private var listenTogetherPreviousShuffle: Boolean? = null
     private var listenTogetherPreviousRepeatMode: Int? = null
     private var autoplayFetchGeneration = -1L
@@ -1560,7 +1562,7 @@ class PlayerSharedViewModel @Inject constructor(
 
     fun playAudio(notifyListenTogether: Boolean = true) {
         audioService?.play()
-        if (notifyListenTogether && listenTogetherQueueAuthoritative) {
+        if (notifyListenTogether && isListenTogetherGuest) {
             DsmusicListenTogetherSession.client.sendGuestPlaybackControl(
                 isPlaying = true,
                 positionMs = _currentPosition.value.toLong()
@@ -1569,7 +1571,7 @@ class PlayerSharedViewModel @Inject constructor(
     }
     fun pauseAudio(notifyListenTogether: Boolean = true) {
         audioService?.pause()
-        if (notifyListenTogether && listenTogetherQueueAuthoritative) {
+        if (notifyListenTogether && isListenTogetherGuest) {
             DsmusicListenTogetherSession.client.sendGuestPlaybackControl(
                 isPlaying = false,
                 positionMs = _currentPosition.value.toLong()
@@ -1940,7 +1942,7 @@ class PlayerSharedViewModel @Inject constructor(
         debouncePlaybackLoadMs: Long = 0L
     ) {
         // Guests follow the host's queue and cannot select a different track.
-        if (listenTogetherQueueAuthoritative) return
+        if (listenTogetherQueueAuthoritative || isListenTogetherGuest) return
         // A direct queue selection takes priority over a pending Next/Previous burst.
         cancelPendingRapidNavigation()
         val songs = _songList.value
@@ -2161,7 +2163,7 @@ class PlayerSharedViewModel @Inject constructor(
     }
 
     fun playNextSong(force: Boolean = false) {
-        if (listenTogetherQueueAuthoritative) return
+        if (listenTogetherQueueAuthoritative || isListenTogetherGuest) return
         val songs = _songList.value
         val navigationBaseIndex = pendingRapidNavigationIndex() ?: _currentSongIndex.value
 
@@ -2250,7 +2252,7 @@ class PlayerSharedViewModel @Inject constructor(
     }
 
     fun playPreviousSong() {
-        if (listenTogetherQueueAuthoritative) return
+        if (listenTogetherQueueAuthoritative || isListenTogetherGuest) return
         val songs = _songList.value
         if (songs.isEmpty()) return
 
