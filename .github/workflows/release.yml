@@ -162,26 +162,19 @@ jobs:
               # Manually supplied highlights remain available as an override.
               printf '%s\n\n' "$RELEASE_NOTES"
             else
+              # Keep the curated feature summary to exactly ten sentences.
               printf '%s\n' \
-                '### 🎚️ A New Full-Screen Visualizer Experience' \
-                'Explore three immersive, audio-reactive visualizer styles from the Full Screen Player:' \
-                '' \
-                '- **Bars (16)** — the classic segmented 16-bar visualizer.' \
-                '- **Spectrum** — a flowing 48-column frequency display.' \
-                '- **Circular Spectrum** — a radial, audio-reactive spectrum.' \
-                '' \
-                'Choose your preferred style in **Settings → Customize → Visualizer**. Open the visualizer from the Full Screen Player whenever you want to see it.' \
-                '' \
-                '### ⚡ Smarter Performance' \
-                '- Audio FFT capture starts only when the dedicated visualizer screen opens and is released when it closes.' \
-                '- The player interface and shared artwork rendering are suspended behind the visualizer, then restored when you return.' \
-                '- Music playback continues uninterrupted while the visualizer is open.' \
-                '' \
-                '### 🛠️ Fixes & Refinements' \
-                '- Addressed reported UI and playback-screen issues.' \
-                '- Refined rendering and lifecycle handling to reduce unnecessary background work.' \
-                '- Included additional stability and reliability fixes across the app.'
-              printf '\n'
+                'Listen Together now supports both Internet and Same Wi-Fi rooms, with room chat and Cloudflare-backed hosting.' \
+                'Incoming messages show an app-wide snackbar, while unread counts remain visible on the room button.' \
+                'Automatic reconnection, session restoration, heartbeat checks, and retry handling make rooms more resilient to temporary network loss.' \
+                'Host playback is authoritative for track changes, seeking, and shared queue updates, while guests can still control play and pause.' \
+                'Track changes and seeks use improved timing and stream-readiness handling to reduce stale or incorrectly positioned guest playback.' \
+                'The full-screen visualizer adds configurable colour styles, reorderable player access, and compact synchronized lyrics.' \
+                'Lyrics and widgets receive lower-memory rendering and timing improvements, with better next-track and expired-stream recovery.' \
+                'Search back navigation, recent-song menus, and keyboard dismissal have been refined.' \
+                'Player title alignment, mini-player overflow, offline page overlays, landscape navigation, and system navigation-bar backgrounds have been corrected.' \
+                'Crash and ANR reports can now be shared as compact text files, and onboarding includes improved permission retry and recovery paths.'
+              printf '\\n'
             fi
             printf '## Choose your APK\n\n'
             printf '| Download | Device compatibility |\n|---|---|\n'
