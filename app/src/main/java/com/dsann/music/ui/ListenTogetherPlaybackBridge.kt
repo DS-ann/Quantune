@@ -34,7 +34,6 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
     val isPlaying by viewModel.isPlaying.collectAsState()
     val currentPosition by viewModel.currentPosition.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val latestCurrentSong by rememberUpdatedState(currentSong)
     val latestSong by rememberUpdatedState(currentSong)
     val latestPlaying by rememberUpdatedState(isPlaying)
     val latestPosition by rememberUpdatedState(currentPosition)
