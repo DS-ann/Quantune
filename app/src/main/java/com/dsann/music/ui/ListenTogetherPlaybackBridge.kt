@@ -5,8 +5,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberUpdatedState
 import com.dsann.music.data.collaboration.DsmusicListenTogetherSession
 import com.dsann.music.data.collaboration.RemotePlaybackState
 import com.dsann.music.data.collaboration.SharedTrack
@@ -20,6 +20,8 @@ import kotlin.math.abs
 @Composable
 fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
     val client = DsmusicListenTogetherSession.client
+    // This bridge must keep observing playback while the activity is backgrounded.
+    // Lifecycle-aware collectors stop at STARTED/STOPPED and silently break room sync.
     val role by client.role.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
     val songList by viewModel.songList.collectAsState()
