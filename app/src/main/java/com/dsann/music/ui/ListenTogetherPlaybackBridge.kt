@@ -14,10 +14,11 @@ import com.dsann.music.data.collaboration.RemotePlaybackState
 import com.dsann.music.data.collaboration.SharedTrack
 import com.dsann.music.model.SongItem
 import com.dsann.music.viewmodel.PlayerSharedViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 @Composable
@@ -33,7 +34,6 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
     val isPlaying by viewModel.isPlaying.collectAsState()
     val currentPosition by viewModel.currentPosition.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val latestCurrentSong by rememberUpdatedState(currentSong)
     val latestSong by rememberUpdatedState(currentSong)
     val latestPlaying by rememberUpdatedState(isPlaying)
     val latestPosition by rememberUpdatedState(currentPosition)
@@ -79,17 +79,15 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
     // Sending these from separate effects let "play" overtake "change_track" on a host
     // skip; the later change_track then paused every guest until another host action.
     LaunchedEffect(role, isPlaying, currentSong?.id, currentSong?.videoId, isLoading) {
-        if (role == "HOST" && !isLoading) {
+        if (role == "HOST") {
             val incomingGuestControl = remotePlayback
-            if (
-                incomingGuestControl != null &&
+            val isGuestControlEcho = incomingGuestControl != null &&
                 incomingGuestControl.action in setOf("play", "pause") &&
                 incomingGuestControl.sequence == lastAppliedGuestControlSequence.longValue
-            ) {
-                // The host has just applied this guest request. Consume the marker so
-                // a later independent host action with the same play state is not lost.
+            if (isGuestControlEcho) {
+                // The room already relayed this guest request to every other listener.
+                // Consume the marker, but still announce any host track change in progress.
                 lastAppliedGuestControlSequence.longValue = -1L
-                return@LaunchedEffect
             }
 
             val song = currentSong
@@ -97,22 +95,26 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
             val trackKey = song.id.toString() + ":" + videoId
             val sharedTrack = song.toSharedTrack(videoId)
 
+            // Start guest stream resolution as soon as the host selects a different song.
+            // Do not make every listener wait for the host's stream resolver to finish.
             if (lastAnnouncedHostTrack.value != trackKey) {
                 client.sendTrackChange(
                     track = sharedTrack,
-                    positionMs = currentPosition.toLong(),
+                    positionMs = 0L,
                     upcomingQueue = latestQueue
                 )
                 lastAnnouncedHostTrack.value = trackKey
             }
 
-            // WebSocket sends are ordered, and the local-room outbox below preserves
-            // the same ordering: change_track is always delivered before play/pause.
-            client.sendHostPlayback(
-                isPlaying = isPlaying,
-                track = sharedTrack,
-                positionMs = currentPosition.toLong()
-            )
+            // The track announcement above is independent of isLoading. Only the final
+            // transport state waits for the host's selected track to become ready.
+            if (!isLoading && !isGuestControlEcho) {
+                client.sendHostPlayback(
+                    isPlaying = isPlaying,
+                    track = sharedTrack,
+                    positionMs = currentPosition.toLong()
+                )
+            }
         }
     }
 
@@ -153,13 +155,30 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
         }
     }
 
-    // Serialize remote events. A new host event must not cancel a guest's in-flight
-    // stream resolution; otherwise the metadata changes but the previous song keeps playing.
+    // Apply only the newest transport/track event. Loading an older skipped track must
+    // not hold up a newer host selection; the service cancels superseded URI resolutions.
+    // Queue-only snapshots are handled separately so they cannot cancel a track load.
     LaunchedEffect(role) {
+        var guestPlaybackJob: Job? = null
         client.remotePlayback.collect { playback ->
             if (playback != null) {
                 when {
-                    role == "GUEST" -> applyRemotePlayback(playback, latestCurrentSong, viewModel)
+                    role == "GUEST" && playback.action in setOf("sync_queue", "queue_clear") -> {
+                        applyRemoteQueue(
+                            client.remotePlayback.value?.queue ?: playback.queue,
+                            viewModel
+                        )
+                    }
+                    role == "GUEST" -> {
+                        guestPlaybackJob?.cancel()
+                        guestPlaybackJob = launch {
+                            applyRemotePlayback(
+                                playback,
+                                viewModel.currentSong.value,
+                                viewModel
+                            )
+                        }
+                    }
                     role == "HOST" && playback.action in setOf("play", "pause") -> {
                         // The server already relays this request to every other listener.
                         // Apply only transport state on the host: guest position/track/queue
@@ -208,6 +227,14 @@ private fun SharedTrack.toQueueSongItem(queueIndex: Int): SongItem {
     }
 }
 
+private fun applyRemoteQueue(queue: List<SharedTrack>, viewModel: PlayerSharedViewModel) {
+    if (viewModel.currentSong.value == null) return
+    val upcoming = queue.mapIndexed { index, sharedTrack ->
+        sharedTrack.toQueueSongItem(index)
+    }.filter { !it.videoId.isNullOrBlank() }
+    viewModel.applyListenTogetherUpcomingQueue(upcoming)
+}
+
 private suspend fun applyRemotePlayback(
     playback: RemotePlaybackState,
     currentSong: SongItem?,
@@ -236,38 +263,40 @@ private suspend fun applyRemotePlayback(
             viewModel.playListenTogetherTrack(incoming)
         }
 
-        // The selected song is published before its stream is resolved. Wait for the
-        // actual player-ready signal rather than guessing how long a slow connection needs.
-        // The timeout still lets later sync messages proceed when a stream cannot load.
+        // Do not seek into an unprepared stream. The collector cancels this wait as soon
+        // as a newer host action arrives, so rapid skips always supersede stale loads.
         if (!viewModel.isPlaybackReady.value) {
-            withTimeoutOrNull(20_000L) {
-                viewModel.isPlaybackReady.first { ready -> ready }
-            }
+            viewModel.isPlaybackReady.first { ready -> ready }
         }
 
-        if (!isDifferentTrack && playback.action == "change_track") {
-            // The same video can occupy multiple queue positions. Restart that occurrence
-            // at the host's position without unnecessarily resolving the same stream again.
-            viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
-            viewModel.pauseAudio(notifyListenTogether = false)
-        }
+
     }
 
-    // Apply the shared upcoming list after a track change has loaded. The ViewModel
-    // retains the active song as row zero, then preserves every ordered queue occurrence.
-    val queueCurrent = viewModel.currentSong.value ?: currentSong
-    if (queueCurrent != null) {
-        val upcoming = playback.queue.mapIndexed { index, sharedTrack ->
-            sharedTrack.toQueueSongItem(index)
-        }.filter { !it.videoId.isNullOrBlank() }
-        viewModel.applyListenTogetherUpcomingQueue(upcoming)
+    // A slow stream load adds time between receipt and playback. Advance the host's
+    // reported position by that wait so the guest does not start several seconds behind.
+    val elapsedSinceEvent = if (playback.isPlaying && playback.receivedAtElapsedMs > 0L) {
+        (SystemClock.elapsedRealtime() - playback.receivedAtElapsedMs).coerceAtLeast(0L)
+    } else {
+        0L
     }
+    val rawTargetPosition = playback.positionMs + elapsedSinceEvent
+    val durationMs = playback.track?.durationMs ?: 0L
+    val targetPositionMs = if (durationMs > 0L) {
+        rawTargetPosition.coerceAtMost(durationMs)
+    } else {
+        rawTargetPosition
+    }
+
+    // Use the newest queue snapshot, not the potentially stale snapshot attached to
+    // the earlier track event that started this load.
+    val latestQueue = DsmusicListenTogetherSession.client.remotePlayback.value?.queue ?: playback.queue
+    applyRemoteQueue(latestQueue, viewModel)
 
     when (playback.action) {
         "play", "sync_state" -> {
             val current = viewModel.currentPosition.value.toLong()
-            if (abs(current - playback.positionMs) > 1_500L) {
-                viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            if (abs(current - targetPositionMs) > 1_500L) {
+                viewModel.seekTo(targetPositionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), fromListenTogether = true)
             }
             if (playback.isPlaying) {
                 viewModel.playAudio(notifyListenTogether = false)
@@ -277,14 +306,14 @@ private suspend fun applyRemotePlayback(
         }
         "pause", "change_track" -> {
             val current = viewModel.currentPosition.value.toLong()
-            if (abs(current - playback.positionMs) > 450L) {
-                viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            if (abs(current - targetPositionMs) > 450L) {
+                viewModel.seekTo(targetPositionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), fromListenTogether = true)
             }
             // A host track change is loaded paused; the following host play event starts it.
             viewModel.pauseAudio(notifyListenTogether = false)
         }
         "seek" -> {
-            viewModel.seekTo(playback.positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            viewModel.seekTo(targetPositionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), fromListenTogether = true)
             if (playback.isPlaying) viewModel.playAudio(notifyListenTogether = false)
             else viewModel.pauseAudio(notifyListenTogether = false)
         }

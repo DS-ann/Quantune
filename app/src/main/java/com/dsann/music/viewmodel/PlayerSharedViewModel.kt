@@ -1578,7 +1578,10 @@ class PlayerSharedViewModel @Inject constructor(
             )
         }
     }
-    fun seekTo(position: Int) {
+    fun seekTo(position: Int, fromListenTogether: Boolean = false) {
+        // Guests can request play/pause, but the host owns the shared playback position.
+        // Keep remote host seek updates working while rejecting local guest scrubbing.
+        if (isListenTogetherGuest && !fromListenTogether) return
         val safePosition = if (_duration.value > 0) {
             position.coerceIn(0, _duration.value)
         } else {
