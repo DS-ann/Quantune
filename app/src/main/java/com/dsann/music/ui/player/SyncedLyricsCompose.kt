@@ -198,6 +198,7 @@ internal fun SyncedLyricsCompose(
     lyricsColorStyle: String = "Home Studio Gradient",
     gradientFontBorderWidth: Dp = 1.dp,
     centerLineLyrics: Boolean = false,
+    forceLowCostRendering: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -217,8 +218,8 @@ internal fun SyncedLyricsCompose(
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
     // Low-memory phones use a single text layer instead of the multi-pass karaoke
     // glyph masks and offscreen compositing that can stall older GPU drivers.
-    val useLowCostLyricsRendering = remember(context) {
-        isLowCostLyricsDevice(context)
+    val useLowCostLyricsRendering = remember(context, forceLowCostRendering) {
+        forceLowCostRendering || isLowCostLyricsDevice(context)
     }
 
     val currentView = LocalView.current
