@@ -387,6 +387,7 @@ export class Room extends DurableObject {
       const out=[fieldString(1,action),fieldString(2,str(f,2)),fieldInt(3,s.position)];
       if(s.track) out.push(fieldBytes(4,encodeTrack(s.track)));
       if(hasQueue) for(const t of s.queue) out.push(fieldBytes(6,encodeTrack(t)));
+      if(action==="queue_clear") out.push(fieldInt(12,1));
       out.push(fieldString(7,s.queueTitle),fieldInt(9,now));
       // The sender already applied its own action locally. Relaying back to it creates
       // an event echo that can be mistaken for a new guest request by the host bridge.
