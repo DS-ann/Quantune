@@ -360,6 +360,9 @@ export class Room extends DurableObject {
       }
 
       const now=Date.now();
+      // Capture the live host timeline before changing the playing flag or resetting
+      // lastUpdate. Guest requests and queue-only updates must never rewind the room.
+      const livePositionBeforeAction=livePosition(s);
       if(isHost && trackField?.b) s.track=decodeTrack(trackField.b);
       if(isHost && hasQueue) s.queue=queueFields.map(decodeTrack).filter(Boolean);
       if(action==="play") s.playing=true;
@@ -368,10 +371,15 @@ export class Room extends DurableObject {
       else if(action==="seek") s.position=num(f,3);
       else if(isHost && (action==="sync_queue" || action==="queue_clear")) s.queue=queueFields.map(decodeTrack).filter(Boolean);
       if(action==="play" || action==="pause" || action==="seek" || action==="change_track") {
-        const requestedPosition=Math.max(0,num(f,3,s.position));
-        s.position=(!isHost && s.track?.durationMs>0)
-          ? Math.min(requestedPosition,s.track.durationMs)
-          : requestedPosition;
+        if(isHost) {
+          s.position=Math.max(0,num(f,3,s.position));
+        } else {
+          // Guest play/pause is a transport request, not permission to seek.
+          s.position=livePositionBeforeAction;
+        }
+      } else if(action==="sync_queue") {
+        // Queue edits must not reset a playing room to the position of an old event.
+        s.position=livePositionBeforeAction;
       }
       if(isHost && str(f,7)) s.queueTitle=clean(str(f,7),120);
       s.lastUpdate=now; s.revision++;
@@ -380,7 +388,9 @@ export class Room extends DurableObject {
       if(s.track) out.push(fieldBytes(4,encodeTrack(s.track)));
       if(hasQueue) for(const t of s.queue) out.push(fieldBytes(6,encodeTrack(t)));
       out.push(fieldString(7,s.queueTitle),fieldInt(9,now));
-      await this.broadcast("sync_playback",concat(out)); return;
+      // The sender already applied its own action locally. Relaying back to it creates
+      // an event echo that can be mistaken for a new guest request by the host bridge.
+      await this.broadcast("sync_playback",concat(out),connectionId); return;
     }
     if(type==="chat") {
       if(!user) return this.fail(connectionId,"not_in_room","You are not an active room member.");
