@@ -202,6 +202,14 @@ internal fun PlayerLyricsContent(
 ) {
     val compactLandscapeLyrics = LocalConfiguration.current.orientation ==
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    var plainLyricsLines by remember(plainLyrics) {
+        mutableStateOf<List<String>>(emptyList())
+    }
+    LaunchedEffect(plainLyrics) {
+        plainLyricsLines = withContext(Dispatchers.Default) {
+            plainLyrics.orEmpty().split('\n').map { it.removeSuffix("\r") }
+        }
+    }
     val context = LocalContext.current
     val appearancePreferences = remember(context) {
         context.getSharedPreferences("AppSettings", android.content.Context.MODE_PRIVATE)
@@ -285,8 +293,11 @@ internal fun PlayerLyricsContent(
                     // and rasterize every off-screen line when the lyrics page first opens.
                     // Virtualize one source line per item so only the visible lyric lines
                     // enter the initial layout/draw pass.
-                    val plainLyricsLines = remember(plainLyrics) {
-                        plainLyrics.orEmpty().split('\n').map { it.removeSuffix("\r") }
+                    if (plainLyricsLines.isEmpty()) {
+                        LoadingIndicator(
+                            modifier = Modifier.align(Alignment.Center).size(32.dp),
+                            color = dynamicAccentColor
+                        )
                     }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
