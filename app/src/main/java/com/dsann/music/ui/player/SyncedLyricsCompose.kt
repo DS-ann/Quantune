@@ -212,6 +212,11 @@ internal fun SyncedLyricsCompose(
     }
     val isLandscape = LocalConfiguration.current.orientation ==
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    // Low-memory phones use a single text layer instead of the multi-pass karaoke
+    // glyph masks and offscreen compositing that can stall older GPU drivers.
+    val useLowCostLyricsRendering = remember(context) {
+        isLowCostLyricsDevice(context)
+    }
 
     val currentView = LocalView.current
     DisposableEffect(currentView) {
@@ -241,10 +246,7 @@ internal fun SyncedLyricsCompose(
     // Word highlights stay aligned to display VSYNC, but fullscreen karaoke does not
     // need a state update on every panel refresh. Respect the user's global frame cap and
     // cap lower-memory devices at 30 fps to avoid overloading their first lyrics render.
-    val lyricsFrameContext = LocalContext.current
-    val karaokeFrameRateCeiling = remember(lyricsFrameContext) {
-        if (isLowCostLyricsDevice(lyricsFrameContext)) 30 else null
-    }
+    val karaokeFrameRateCeiling = if (useLowCostLyricsRendering) 30 else null
     val karaokeFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
         active = isPlaying && isKaraokeMode,
         maximumFrameRate = karaokeFrameRateCeiling
@@ -497,6 +499,7 @@ internal fun SyncedLyricsCompose(
                             gradientFontBorderWidth = gradientFontBorderWidth,
                             centerLineLyrics = centerLineLyrics,
                             fontFamilyChoice = lyricsFontFamily,
+                            lowCostRendering = useLowCostLyricsRendering,
                             onClick = {
                                 onSeekTo(
                                     line.startTimeMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
@@ -540,9 +543,90 @@ private fun LyricLineItem(
     gradientFontBorderWidth: Dp = 1.dp,
     centerLineLyrics: Boolean = false,
     fontFamilyChoice: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    lowCostRendering: Boolean = false
 ) {
     val isKaraoke = line.isWordByWord && line.words.isNotEmpty()
+
+    if (lowCostRendering) {
+        // On constrained phones, preserve synced line changes and tap-to-seek but
+        // avoid per-character geometry, stroked glyph passes, GPU glow and offscreen
+        // masks. Karaoke therefore falls back to a clean active-line highlight.
+        val lowCostAlignment = if (centerLineLyrics) {
+            TextAlign.Center
+        } else {
+            when (alignment) {
+                "Left" -> TextAlign.Start
+                "Center" -> TextAlign.Center
+                else -> if (line.isRightAligned) TextAlign.End else TextAlign.Start
+            }
+        }
+        val lowCostColor = when (lyricsColorStyle) {
+            "White" -> Color.White
+            "UI Matching" -> accentColor
+            else -> contentColor
+        }
+        val lowCostAlpha = when {
+            isActive -> 1f
+            isPast -> 0.60f
+            else -> 0.38f
+        }
+        val lowCostFont = when (fontFamilyChoice) {
+            "Sans" -> FontFamily.SansSerif
+            "Serif" -> FontFamily.Serif
+            "Mono" -> FontFamily.Monospace
+            else -> GoogleSansFlexNonRounded
+        }
+        val lowCostStyle = DsmusicTheme.typography.headlineMedium.copy(
+            brush = null,
+            shadow = null,
+            fontFamily = lowCostFont,
+            fontSize = 38.sp * textScale,
+            fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Bold,
+            lineHeight = 50.sp * textScale,
+            textAlign = lowCostAlignment,
+            platformStyle = PlatformTextStyle(includeFontPadding = true)
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClick
+                )
+                .padding(
+                    start = if (centerLineLyrics) 24.dp else 28.dp,
+                    end = 24.dp,
+                    top = 12.dp,
+                    bottom = 12.dp
+                )
+        ) {
+            Text(
+                text = line.content,
+                style = lowCostStyle,
+                color = lowCostColor.copy(alpha = lowCostAlpha),
+                maxLines = Int.MAX_VALUE
+            )
+            if (!line.backgroundContent.isNullOrBlank()) {
+                Text(
+                    text = line.backgroundContent,
+                    style = DsmusicTheme.typography.bodySmall.copy(
+                        fontFamily = lowCostFont,
+                        fontSize = 18.sp * textScale,
+                        lineHeight = 26.sp * textScale,
+                        textAlign = lowCostAlignment,
+                        shadow = null,
+                        brush = null
+                    ),
+                    color = lowCostColor.copy(alpha = if (isActive) 0.68f else 0.32f),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    maxLines = 2
+                )
+            }
+        }
+        return
+    }
     // Keep the same 1 dp gradient font contour in the fullscreen renderer.
     val lineSyncedGradientBorderWidth = gradientFontBorderWidth
     val scale = 1.0f
