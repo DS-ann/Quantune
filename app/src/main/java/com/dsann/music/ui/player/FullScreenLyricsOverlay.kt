@@ -197,6 +197,7 @@ internal fun PlayerLyricsContent(
     providerResults: Map<String, LyricsResult>,
     gradientFontBorderWidth: Dp = 1.dp,
     centerLineLyrics: Boolean = false,
+    forceLowCostRendering: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val compactLandscapeLyrics = LocalConfiguration.current.orientation ==
@@ -246,6 +247,7 @@ internal fun PlayerLyricsContent(
                 lyricsColorStyle = lyricsColorStyle,
                 gradientFontBorderWidth = gradientFontBorderWidth,
                 centerLineLyrics = centerLineLyrics,
+                forceLowCostRendering = forceLowCostRendering,
                 modifier = Modifier.fillMaxSize()
             )
             !plainLyrics.isNullOrBlank() -> {
