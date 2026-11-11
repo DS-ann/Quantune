@@ -107,7 +107,7 @@ function encodeState(s) {
 function syncState(s) {
   const parts=[];
   if (s.track) parts.push(fieldBytes(1,encodeTrack(s.track)));
-  parts.push(fieldBool(2,s.playing),fieldInt(3,livePosition(s)),fieldInt(4,s.lastUpdate));
+  parts.push(fieldBool(2,s.playing),fieldInt(3,s.position),fieldInt(4,s.lastUpdate));
   for (const t of s.queue) parts.push(fieldBytes(5,encodeTrack(t)));
   parts.push(fieldFloat(6,1),fieldInt(7,s.revision),fieldString(8,s.queueTitle || ""));
   return concat(parts);
