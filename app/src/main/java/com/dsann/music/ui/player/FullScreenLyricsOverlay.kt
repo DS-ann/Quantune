@@ -205,9 +205,13 @@ internal fun PlayerLyricsContent(
     var plainLyricsLines by remember(plainLyrics) {
         mutableStateOf<List<String>>(emptyList())
     }
-    LaunchedEffect(plainLyrics) {
-        plainLyricsLines = withContext(Dispatchers.Default) {
-            plainLyrics.orEmpty().split('\n').map { it.removeSuffix("\r") }
+    LaunchedEffect(plainLyrics, syncedLyrics) {
+        plainLyricsLines = if (!syncedLyrics.isNullOrEmpty() || plainLyrics.isNullOrBlank()) {
+            emptyList()
+        } else {
+            withContext(Dispatchers.Default) {
+                plainLyrics.orEmpty().split('\n').map { it.removeSuffix("\r") }
+            }
         }
     }
     val context = LocalContext.current
@@ -255,7 +259,9 @@ internal fun PlayerLyricsContent(
                 lyricsColorStyle = lyricsColorStyle,
                 gradientFontBorderWidth = gradientFontBorderWidth,
                 centerLineLyrics = centerLineLyrics,
-                forceLowCostRendering = forceLowCostRendering,
+                // Landscape lyrics have a shallow viewport whether shown in the
+                // side panel or the expanded dialog. Avoid GPU mask compositing there.
+                forceLowCostRendering = forceLowCostRendering || compactLandscapeLyrics,
                 modifier = Modifier.fillMaxSize()
             )
             !plainLyrics.isNullOrBlank() -> {
