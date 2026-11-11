@@ -2476,7 +2476,6 @@ private fun MiniPlayerContentInternal(
         Spacer(modifier = Modifier.width(6.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             DsmusicIconButton(
