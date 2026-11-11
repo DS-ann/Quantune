@@ -495,6 +495,7 @@ class DsmusicListenTogetherClient {
 
                 localClientSocket = connection
                 localClientWriter = writer
+                approval.optString("userId").takeIf { it.isNotBlank() }?.let { localUserId = it }
                 _roomCode.value = approval.optString("pin", cleanPin)
                 _joinPending.value = false
                 _role.value = "GUEST"
@@ -559,10 +560,13 @@ class DsmusicListenTogetherClient {
                 return
             }
 
-            val id = request.optString("id").trim().ifBlank { UUID.randomUUID().toString() }
+            // The host assigns the stable room identity; a guest cannot impersonate
+            // another member by choosing its own sender ID in the join request.
+            val id = UUID.randomUUID().toString()
             val name = request.optString("name").trim().ifBlank { "Listener" }.take(32)
-            peer = LocalPeer(id, name, peerSocket, reader, writer)
-            pendingLocalPeers[id] = peer
+            val activePeer = LocalPeer(id, name, peerSocket, reader, writer)
+            peer = activePeer
+            pendingLocalPeers[id] = activePeer
             _joinRequests.value = _joinRequests.value
                 .filterNot { it.userId == id } + RoomJoinRequest(id, name)
             _message.value = "$name wants to join your local room."
@@ -574,7 +578,7 @@ class DsmusicListenTogetherClient {
                     "leave" -> break
                     "chat_send" -> {
                         // Pending guests cannot send until their request is approved.
-                        if (localPeers[peer.id] !== peer) continue
+                        if (localPeers[activePeer.id] !== activePeer) continue
                         val text = message.optString("text")
                             .replace("\u0000", "")
                             .trim()
@@ -582,8 +586,8 @@ class DsmusicListenTogetherClient {
                         if (text.isNotBlank()) {
                             val chat = RoomChatMessage(
                                 id = UUID.randomUUID().toString(),
-                                senderId = peer.id,
-                                senderName = peer.name,
+                                senderId = activePeer.id,
+                                senderName = activePeer.name,
                                 text = text,
                                 timestampMs = System.currentTimeMillis()
                             )
@@ -1184,6 +1188,7 @@ class DsmusicListenTogetherClient {
             val approval = JSONObject()
                 .put("type", "approved")
                 .put("pin", localRoomPin.orEmpty())
+                .put("userId", peer.id)
                 .put("users", users)
                 .put("chatHistory", localChatHistoryJson())
                 .put(
