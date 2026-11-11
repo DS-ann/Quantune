@@ -217,10 +217,6 @@ export class Room extends DurableObject {
     if(this.stateData) return false;
     const f=decodeFields(payload), username=clean(str(f,1),MAX_NAME);
     if(!username) { await this.fail(connectionId,"missing_username","Username is required."); return true; }
-    const code=this.ctx.id.toString(); // deterministic ID is not the room code; overwritten below by caller name
-    const roomCode = this.env.ROOMS.idFromName ? null : null;
-    // Room code is supplied by the namespace name in the connection URL metadata.
-    const assignedCode = this.roomCode || null;
     if(!assignedCode) { await this.fail(connectionId,"room_code_missing","Room allocation failed."); return true; }
     const userId=makeId(), token=makeToken(assignedCode), now=Date.now();
     this.stateData={code:assignedCode,hostId:userId,users:[{id:userId,name:username,connected:true,connectionId}],
