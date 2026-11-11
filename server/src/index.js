@@ -30,6 +30,11 @@ function fieldInt(number, value) {
   const n = BigInt(value || 0);
   return n === 0n ? new Uint8Array() : concat([varint(number << 3), varint(n)]);
 }
+function fieldSInt(number, value) {
+  const n = BigInt(Math.trunc(Number(value) || 0));
+  const encoded = (n << 1n) ^ (n >> 63n);
+  return concat([varint(number << 3), varint(encoded)]);
+}
 function fieldBool(number, value) { return value ? fieldInt(number, 1) : new Uint8Array(); }
 function fieldFloat(number, value) {
   if (!value) return new Uint8Array();
@@ -116,6 +121,19 @@ function livePosition(s) {
   if (!s.playing) return Math.max(0,s.position || 0);
   const p=(s.position || 0)+Math.max(0,Date.now()-(s.lastUpdate || Date.now()));
   return s.track?.durationMs ? Math.min(p,s.track.durationMs) : p;
+}
+function crc32Text(value) {
+  let crc = 0xffffffff;
+  for (const byte of new TextEncoder().encode(value)) {
+    crc ^= byte;
+    for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function playbackStateHash(s) {
+  let value = `${s.track?.id || ""}\\n`;
+  for (const track of s.queue || []) value += `${track.id}\\n`;
+  return crc32Text(value);
 }
 function makeId() { return crypto.randomUUID(); }
 function makeToken(code) { return code + "." + Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>b.toString(16).padStart(2,"0")).join(""); }
@@ -299,7 +317,23 @@ export class Room extends DurableObject {
     }
     if(type==="ping") {
       const f=decodeFields(payload), receive=Date.now();
-      await this.send(connectionId,"pong",concat([fieldInt(1,num(f,1)),fieldInt(2,receive),fieldInt(3,Date.now()),fieldInt(4,num(f,2))]));
+      const response=[fieldInt(1,num(f,1)),fieldInt(2,receive),fieldInt(3,Date.now()),fieldInt(4,num(f,2))];
+      if(user && user.id!==s.hostId && num(f,3)===1 && s.track) {
+        const guestTrackId=str(f,4);
+        const guestPosition=Math.max(0,num(f,5));
+        const guestAt=num(f,6,receive);
+        const guestPlaying=bool(f,9);
+        const guestHashValid=num(f,7)===1;
+        const trackMatches=guestTrackId===s.track.id;
+        const queueMatches=!guestHashValid || num(f,8)===playbackStateHash(s);
+        const stateMismatch=!trackMatches || !queueMatches || guestPlaying!==s.playing;
+        const ageMs=receive-guestAt;
+        const canMeasureDrift=trackMatches && guestPlaying===s.playing && ageMs>=-5000 && ageMs<=30000;
+        const guestPositionAtReceive=guestPosition+(guestPlaying?Math.max(0,ageMs):0);
+        const driftMs=canMeasureDrift?Math.round(guestPositionAtReceive-livePosition(s)):0;
+        response.push(fieldBool(5,canMeasureDrift),fieldSInt(6,driftMs),fieldBool(7,stateMismatch));
+      }
+      await this.send(connectionId,"pong",concat(response));
       return;
     }
     if(type==="request_sync") {

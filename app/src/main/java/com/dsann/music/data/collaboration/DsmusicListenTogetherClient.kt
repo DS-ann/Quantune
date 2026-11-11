@@ -1174,9 +1174,10 @@ class DsmusicListenTogetherClient {
         hasServerClockOffset = true
 
         val driftValid = fields.firstVarint(5) == 1L
-        val driftMs = fields.firstVarint(6) ?: 0L
+        val encodedDrift = fields.firstVarint(6) ?: 0L
+        val driftMs = (encodedDrift ushr 1) xor -(encodedDrift and 1L)
         val stateMismatch = fields.firstVarint(7) == 1L
-        if (!stateMismatch && driftValid && kotlin.math.abs(driftMs) > 1_000L) {
+        if (stateMismatch || (driftValid && kotlin.math.abs(driftMs) > 1_000L)) {
             val now = SystemClock.elapsedRealtime()
             if (now - lastSyncRequestElapsedMs >= 4_000L) {
                 lastSyncRequestElapsedMs = now
@@ -1409,11 +1410,11 @@ class DsmusicListenTogetherClient {
         pingJob = scope.launch {
             repeat(3) {
                 sendTimeSyncPing()
-                delay(5_000L)
+                delay(1_000L)
             }
             while (isActive) {
                 sendTimeSyncPing()
-                delay(15_000L)
+                delay(30_000L)
             }
         }
     }
@@ -1446,6 +1447,7 @@ class DsmusicListenTogetherClient {
                 .string(4, track.id)
                 .varint(5, position)
                 .varint(6, serverNowMs())
+                .varint(9, if (playback.isPlaying) 1L else 0L)
         }
 
         val stateHash = CRC32().apply {

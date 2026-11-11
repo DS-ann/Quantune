@@ -106,9 +106,10 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
                 val observedPosition = latestPosition.toLong().coerceAtLeast(0L)
                 val expectedPosition = previousPosition + if (latestPlaying) elapsed else 0L
 
-                if (latestPlaying && elapsed > 0L &&
-                    abs(observedPosition - expectedPosition) > 2_500L
-                ) {
+                // Compare against the expected timeline in both playback states.
+                // Paused seeks must be relayed too, and absolute difference detects
+                // both forward and backward jumps.
+                if (elapsed > 0L && abs(observedPosition - expectedPosition) > 1_200L) {
                     val song = latestSong
                     val videoId = song?.videoId
                     if (song != null && !videoId.isNullOrBlank()) {
