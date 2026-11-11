@@ -309,7 +309,7 @@ internal object CrashDiagnostics {
             "===== THREAD: ${thread.name} | STATE: ${thread.state} | " +
                 "ID: ${thread.id} | PRIORITY: ${thread.priority} ====="
         )
-        stack.take(80).forEach { frame -> output.appendLine("\\tat $frame") }
+        stack.take(80).forEach { frame -> output.appendLine("\tat $frame") }
         if (stack.size > 80) {
             output.appendLine("... ${stack.size - 80} additional frames omitted.")
         }
@@ -342,7 +342,7 @@ internal object CrashDiagnostics {
      * frames help identify a persistent RenderThread/driver synchronization wait.
      */
     private fun captureCriticalThreadSamples(): String = buildString {
-        repeat(3) { sampleIndex ->
+        for (sampleIndex in 0 until 3) {
             val stacks = Thread.getAllStackTraces()
             val critical = stacks.entries
                 .filter { it.key.name == "main" || isGraphicsThread(it.key) }
@@ -370,7 +370,7 @@ internal object CrashDiagnostics {
                     Thread.sleep(140L)
                 } catch (_: InterruptedException) {
                     Thread.currentThread().interrupt()
-                    break
+                    return@buildString
                 }
             }
         }
