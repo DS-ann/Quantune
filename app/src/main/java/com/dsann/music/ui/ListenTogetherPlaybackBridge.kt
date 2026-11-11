@@ -85,7 +85,7 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
 
     val lastAppliedGuestControlSequence = remember { mutableLongStateOf(-1L) }
 
-    LaunchedEffect(role, isPlaying, currentSong?.id, isLoading, remotePlayback?.sequence) {
+    LaunchedEffect(role, isPlaying, currentSong?.id, currentSong?.videoId, isLoading) {
         if (role == "HOST" && !isLoading) {
             val incomingGuestControl = remotePlayback
             if (
@@ -152,11 +152,17 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
                 when {
                     role == "GUEST" -> applyRemotePlayback(playback, latestCurrentSong, viewModel)
                     role == "HOST" && playback.action in setOf("play", "pause") -> {
-                        // Mark only requests that will actually change the host's local player.
+                        // The server already relays this request to every other listener.
+                        // Apply only transport state on the host: guest position/track/queue
+                        // data must never change the host's authoritative playback timeline.
                         if (viewModel.isPlaying.value != playback.isPlaying) {
                             lastAppliedGuestControlSequence.longValue = playback.sequence
+                            if (playback.isPlaying) {
+                                viewModel.playAudio(notifyListenTogether = false)
+                            } else {
+                                viewModel.pauseAudio(notifyListenTogether = false)
+                            }
                         }
-                        applyRemotePlayback(playback, latestCurrentSong, viewModel)
                     }
                 }
             }
