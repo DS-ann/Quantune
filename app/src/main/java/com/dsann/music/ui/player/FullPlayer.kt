@@ -111,6 +111,7 @@ import com.dsann.music.data.features.AiLyricsTranslationSettingsStore
 import com.dsann.music.data.features.AiLyricsTranslationSession
 import com.dsann.music.data.lyrics.LineSyncedLyricTimeline
 import com.dsann.music.data.lyrics.LyricsResult
+import com.dsann.music.data.collaboration.DsmusicListenTogetherSession
 import com.dsann.music.model.SongItem
 import com.dsann.music.viewmodel.PlayerSharedViewModel
 import com.dsann.music.data.innertube.YouTubeMusic
@@ -604,8 +605,11 @@ fun FullPlayerScreen(
     dragModifier: Modifier = Modifier,
     isPlayerVisible: Boolean,
     modifier: Modifier = Modifier,
-    onVisualizerVisibilityChanged: (Boolean) -> Unit = {}
+    onVisualizerVisibilityChanged: (Boolean) -> Unit = {},
+    canSkipTracks: Boolean = true
 ) {
+    val listenTogetherRole by DsmusicListenTogetherSession.client.role.collectAsStateWithLifecycle()
+    val canSkipTracks = listenTogetherRole != "GUEST"
     val isLyricsModeEnabled by viewModel.isLyricsModeEnabled.collectAsStateWithLifecycle()
     val syncedLyrics by viewModel.syncedLyrics.collectAsStateWithLifecycle()
     val plainLyrics by viewModel.plainLyrics.collectAsStateWithLifecycle()
@@ -725,7 +729,8 @@ fun FullPlayerScreen(
         },
         dragModifier = dragModifier,
         modifier = modifier,
-        onVisualizerVisibilityChanged = onVisualizerVisibilityChanged
+        onVisualizerVisibilityChanged = onVisualizerVisibilityChanged,
+        canSkipTracks = canSkipTracks
     )
 }
 
@@ -1804,15 +1809,15 @@ fun FullPlayer(
                     modifier = Modifier
                         .then(if (roundTransport) transportSizeModifier else Modifier.weight(1f).then(transportSizeModifier))
                         .clip(transportShape)
-                        .background(sideControlColor)
-                        .clickable(onClick = onPreviousClick),
+                        .background(sideControlColor.copy(alpha = sideControlColor.alpha * if (canSkipTracks) 1f else 0.38f))
+                        .clickable(enabled = canSkipTracks, onClick = onPreviousClick),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_skip_previous),
                         contentDescription = "Previous Song",
                         modifier = Modifier.size(34.dp),
-                        tint = sideIconColor
+                        tint = sideIconColor.copy(alpha = sideIconColor.alpha * if (canSkipTracks) 1f else 0.38f)
                     )
                 }
 
@@ -1845,15 +1850,15 @@ fun FullPlayer(
                     modifier = Modifier
                         .then(if (roundTransport) transportSizeModifier else Modifier.weight(1f).then(transportSizeModifier))
                         .clip(transportShape)
-                        .background(sideControlColor)
-                        .clickable(onClick = onNextClick),
+                        .background(sideControlColor.copy(alpha = sideControlColor.alpha * if (canSkipTracks) 1f else 0.38f))
+                        .clickable(enabled = canSkipTracks, onClick = onNextClick),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_skip_next),
                         contentDescription = "Next Song",
                         modifier = Modifier.size(34.dp),
-                        tint = sideIconColor
+                        tint = sideIconColor.copy(alpha = sideIconColor.alpha * if (canSkipTracks) 1f else 0.38f)
                     )
                 }
             }
