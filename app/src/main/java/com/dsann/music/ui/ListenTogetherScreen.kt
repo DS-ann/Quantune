@@ -372,6 +372,116 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                 }
             }
         } else {
+            if (!roomCode.isNullOrBlank()) {
+                DsmusicCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(19.dp)) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(9.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text(
+                                    if (role == "HOST") "HOSTED ROOM" else "JOINED ROOM",
+                                    style = DsmusicTheme.typography.titleMedium,
+                                    color = DsmusicTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    if (client.isLocalRoom) "LOCAL ROOM PIN" else "ROOM CODE",
+                                    style = DsmusicTheme.typography.labelSmall,
+                                    color = DsmusicTheme.colorScheme.primary,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    roomCode.orEmpty(),
+                                    style = DsmusicTheme.typography.headlineSmall,
+                                    color = DsmusicTheme.colorScheme.onSurface
+                                )
+                            }
+                            ListenTogetherStatusPill(statusLabel = role, active = true)
+                        }
+
+                        if (client.isLocalRoom && role == "HOST") {
+                            Text(
+                                if (showHostAddressFallback) "Hide fallback address" else "Show fallback address",
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { showHostAddressFallback = !showHostAddressFallback }
+                                    .padding(vertical = 3.dp, horizontal = 2.dp),
+                                style = DsmusicTheme.typography.labelMedium,
+                                color = DsmusicTheme.colorScheme.primary
+                            )
+                            if (showHostAddressFallback) {
+                                Text(
+                                    localAddress ?: "Local IP address unavailable",
+                                    style = DsmusicTheme.typography.bodySmall,
+                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("LISTENERS", style = DsmusicTheme.typography.labelSmall, color = DsmusicTheme.colorScheme.primary)
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                roomUsers.size.toString(),
+                                style = DsmusicTheme.typography.labelMedium,
+                                color = DsmusicTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (roomUsers.isNotEmpty()) {
+                            Text(
+                                roomUsers.joinToString("  ·  "),
+                                style = DsmusicTheme.typography.bodySmall,
+                                color = DsmusicTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2
+                            )
+                        }
+
+                        if (role == "HOST" && currentSong?.videoId.isNullOrBlank()) {
+                            Text(
+                                "Play an online track to share it. Local-only tracks cannot be resolved on guests' devices.",
+                                style = DsmusicTheme.typography.bodySmall,
+                                color = DsmusicTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        if (role == "HOST" || role == "GUEST") {
+                            roomCurrentTrack?.let { track ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("NOW PLAYING", style = DsmusicTheme.typography.labelSmall, color = DsmusicTheme.colorScheme.primary)
+                                    Spacer(Modifier.weight(1f))
+                                    Text("LIVE", style = DsmusicTheme.typography.labelSmall, color = DsmusicTheme.colorScheme.primary)
+                                }
+                                ListenTogetherTrackRow(track = track, position = null, isCurrent = true)
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("UP NEXT", style = DsmusicTheme.typography.labelSmall, color = DsmusicTheme.colorScheme.primary)
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    roomUpcomingQueue.size.toString() + " tracks",
+                                    style = DsmusicTheme.typography.labelSmall,
+                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                if (roomUpcomingQueue.isEmpty()) {
+                                    "No upcoming tracks."
+                                } else {
+                                    "${roomUpcomingQueue.size} tracks waiting in the shared queue."
+                                },
+                                style = DsmusicTheme.typography.bodySmall,
+                                color = DsmusicTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        DsmusicOutlinedButton(
+                            onClick = { client.leaveRoom() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Leave room") }
+                    }
+                }
+            } else {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -632,114 +742,11 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                 }
             }
         }
-        }
-
-
-        if (!roomCode.isNullOrBlank()) {
-            DsmusicCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(19.dp)) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(9.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text(
-                                if (networkMode == "SAME_NETWORK") "LOCAL ROOM PIN" else "ROOM CODE",
-                                style = DsmusicTheme.typography.labelSmall,
-                                color = DsmusicTheme.colorScheme.primary,
-                                letterSpacing = 1.sp
-                            )
-                            Text(
-                                roomCode.orEmpty(),
-                                style = DsmusicTheme.typography.headlineSmall,
-                                color = DsmusicTheme.colorScheme.onSurface
-                            )
-                        }
-                        ListenTogetherStatusPill(statusLabel = role, active = true)
-                    }
-
-                    if (networkMode == "SAME_NETWORK" && role == "HOST") {
-                        Text(
-                            if (showHostAddressFallback) "Hide fallback address" else "Show fallback address",
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { showHostAddressFallback = !showHostAddressFallback }
-                                .padding(vertical = 3.dp, horizontal = 2.dp),
-                            style = DsmusicTheme.typography.labelMedium,
-                            color = DsmusicTheme.colorScheme.primary
-                        )
-                        if (showHostAddressFallback) {
-                            Text(
-                                localAddress ?: "Local IP address unavailable",
-                                style = DsmusicTheme.typography.bodySmall,
-                                color = DsmusicTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("LISTENERS", style = DsmusicTheme.typography.labelSmall, color = DsmusicTheme.colorScheme.primary)
-                        Spacer(Modifier.weight(1f))
-                        Text(
-                            roomUsers.size.toString(),
-                            style = DsmusicTheme.typography.labelMedium,
-                            color = DsmusicTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    if (roomUsers.isNotEmpty()) {
-                        Text(
-                            roomUsers.joinToString("  ·  "),
-                            style = DsmusicTheme.typography.bodySmall,
-                            color = DsmusicTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
-                        )
-                    }
-
-                    if (role == "HOST" && currentSong?.videoId.isNullOrBlank()) {
-                        Text(
-                            "Play an online track to share it. Local-only tracks cannot be resolved on guests' devices.",
-                            style = DsmusicTheme.typography.bodySmall,
-                            color = DsmusicTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    if (role == "HOST" || role == "GUEST") {
-                        roomCurrentTrack?.let { track ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("NOW PLAYING", style = DsmusicTheme.typography.labelSmall, color = DsmusicTheme.colorScheme.primary)
-                                Spacer(Modifier.weight(1f))
-                                Text("LIVE", style = DsmusicTheme.typography.labelSmall, color = DsmusicTheme.colorScheme.primary)
-                            }
-                            ListenTogetherTrackRow(track = track, position = null, isCurrent = true)
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("UP NEXT", style = DsmusicTheme.typography.labelSmall, color = DsmusicTheme.colorScheme.primary)
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                roomUpcomingQueue.size.toString() + " tracks",
-                                style = DsmusicTheme.typography.labelSmall,
-                                color = DsmusicTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Text(
-                            if (roomUpcomingQueue.isEmpty()) {
-                                "No upcoming tracks."
-                            } else {
-                                "${roomUpcomingQueue.size} tracks waiting in the shared queue."
-                            },
-                            style = DsmusicTheme.typography.bodySmall,
-                            color = DsmusicTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    DsmusicOutlinedButton(
-                        onClick = { client.leaveRoom() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Leave room") }
-                }
             }
         }
+
+
+
 
         Text(
             "Only track details, queue and playback controls are shared. Audio stays on each device.",
