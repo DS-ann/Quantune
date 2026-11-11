@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "docs/**"
+      - "Screenshots/**"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
@@ -24,6 +25,16 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Prepare website screenshots
+        run: |
+          set -euo pipefail
+          mkdir -p docs/assets/screenshots
+          cp Screenshots/*.png docs/assets/screenshots/
+          for screenshot in "Explore.png" "Full Screen Player.png" "Full screen lyrics.png" "Listen together.png" "Song recognizer.png"; do
+            test -s "docs/assets/screenshots/$screenshot"
+          done
+          echo "Prepared $(find docs/assets/screenshots -maxdepth 1 -type f -name '*.png' | wc -l) Quantune screenshots."
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

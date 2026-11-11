@@ -32,7 +32,9 @@
   &nbsp;·&nbsp;
   <a href="https://github.com/DS-ann/Quantune/releases/latest"><strong>Download Quantune</strong></a>
   &nbsp;·&nbsp;
-  <a href="#whats-new">What's new</a>
+  <a href="#whats-new">What&#39;s new</a>
+  &nbsp;·&nbsp;
+  <a href="#screenshots"><strong>Screenshots</strong></a>
   &nbsp;·&nbsp;
   <a href="#features">Features</a>
   &nbsp;·&nbsp;
@@ -54,6 +56,7 @@
 ## Contents
 
 - [About Quantune](#about-quantune)
+- [Screenshots](#screenshots)
 - [What's new](#whats-new)
 - [Download](#download)
 - [Features](#features)
@@ -79,6 +82,52 @@ The app combines online playback with local music, playlists, favourites, listen
 | Package ID | <code>com.dsann.music</code> |
 | Release channel | [GitHub Releases](https://github.com/DS-ann/Quantune/releases) |
 | License | Apache License 2.0 |
+
+
+## Screenshots
+
+These are real Quantune app captures, not concept mockups. Select an image to view it at full size.
+
+<p align="center">
+  <a href="Screenshots/Listen%20together.png"><img src="Screenshots/Listen%20together.png" alt="Quantune Listen Together screen" width="180"></a>
+  <a href="Screenshots/Full%20Screen%20Player.png"><img src="Screenshots/Full%20Screen%20Player.png" alt="Quantune full-screen player" width="180"></a>
+  <a href="Screenshots/Full%20screen%20lyrics.png"><img src="Screenshots/Full%20screen%20lyrics.png" alt="Quantune synchronized lyrics" width="180"></a>
+  <a href="Screenshots/Song%20recognizer.png"><img src="Screenshots/Song%20recognizer.png" alt="Quantune song recognizer" width="180"></a>
+</p>
+
+<details>
+  <summary><strong>Explore all 19 app screenshots</strong></summary>
+
+  ### Discovery and library
+  <p align="center">
+    <a href="Screenshots/Explore.png"><img src="Screenshots/Explore.png" alt="Explore screen" width="170"></a>
+    <a href="Screenshots/Search.png"><img src="Screenshots/Search.png" alt="Search screen" width="170"></a>
+    <a href="Screenshots/Search%20results.png"><img src="Screenshots/Search results.png" alt="Search results screen" width="170"></a>
+    <a href="Screenshots/Genre.png"><img src="Screenshots/Genre.png" alt="Genre screen" width="170"></a>
+    <a href="Screenshots/Library.png"><img src="Screenshots/Library.png" alt="Library screen" width="170"></a>
+    <a href="Screenshots/Local%20music.png"><img src="Screenshots/Local music.png" alt="Local music screen" width="170"></a>
+  </p>
+
+  ### Player and visualizers
+  <p align="center">
+    <a href="Screenshots/Full%20screen%20player%20landscape.png"><img src="Screenshots/Full screen player landscape.png" alt="Landscape player" width="330"></a>
+    <a href="Screenshots/Visualizer%20bar.png"><img src="Screenshots/Visualizer bar.png" alt="Bar visualizer" width="170"></a>
+    <a href="Screenshots/Visualizer%20Spectrum.png"><img src="Screenshots/Visualizer Spectrum.png" alt="Spectrum visualizer" width="170"></a>
+    <a href="Screenshots/Visualizer%20ring.png"><img src="Screenshots/Visualizer ring.png" alt="Ring visualizer" width="170"></a>
+  </p>
+
+  ### Customization and settings
+  <p align="center">
+    <a href="Screenshots/Customize%20settings.png"><img src="Screenshots/Customize settings.png" alt="Player customization settings" width="170"></a>
+    <a href="Screenshots/Playback%20Settings.png"><img src="Screenshots/Playback Settings.png" alt="Playback settings" width="170"></a>
+    <a href="Screenshots/Settings%201.png"><img src="Screenshots/Settings 1.png" alt="Settings screen one" width="170"></a>
+    <a href="Screenshots/Settings%202.png"><img src="Screenshots/Settings 2.png" alt="Settings screen two" width="170"></a>
+    <a href="Screenshots/Account%20settings.png"><img src="Screenshots/Account settings.png" alt="Account settings" width="170"></a>
+  </p>
+</details>
+
+<p align="center"><sub>Screen layout and appearance may vary by device, Android version and app settings.</sub></p>
+
 
 ## What's new
 

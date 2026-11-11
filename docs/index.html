@@ -228,6 +228,52 @@
     @media (prefers-reduced-motion: reduce) {
       *, *:before, *:after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
     }
+  
+    /* Real screenshot hero and responsive gallery */
+    .real-showcase { position: relative; }
+    .real-glow { position:absolute; width:78%; aspect-ratio:1; border-radius:50%; background:radial-gradient(circle,rgba(128,91,228,.34),rgba(61,177,174,.08) 52%,transparent 73%); filter:blur(14px); }
+    .real-screen { position:absolute; overflow:hidden; display:block; border:1px solid rgba(228,224,255,.24); border-radius:23px; background:#090a12; box-shadow:0 28px 88px rgba(0,0,0,.48),0 0 0 7px rgba(255,255,255,.025); }
+    .real-screen img { width:100%; height:100%; object-fit:contain; background:#090a12; }
+    .real-screen.main { width:min(48%,260px); height:460px; left:10%; top:7%; transform:rotate(-5deg); z-index:2; }
+    .real-screen.secondary { width:min(43%,232px); height:408px; right:8%; bottom:6%; transform:rotate(5deg); z-index:3; }
+    .real-label { position:absolute; top:2%; right:0; z-index:4; padding:11px 15px; border:1px solid var(--line); border-radius:14px; background:rgba(17,20,33,.9); color:var(--muted); font-size:.76rem; backdrop-filter:blur(12px); }
+    .real-label strong { display:block; color:var(--text); font-size:.85rem; }
+    .real-foot { position:absolute; left:4%; bottom:4%; z-index:4; padding:11px 14px; border:1px solid var(--line); border-radius:14px; background:rgba(17,20,33,.92); box-shadow:0 12px 42px rgba(0,0,0,.28); color:var(--muted); font-size:.75rem; backdrop-filter:blur(14px); }
+    .real-foot b { color:var(--text); }
+    .gallery-toolbar { display:flex; flex-wrap:wrap; justify-content:center; gap:9px; margin:0 auto 28px; }
+    .filter-btn { padding:9px 14px; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,.025); color:var(--muted); font-size:.82rem; cursor:pointer; }
+    .filter-btn:hover,.filter-btn[aria-pressed="true"] { border-color:rgba(167,139,250,.6); background:rgba(167,139,250,.14); color:var(--text); }
+    .gallery-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
+    .shot-card { overflow:hidden; border:1px solid var(--line); border-radius:20px; background:linear-gradient(150deg,rgba(23,27,43,.96),rgba(15,17,28,.96)); transition:transform .2s ease,border-color .2s ease; }
+    .shot-card:hover { transform:translateY(-4px); border-color:rgba(167,139,250,.42); }
+    .shot-card[hidden] { display:none; }
+    .shot-image { height:350px; position:relative; display:grid; place-items:center; padding:12px; overflow:hidden; background:radial-gradient(ellipse at 50% 40%,rgba(116,94,196,.13),transparent 68%),#0a0c15; }
+    .shot-image img { width:100%; height:100%; object-fit:contain; border-radius:9px; }
+    .shot-card.wide { grid-column:span 2; }
+    .shot-card.wide .shot-image { height:260px; }
+    .zoom-hint { position:absolute; right:14px; bottom:13px; padding:6px 9px; border:1px solid rgba(255,255,255,.13); border-radius:999px; background:rgba(8,9,16,.8); color:#eeeaff; font-size:.68rem; opacity:0; transform:translateY(4px); transition:opacity .18s ease,transform .18s ease; }
+    .shot-image:hover .zoom-hint,.shot-image:focus-visible .zoom-hint { opacity:1; transform:translateY(0); }
+    .shot-caption { min-height:88px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:14px 15px 16px; }
+    .shot-caption strong { font-size:.91rem; }
+    .shot-caption p { margin:3px 0 0; color:var(--muted); font-size:.77rem; line-height:1.45; }
+    .shot-tag { flex:0 0 auto; margin-top:1px; padding:4px 7px; border:1px solid var(--line); border-radius:999px; color:var(--soft); font-size:.62rem; text-transform:capitalize; }
+    @media (max-width:980px) { .gallery-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    @media (max-width:700px) {
+      .real-screen.main { height:372px; left:12%; }
+      .real-screen.secondary { height:333px; right:8%; }
+      .gallery-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+      .shot-image { height:285px; padding:9px; }
+      .shot-caption { display:block; min-height:105px; padding:12px; }
+      .shot-tag { display:inline-block; margin-top:8px; }
+      .shot-card.wide { grid-column:span 2; }
+      .shot-card.wide .shot-image { height:210px; }
+    }
+    @media (max-width:390px) {
+      .shot-image { height:245px; }
+      .real-screen.main { height:330px; }
+      .real-screen.secondary { height:298px; }
+    }
+
   </style>
 </head>
 <body>
@@ -258,6 +304,7 @@
       </button>
       <nav class="navlinks" id="navlinks" aria-label="Main navigation">
         <a href="#features">Features</a>
+        <a href="#screenshots">Screenshots</a>
         <a href="#lyrics">Lyrics</a>
         <a href="#download">Download</a>
         <a href="https://github.com/DS-ann/Quantune" target="_blank" rel="noopener">Source code</a>
@@ -288,29 +335,16 @@
           </div>
         </div>
 
-        <div class="visual-stage" role="img" aria-label="Illustrative Quantune music player interface with visualizer, synchronized lyrics and a shared listening room">
-          <div class="orb"></div><div class="ring"></div>
-          <div class="room-chip">
-            <div class="avatars"><i></i><i></i><i></i></div>
-            <div><b>Listen Together</b><small>In sync, wherever you are</small></div>
-          </div>
-          <div class="phone">
-            <div class="phone-screen">
-              <div class="phone-top">
-                <div class="phone-brand"><img src="https://raw.githubusercontent.com/DS-ann/Quantune/main/assets/quantune-app-icon.webp" alt=""> Quantune</div>
-                <span>NOW PLAYING</span>
-              </div>
-              <div class="phone-kicker">Your listening space</div>
-              <div class="album-art"></div>
-              <div class="track-title">Find your next favourite</div>
-              <div class="track-sub">Discover · Listen · Repeat</div>
-              <div class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-              <div class="phone-controls">
-                <span>‹</span><span class="play"><svg class="icon"><use href="#i-play"></use></svg></span><span>›</span>
-              </div>
-            </div>
-          </div>
-          <div class="lyric-chip"><small>Synced lyrics</small><strong>Stay with the rhythm.<br>Follow every line.</strong></div>
+        <div class="visual-stage real-showcase" aria-label="Real screenshots from Quantune">
+          <div class="real-glow"></div>
+          <div class="real-label"><strong>Real app screens</strong>Captured from Quantune</div>
+          <a class="real-screen main" href="assets/screenshots/Full%20Screen%20Player.png" target="_blank" rel="noopener">
+            <img src="assets/screenshots/Full%20Screen%20Player.png" alt="Quantune full-screen music player" fetchpriority="high">
+          </a>
+          <a class="real-screen secondary" href="assets/screenshots/Listen%20together.png" target="_blank" rel="noopener">
+            <img src="assets/screenshots/Listen%20together.png" alt="Quantune Listen Together screen" loading="eager">
+          </a>
+          <div class="real-foot"><b>Discover. Sync. Play.</b><br>One listening space.</div>
         </div>
       </div>
     </section>
@@ -357,7 +391,164 @@
       </div>
     </section>
 
-    <section class="section" id="lyrics">
+    
+    <section class="section screenshot-gallery" id="screenshots">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="section-kicker">Captured in the app</div>
+          <h2>See Quantune in action.</h2>
+          <p>Browse the actual app screens. Choose a category to focus the gallery, or open any image to inspect it at full size.</p>
+        </div>
+        <div class="gallery-toolbar" role="group" aria-label="Filter screenshots">
+          <button class="filter-btn" type="button" data-filter="all" aria-pressed="true">All screens</button>
+          <button class="filter-btn" type="button" data-filter="discovery" aria-pressed="false">Discovery</button>
+          <button class="filter-btn" type="button" data-filter="player" aria-pressed="false">Player</button>
+          <button class="filter-btn" type="button" data-filter="lyrics" aria-pressed="false">Lyrics</button>
+          <button class="filter-btn" type="button" data-filter="sharing" aria-pressed="false">Listen Together</button>
+          <button class="filter-btn" type="button" data-filter="recognition" aria-pressed="false">Recognition</button>
+          <button class="filter-btn" type="button" data-filter="visualizer" aria-pressed="false">Visualizers</button>
+          <button class="filter-btn" type="button" data-filter="settings" aria-pressed="false">Settings</button>
+          <button class="filter-btn" type="button" data-filter="library" aria-pressed="false">Library</button>
+        </div>
+        <div class="gallery-grid">
+          <article class="shot-card" data-category="discovery">
+            <a class="shot-image" href="assets/screenshots/Explore.png" target="_blank" rel="noopener" aria-label="Open Explore screenshot at full size">
+              <img src="assets/screenshots/Explore.png" alt="Quantune Explore screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Explore</strong><p>Browse the music discovery view.</p></div><span class="shot-tag">discovery</span></div>
+          </article>
+          <article class="shot-card" data-category="discovery">
+            <a class="shot-image" href="assets/screenshots/Search.png" target="_blank" rel="noopener" aria-label="Open Search screenshot at full size">
+              <img src="assets/screenshots/Search.png" alt="Quantune Search screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Search</strong><p>Find music with the search screen.</p></div><span class="shot-tag">discovery</span></div>
+          </article>
+          <article class="shot-card" data-category="discovery">
+            <a class="shot-image" href="assets/screenshots/Search%20results.png" target="_blank" rel="noopener" aria-label="Open Search results screenshot at full size">
+              <img src="assets/screenshots/Search%20results.png" alt="Quantune Search results screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Search results</strong><p>Browse matching tracks and results.</p></div><span class="shot-tag">discovery</span></div>
+          </article>
+          <article class="shot-card" data-category="discovery">
+            <a class="shot-image" href="assets/screenshots/Genre.png" target="_blank" rel="noopener" aria-label="Open Genres screenshot at full size">
+              <img src="assets/screenshots/Genre.png" alt="Quantune Genres screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Genres</strong><p>Explore music by genre.</p></div><span class="shot-tag">discovery</span></div>
+          </article>
+          <article class="shot-card" data-category="library">
+            <a class="shot-image" href="assets/screenshots/Library.png" target="_blank" rel="noopener" aria-label="Open Library screenshot at full size">
+              <img src="assets/screenshots/Library.png" alt="Quantune Library screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Library</strong><p>Keep playlists and listening history together.</p></div><span class="shot-tag">library</span></div>
+          </article>
+          <article class="shot-card" data-category="library">
+            <a class="shot-image" href="assets/screenshots/Local%20music.png" target="_blank" rel="noopener" aria-label="Open Local music screenshot at full size">
+              <img src="assets/screenshots/Local%20music.png" alt="Quantune Local music screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Local music</strong><p>Browse music stored on the device.</p></div><span class="shot-tag">library</span></div>
+          </article>
+          <article class="shot-card" data-category="player">
+            <a class="shot-image" href="assets/screenshots/Full%20Screen%20Player.png" target="_blank" rel="noopener" aria-label="Open Full-screen player screenshot at full size">
+              <img src="assets/screenshots/Full%20Screen%20Player.png" alt="Quantune Full-screen player screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Full-screen player</strong><p>The main playback experience.</p></div><span class="shot-tag">player</span></div>
+          </article>
+          <article class="shot-card" data-category="lyrics">
+            <a class="shot-image" href="assets/screenshots/Full%20screen%20lyrics.png" target="_blank" rel="noopener" aria-label="Open Full-screen lyrics screenshot at full size">
+              <img src="assets/screenshots/Full%20screen%20lyrics.png" alt="Quantune Full-screen lyrics screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Full-screen lyrics</strong><p>Follow lyrics while listening.</p></div><span class="shot-tag">lyrics</span></div>
+          </article>
+          <article class="shot-card wide" data-category="player">
+            <a class="shot-image" href="assets/screenshots/Full%20screen%20player%20landscape.png" target="_blank" rel="noopener" aria-label="Open Landscape player screenshot at full size">
+              <img src="assets/screenshots/Full%20screen%20player%20landscape.png" alt="Quantune Landscape player screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Landscape player</strong><p>A wide player layout for landscape screens.</p></div><span class="shot-tag">player</span></div>
+          </article>
+          <article class="shot-card" data-category="sharing">
+            <a class="shot-image" href="assets/screenshots/Listen%20together.png" target="_blank" rel="noopener" aria-label="Open Listen Together screenshot at full size">
+              <img src="assets/screenshots/Listen%20together.png" alt="Quantune Listen Together screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Listen Together</strong><p>Create or join a shared listening room.</p></div><span class="shot-tag">sharing</span></div>
+          </article>
+          <article class="shot-card" data-category="recognition">
+            <a class="shot-image" href="assets/screenshots/Song%20recognizer.png" target="_blank" rel="noopener" aria-label="Open Song recognizer screenshot at full size">
+              <img src="assets/screenshots/Song%20recognizer.png" alt="Quantune Song recognizer screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Song recognizer</strong><p>Identify nearby music with song recognition.</p></div><span class="shot-tag">recognition</span></div>
+          </article>
+          <article class="shot-card" data-category="visualizer">
+            <a class="shot-image" href="assets/screenshots/Visualizer%20bar.png" target="_blank" rel="noopener" aria-label="Open Bar visualizer screenshot at full size">
+              <img src="assets/screenshots/Visualizer%20bar.png" alt="Quantune Bar visualizer screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Bar visualizer</strong><p>One of Quantune's visualizer styles.</p></div><span class="shot-tag">visualizer</span></div>
+          </article>
+          <article class="shot-card" data-category="visualizer">
+            <a class="shot-image" href="assets/screenshots/Visualizer%20Spectrum.png" target="_blank" rel="noopener" aria-label="Open Spectrum visualizer screenshot at full size">
+              <img src="assets/screenshots/Visualizer%20Spectrum.png" alt="Quantune Spectrum visualizer screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Spectrum visualizer</strong><p>A spectrum-style visualizer.</p></div><span class="shot-tag">visualizer</span></div>
+          </article>
+          <article class="shot-card" data-category="visualizer">
+            <a class="shot-image" href="assets/screenshots/Visualizer%20ring.png" target="_blank" rel="noopener" aria-label="Open Ring visualizer screenshot at full size">
+              <img src="assets/screenshots/Visualizer%20ring.png" alt="Quantune Ring visualizer screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Ring visualizer</strong><p>A circular visualizer style.</p></div><span class="shot-tag">visualizer</span></div>
+          </article>
+          <article class="shot-card" data-category="settings">
+            <a class="shot-image" href="assets/screenshots/Customize%20settings.png" target="_blank" rel="noopener" aria-label="Open Player customization screenshot at full size">
+              <img src="assets/screenshots/Customize%20settings.png" alt="Quantune Player customization screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Player customization</strong><p>Adjust the player presentation.</p></div><span class="shot-tag">settings</span></div>
+          </article>
+          <article class="shot-card" data-category="settings">
+            <a class="shot-image" href="assets/screenshots/Playback%20Settings.png" target="_blank" rel="noopener" aria-label="Open Playback settings screenshot at full size">
+              <img src="assets/screenshots/Playback%20Settings.png" alt="Quantune Playback settings screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Playback settings</strong><p>Configure playback preferences.</p></div><span class="shot-tag">settings</span></div>
+          </article>
+          <article class="shot-card" data-category="settings">
+            <a class="shot-image" href="assets/screenshots/Settings%201.png" target="_blank" rel="noopener" aria-label="Open Settings · 1 screenshot at full size">
+              <img src="assets/screenshots/Settings%201.png" alt="Quantune Settings · 1 screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Settings · 1</strong><p>Explore the app settings.</p></div><span class="shot-tag">settings</span></div>
+          </article>
+          <article class="shot-card" data-category="settings">
+            <a class="shot-image" href="assets/screenshots/Settings%202.png" target="_blank" rel="noopener" aria-label="Open Settings · 2 screenshot at full size">
+              <img src="assets/screenshots/Settings%202.png" alt="Quantune Settings · 2 screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Settings · 2</strong><p>More app settings.</p></div><span class="shot-tag">settings</span></div>
+          </article>
+          <article class="shot-card" data-category="settings">
+            <a class="shot-image" href="assets/screenshots/Account%20settings.png" target="_blank" rel="noopener" aria-label="Open Account settings screenshot at full size">
+              <img src="assets/screenshots/Account%20settings.png" alt="Quantune Account settings screenshot" loading="lazy" decoding="async">
+              <span class="zoom-hint">View full size ↗</span>
+            </a>
+            <div class="shot-caption"><div><strong>Account settings</strong><p>Account-related settings.</p></div><span class="shot-tag">settings</span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+<section class="section" id="lyrics">
       <div class="wrap">
         <div class="split-band">
           <div>
@@ -504,6 +695,15 @@
       menuButton.setAttribute("aria-expanded", "false");
       menuButton.setAttribute("aria-label", "Open navigation");
     }));
+
+    const filterButtons = document.querySelectorAll(".filter-btn");
+    const screenshotCards = document.querySelectorAll(".shot-card");
+    filterButtons.forEach(button => button.addEventListener("click", () => {
+      const filter = button.dataset.filter;
+      filterButtons.forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+      screenshotCards.forEach(card => { card.hidden = filter !== "all" && card.dataset.category !== filter; });
+    }));
+
     document.querySelector("#year").textContent = new Date().getFullYear();
   </script>
 </body>
