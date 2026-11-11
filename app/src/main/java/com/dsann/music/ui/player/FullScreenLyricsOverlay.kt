@@ -109,55 +109,6 @@ import kotlin.math.max
 import kotlinx.coroutines.delay
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
-/**
- * Optimized circular reveal modifier utilizing a remembered path and in-place reset/rebuild.
- * Ensures zero Path or Rect allocations on every single animation drawing frame!
- */
-private fun Modifier.circularRevealFrom(
-    progressProvider: () -> Float,
-    centerProvider: () -> Offset?
-): Modifier = this.drawWithCache {
-    val path = Path()
-    onDrawWithContent {
-        val progress = progressProvider()
-        val normalizedProgress = progress.coerceIn(0f, 1f)
-        if (normalizedProgress <= 0f) return@onDrawWithContent
-        if (normalizedProgress >= 0.999f) {
-            drawContent()
-            return@onDrawWithContent
-        }
-
-        val fallbackCenter = Offset(size.width * 0.9f, size.height * 0.72f)
-        val revealCenter = centerProvider() ?: fallbackCenter
-
-        val maxRadius = max(
-            max(
-                hypot(revealCenter.x.toDouble(), revealCenter.y.toDouble()),
-                hypot((size.width - revealCenter.x).toDouble(), revealCenter.y.toDouble())
-            ),
-            max(
-                hypot(revealCenter.x.toDouble(), (size.height - revealCenter.y).toDouble()),
-                hypot((size.width - revealCenter.x).toDouble(), (size.height - revealCenter.y).toDouble())
-            )
-        ).toFloat()
-
-        val radius = maxRadius * normalizedProgress
-        
-        path.reset() // Reuse existing Path object
-        path.addOval(
-            Rect(
-                left = revealCenter.x - radius,
-                top = revealCenter.y - radius,
-                right = revealCenter.x + radius,
-                bottom = revealCenter.y + radius
-            )
-        )
-
-        clipPath(path) {
-            this@onDrawWithContent.drawContent()
-        }
-    }
-}
 
 
 @Composable
@@ -395,8 +346,6 @@ internal fun FullScreenLyricsOverlay(
     playbackSpeedProvider: () -> Float = { 1f },
     contentReady: Boolean,
     backgroundBrush: Brush,
-    revealProgressProvider: () -> Float,
-    revealCenterProvider: () -> Offset?,
     contentColor: Color,
     contentSecondary: Color,
     dynamicAccentColor: Color,
@@ -413,24 +362,7 @@ internal fun FullScreenLyricsOverlay(
     val consumeClicks = remember { MutableInteractionSource() }
     var showProvidersSheet by remember { mutableStateOf(false) }
     var syncOffsetMs by remember(currentSong?.id) { mutableStateOf(0L) }
-    var lyricsRevealDelayComplete by remember { mutableStateOf(false) }
-
-    // Keep lyric words hidden until the overlay has fully opened, then leave a short
-    // 200 ms visual pause before revealing the lyrics. Reset this on close so every
-    // opening gets the same timing; loading indicators and header controls stay usable.
-    LaunchedEffect(contentReady) {
-        if (!contentReady) {
-            lyricsRevealDelayComplete = false
-        } else {
-            delay(200L)
-            lyricsRevealDelayComplete = true
-        }
-    }
-
     val context = LocalContext.current
-    val useLowCostReveal = remember(context) {
-        isLowCostLyricsDevice(context)
-    }
 
     DisposableEffect(Unit) {
         CrashDiagnostics.updateOverlayScreen("Full-screen Lyrics")
@@ -441,16 +373,13 @@ internal fun FullScreenLyricsOverlay(
         }
     }
     SideEffect {
-        val revealPercent = (revealProgressProvider().coerceIn(0f, 1f) * 100f).toInt()
         CrashDiagnostics.updateUiDetails(
-            "Lyrics overlay; reveal=${revealPercent}%; contentReady=$contentReady; " +
-                "loading=$isLoading; playing=$isPlaying; synced=${!syncedLyrics.isNullOrEmpty()}; " +
-                "plain=${!plainLyrics.isNullOrBlank()}; providers=${providerResults.size}; " +
-                "revealPath=${if (useLowCostReveal) "alpha graphics layer" else "circular clip path"}"
+            "Lyrics full-screen dialog; loading=$isLoading; playing=$isPlaying; " +
+                "synced=${!syncedLyrics.isNullOrEmpty()}; plain=${!plainLyrics.isNullOrBlank()}; " +
+                "providers=${providerResults.size}"
         )
         CrashDiagnostics.updateLyricsRendering(
-            "Overlay reveal path=${if (useLowCostReveal) "low-cost alpha layer" else "circular clip path"}; " +
-                "lyrics content=${when { !syncedLyrics.isNullOrEmpty() -> "synced"; !plainLyrics.isNullOrBlank() -> "plain"; else -> "none/loading" }}"
+            "Dialog presentation; lyrics content=${when { !syncedLyrics.isNullOrEmpty() -> "synced"; !plainLyrics.isNullOrBlank() -> "plain"; else -> "none/loading" }}"
         )
     }
 
@@ -655,20 +584,8 @@ internal fun FullScreenLyricsOverlay(
         }
     }
 
-    val lyricsRevealModifier = if (useLowCostReveal) {
-        Modifier.graphicsLayer {
-            alpha = revealProgressProvider().coerceIn(0f, 1f)
-        }
-    } else {
-        Modifier.circularRevealFrom(
-            progressProvider = revealProgressProvider,
-            centerProvider = revealCenterProvider
-        )
-    }
-
     Box(
         modifier = modifier
-            .then(lyricsRevealModifier)
             .background(backgroundBrush)
             .clickable(
                 interactionSource = consumeClicks,
@@ -829,7 +746,7 @@ internal fun FullScreenLyricsOverlay(
                 lyricsError = lyricsError,
                 currentPositionProvider = effectivePositionProvider,
                 playbackSpeedProvider = playbackSpeedProvider,
-                contentReady = contentReady && lyricsRevealDelayComplete,
+                contentReady = contentReady,
                 contentColor = contentColor,
                 dynamicAccentColor = dynamicAccentColor,
                 lyricsColorStyle = lyricsColorStyle,
