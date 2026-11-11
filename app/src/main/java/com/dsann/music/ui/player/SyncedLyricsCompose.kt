@@ -258,8 +258,11 @@ internal fun SyncedLyricsCompose(
 
     SideEffect {
         CrashDiagnostics.updateLyricsRendering(
-            "Synced lyrics; renderer=${if (useLowCostLyricsRendering) "low-memory text-only" else "full karaoke effects"}; " +
-                "lines=${lyrics.size}; karaoke=$isKaraokeMode; playing=$isPlaying; " +
+            "Synced lyrics; renderer=${when {
+                forceLowCostRendering -> "compact landscape panel text-only"
+                useLowCostLyricsRendering -> "low-memory text-only"
+                else -> "full karaoke effects"
+            }}; lines=${lyrics.size}; karaoke=$isKaraokeMode; playing=$isPlaying; " +
                 "frameCap=${karaokeFrameRateCeiling?.let { "$it FPS" } ?: "user/device setting"}"
         )
     }
