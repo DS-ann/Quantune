@@ -89,12 +89,11 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
             if (
                 incomingGuestControl != null &&
                 incomingGuestControl.action in setOf("play", "pause") &&
-                incomingGuestControl.sequence != lastAppliedGuestControlSequence.longValue &&
-                incomingGuestControl.isPlaying == isPlaying
+                incomingGuestControl.sequence == lastAppliedGuestControlSequence.longValue
             ) {
-                // The host is applying a guest's accepted play/pause request. Do not
-                // echo the same state back as a second host-originated command.
-                lastAppliedGuestControlSequence.longValue = incomingGuestControl.sequence
+                // The host has just applied this guest request. Consume the marker so
+                // a later independent host action with the same play state is not lost.
+                lastAppliedGuestControlSequence.longValue = -1L
                 return@LaunchedEffect
             }
             val song = currentSong
@@ -147,8 +146,15 @@ fun ListenTogetherPlaybackBridge(viewModel: PlayerSharedViewModel) {
         val playback = remotePlayback ?: return@LaunchedEffect
         when {
             role == "GUEST" -> applyRemotePlayback(playback, currentSong, viewModel)
-            role == "HOST" && playback.action in setOf("play", "pause") ->
+            role == "HOST" && playback.action in setOf("play", "pause") -> {
+                // Mark only requests that will actually change the host's local player.
+                // A duplicate pause/play while already in that state must not suppress
+                // the host's next unrelated manual playback action.
+                if (viewModel.isPlaying.value != playback.isPlaying) {
+                    lastAppliedGuestControlSequence.longValue = playback.sequence
+                }
                 applyRemotePlayback(playback, currentSong, viewModel)
+            }
         }
     }
 }
