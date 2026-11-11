@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Handler
+import androidx.core.os.HandlerCompat
 import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
@@ -129,7 +130,7 @@ internal object CrashDiagnostics {
     private fun startAnrWatchdog(application: Application) {
         // An asynchronous message bypasses synchronization barriers in the main
         // MessageQueue, so animation/frame barriers cannot make a healthy UI look stuck.
-        val mainHandler = Handler.createAsync(Looper.getMainLooper())
+        val mainHandler = HandlerCompat.createAsync(Looper.getMainLooper())
         val startedActivities = AtomicInteger(0)
         // Handler.postDelayed uses uptimeMillis. Use the same clock for the heartbeat.
         val lastMainResponse = java.util.concurrent.atomic.AtomicLong(SystemClock.uptimeMillis())
