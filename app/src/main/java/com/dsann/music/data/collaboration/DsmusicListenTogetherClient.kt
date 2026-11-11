@@ -1381,6 +1381,42 @@ class DsmusicListenTogetherClient {
         )
     }
 
+    /**
+     * Guests may request play/pause, but never send track, queue, or seek mutations.
+     * The room host/server validates the action and rebroadcasts the authoritative state.
+     */
+    fun sendGuestPlaybackControl(isPlaying: Boolean, positionMs: Long) {
+        if (_role.value != "GUEST" || !isInRoom) return
+        val action = if (isPlaying) "play" else "pause"
+        val position = positionMs.coerceAtLeast(0L)
+        if (localMode) {
+            val writer = localClientWriter ?: return
+            scope.launch {
+                runCatching {
+                    writeLocalLine(
+                        writer,
+                        JSONObject()
+                            .put("type", "playback_control")
+                            .put("action", action)
+                            .put("positionMs", position)
+                    )
+                }.onFailure {
+                    Log.w(TAG, "Could not send local playback control", it)
+                    _message.value = "Playback control could not be sent. Check the room connection."
+                }
+            }
+            return
+        }
+        val payload = ProtoWriter()
+            .string(1, action)
+            .varint(3, position)
+            .apply {
+                if (hasServerClockOffset) varint(11, serverNowMs())
+            }
+            .toByteArray()
+        send("playback_action", payload)
+    }
+
     fun sendHostPlayback(isPlaying: Boolean, track: SharedTrack?, positionMs: Long) {
         if (_role.value != "HOST") return
         if (track != null) lastTrack = track
