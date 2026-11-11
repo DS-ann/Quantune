@@ -2004,6 +2004,14 @@ fun FullPlayer(
                 // Match the visualizer's full-window presentation and immersive system bars.
                 DisposableEffect(dialogWindow) {
                     val controller = dialogWindow?.let { window ->
+                        // Compose Dialog can otherwise retain a content-sized height in
+                        // landscape, leaving fullscreen lyrics confined to roughly half
+                        // of the available player window. Pin both dimensions to the
+                        // activity window so the lyrics overlay spans the complete display.
+                        window.setLayout(
+                            android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                            android.view.WindowManager.LayoutParams.MATCH_PARENT
+                        )
                         WindowCompat.setDecorFitsSystemWindows(window, false)
                         WindowCompat.getInsetsController(window, window.decorView).also {
                             it.systemBarsBehavior =
