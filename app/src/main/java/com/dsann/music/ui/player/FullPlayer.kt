@@ -404,6 +404,11 @@ private fun LandscapePlayerDetailsPane(
     onRetryLyrics: () -> Unit
 ) {
     var showProviderPicker by remember { mutableStateOf(false) }
+    var landscapeLyricsContentReady by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(120L)
+        landscapeLyricsContentReady = true
+    }
     val panelShape = RoundedCornerShape(24.dp)
 
     val context = LocalContext.current
@@ -413,20 +418,11 @@ private fun LandscapePlayerDetailsPane(
     val translationSettings = remember(translationSettingsStore) {
         translationSettingsStore.load()
     }
-    val translationSource = remember(syncedLyrics, plainLyrics) {
-        when {
-            !syncedLyrics.isNullOrEmpty() -> syncedLyrics.joinToString("\n") { line ->
-                line.content.ifBlank { line.words.joinToString("") { word -> word.text } }
-            }
-            !plainLyrics.isNullOrBlank() -> plainLyrics.orEmpty()
-            else -> ""
-        }
-    }
-    val translationKey = remember(currentSong?.id, translationSource, translationSettings) {
-        currentSong?.id?.takeIf { translationSource.isNotBlank() }?.let { songId ->
-            AiLyricsTranslationSession.cacheKey(songId, translationSource, translationSettings)
-        }
-    }
+    // Do not join and hash the entire lyrics payload on the UI thread while the
+    // two-pane player is being created after a rotation.
+    var translationSource by remember { mutableStateOf("") }
+    var translationKey by remember { mutableStateOf<String?>(null) }
+    var translationSourceReady by remember { mutableStateOf(false) }
     val translationCache by AiLyricsTranslationSession.entries.collectAsStateWithLifecycle()
     val cachedTranslation = translationKey?.let { translationCache[it] }
     val translationPreferences = remember(context) {
@@ -438,6 +434,56 @@ private fun LandscapePlayerDetailsPane(
     var translationEnabled by remember(translationSettings.enabled) {
         mutableStateOf(translationSettings.enabled)
     }
+
+    LaunchedEffect(
+        currentSong?.id,
+        syncedLyrics,
+        plainLyrics,
+        translationSettings,
+        translationEnabled
+    ) {
+        translationSourceReady = false
+        translationSource = ""
+        translationKey = null
+        if (!translationEnabled) {
+            translationSourceReady = true
+            return@LaunchedEffect
+        }
+
+        val prepared = withContext(Dispatchers.Default) {
+            val source = when {
+                !syncedLyrics.isNullOrEmpty() -> syncedLyrics.joinToString("\n") { line ->
+                    line.content.ifBlank { line.words.joinToString("") { word -> word.text } }
+                }
+                !plainLyrics.isNullOrBlank() -> plainLyrics.orEmpty()
+                else -> ""
+            }
+            val key = currentSong?.id?.takeIf { source.isNotBlank() }?.let { songId ->
+                AiLyricsTranslationSession.cacheKey(songId, source, translationSettings)
+            }
+            source to key
+        }
+        translationSource = prepared.first
+        translationKey = prepared.second
+        translationSourceReady = true
+    }
+
+    var translatedSyncedLyrics by remember(currentSong?.id) {
+        mutableStateOf<List<LyricLine>?>(null)
+    }
+    LaunchedEffect(currentSong?.id, syncedLyrics, cachedTranslation) {
+        translatedSyncedLyrics = if (cachedTranslation != null) {
+            withContext(Dispatchers.Default) {
+                AiLyricsTranslationSession.mapToSyncedLines(
+                    syncedLyrics,
+                    cachedTranslation.translatedText
+                )
+            }
+        } else {
+            null
+        }
+    }
+
     var showTranslatedLyrics by remember(currentSong?.id, translationKey) {
         mutableStateOf(cachedTranslation != null)
     }
@@ -469,6 +515,7 @@ private fun LandscapePlayerDetailsPane(
         when {
             !translationEnabled -> translationMessage = "Enable translation in Settings → Playback."
             translationBusy -> Unit
+            !translationSourceReady -> translationMessage = "Preparing lyrics for translation…"
             cachedTranslation != null -> showTranslatedLyrics = !showTranslatedLyrics
             currentSong == null || translationSource.isBlank() ->
                 translationMessage = "Load lyrics before translating."
@@ -493,10 +540,6 @@ private fun LandscapePlayerDetailsPane(
             }
         }
     }
-    val translatedSyncedLyrics = cachedTranslation?.let {
-        AiLyricsTranslationSession.mapToSyncedLines(syncedLyrics, it.translatedText)
-    }
-
     Column(
         modifier = modifier
             .background(contentColor.copy(alpha = 0.035f), panelShape)
@@ -566,10 +609,11 @@ private fun LandscapePlayerDetailsPane(
             lyricsError = lyricsError,
             currentPositionProvider = currentPositionProvider,
             playbackSpeedProvider = playbackSpeedProvider,
-            contentReady = true,
+            contentReady = landscapeLyricsContentReady,
             contentColor = contentColor,
             dynamicAccentColor = accentColor,
             lyricsColorStyle = lyricsColorStyle,
+            forceLowCostRendering = true,
             onRetryLyrics = onRetryLyrics,
             onFetchLyrics = onFetchLyrics,
             onSeekTo = onSeekTo,
