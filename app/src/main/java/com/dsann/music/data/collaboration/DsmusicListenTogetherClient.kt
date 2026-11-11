@@ -90,7 +90,7 @@ data class RemotePlaybackState(
  */
 class DsmusicListenTogetherClient {
     companion object {
-        const val DEFAULT_SERVER = "wss://metroserverx.meowery.eu/ws"
+        const val DEFAULT_SERVER = "wss://quantune-listen-server.redmipad1.workers.dev/ws"
         private const val TAG = "DsmusicListenTogether"
         private const val LOCAL_SERVICE_TYPE = "_dsmusic-listen._tcp."
         private const val MAX_CHAT_MESSAGE_LENGTH = 500
