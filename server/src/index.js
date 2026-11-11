@@ -346,7 +346,7 @@ export class Room extends DurableObject {
       if(!action) return this.fail(connectionId,"missing_action","Action is required.");
       const isHost=user.id===s.hostId;
       const queueFields=bytes(f,6);
-      const hasQueue=queueFields.length>0 || f.some(x=>x.n===12 && x.v!==0n) || action==="sync_queue";
+      const hasQueue=queueFields.length>0 || f.some(x=>x.n===12 && x.v!==0n) || action==="sync_queue" || action==="queue_clear";
 
       // Any approved listener may pause or resume the shared session. Only the host
       // can change tracks, seek, or replace the queue; guest payloads cannot smuggle
@@ -377,7 +377,7 @@ export class Room extends DurableObject {
           // Guest play/pause is a transport request, not permission to seek.
           s.position=livePositionBeforeAction;
         }
-      } else if(action==="sync_queue") {
+      } else if(action==="sync_queue" || action==="queue_clear") {
         // Queue edits must not reset a playing room to the position of an old event.
         s.position=livePositionBeforeAction;
       }
