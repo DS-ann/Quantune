@@ -117,6 +117,12 @@ import com.dsann.music.viewmodel.PlayerSharedViewModel
 import com.dsann.music.data.innertube.YouTubeMusic
 import com.dsann.music.data.innertube.OnlineArtistRef
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.material.icons.rounded.ChevronRight
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1250,17 +1256,6 @@ fun FullPlayer(
         val topOffset = if (useWidePlayer) minTopOffset
             else ((screenHeight - albumArtSlotSize) / 2f - 220.dp).coerceAtLeast(minTopOffset)
 
-        var lyricsButtonCenterInRoot by remember { mutableStateOf<Offset?>(null) }
-        val lyricsRevealProgress by animateFloatAsState(
-            targetValue = if (isLyricsModeEnabled) 1f else 0f,
-            animationSpec = tween(durationMillis = 340, easing = FastOutSlowInEasing),
-            label = "LyricsCircularReveal"
-        )
-
-        // Finish the existing reveal before composing populated lyrics. This prevents
-        // the first text-layout / karaoke-geometry pass from competing with the transition.
-        val lyricsContentReady = lyricsRevealProgress >= 1f
-
         val playerControlsContent: @Composable ColumnScope.() -> Unit = {
             // Header Row (Nav controls + collapse) - Symmetric centering
             Row(
@@ -1573,13 +1568,6 @@ fun FullPlayer(
                             contentColor = contentColor,
                             accentColor = dynamicAccentColor,
                             isDark = isDark,
-                            modifier = Modifier.onGloballyPositioned { coordinates ->
-                                val position = coordinates.positionInRoot()
-                                lyricsButtonCenterInRoot = Offset(
-                                    x = position.x + coordinates.size.width / 2f,
-                                    y = position.y + coordinates.size.height / 2f
-                                )
-                            }
                         )
                         "video" -> if (showVideoSwitch) {
                             PillChip(
@@ -1963,33 +1951,52 @@ fun FullPlayer(
                 content = playerControlsContent
             )
         }
-        if (lyricsRevealProgress > 0f) {
-            FullScreenLyricsOverlay(
-                currentSong = uiState.currentSong,
-                syncedLyrics = syncedLyrics,
-                plainLyrics = plainLyrics,
-                isLoading = isLyricsLoading,
-                isPlaying = uiState.isPlaying,
-                lyricsError = lyricsError,
-                currentPositionProvider = currentPositionProvider,
-                playbackSpeedProvider = playbackSpeedProvider,
-                contentReady = lyricsContentReady,
-                backgroundBrush = lyricsBackgroundBrush,
-                revealProgressProvider = { lyricsRevealProgress },
-                revealCenterProvider = { lyricsButtonCenterInRoot },
-                contentColor = lyricsTextColor,
-                contentSecondary = lyricsSecondaryColor,
-                dynamicAccentColor = lyricsAccentColor,
-                lyricsColorStyle = lyricsColorStyle,
-                onRetryLyrics = onRetryLyrics,
-                onFetchLyrics = onFetchLyrics,
-                onSeekTo = onSeekTo,
-                providerResults = providerResults,
-                selectedProvider = selectedProvider,
-                onProviderSelected = onProviderSelected,
-                onDismissLyrics = { onLyricsModeChanged(false) },
-                modifier = Modifier.fillMaxSize()
-            )
+        if (isLyricsModeEnabled) {
+            Dialog(
+                onDismissRequest = { onLyricsModeChanged(false) },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+                // Match the visualizer's full-window presentation and immersive system bars.
+                DisposableEffect(dialogWindow) {
+                    val controller = dialogWindow?.let { window ->
+                        WindowCompat.setDecorFitsSystemWindows(window, false)
+                        WindowCompat.getInsetsController(window, window.decorView).also {
+                            it.systemBarsBehavior =
+                                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                            it.hide(WindowInsetsCompat.Type.systemBars())
+                        }
+                    }
+                    onDispose {
+                        controller?.show(WindowInsetsCompat.Type.systemBars())
+                    }
+                }
+
+                FullScreenLyricsOverlay(
+                    currentSong = uiState.currentSong,
+                    syncedLyrics = syncedLyrics,
+                    plainLyrics = plainLyrics,
+                    isLoading = isLyricsLoading,
+                    isPlaying = uiState.isPlaying,
+                    lyricsError = lyricsError,
+                    currentPositionProvider = currentPositionProvider,
+                    playbackSpeedProvider = playbackSpeedProvider,
+                    contentReady = true,
+                    backgroundBrush = lyricsBackgroundBrush,
+                    contentColor = lyricsTextColor,
+                    contentSecondary = lyricsSecondaryColor,
+                    dynamicAccentColor = lyricsAccentColor,
+                    lyricsColorStyle = lyricsColorStyle,
+                    onRetryLyrics = onRetryLyrics,
+                    onFetchLyrics = onFetchLyrics,
+                    onSeekTo = onSeekTo,
+                    providerResults = providerResults,
+                    selectedProvider = selectedProvider,
+                    onProviderSelected = onProviderSelected,
+                    onDismissLyrics = { onLyricsModeChanged(false) },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
         // --- CUSTOM EMBEDDED SLIDING PLAY QUEUE ---
