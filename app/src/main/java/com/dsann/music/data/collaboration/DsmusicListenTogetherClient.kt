@@ -62,6 +62,14 @@ data class SharedTrack(
 
 data class RoomJoinRequest(val userId: String, val username: String)
 
+data class RoomChatMessage(
+    val id: String,
+    val senderId: String,
+    val senderName: String,
+    val text: String,
+    val timestampMs: Long
+)
+
 data class RemotePlaybackState(
     val sequence: Long,
     val action: String,
@@ -85,6 +93,8 @@ class DsmusicListenTogetherClient {
         const val DEFAULT_SERVER = "wss://metroserverx.meowery.eu/ws"
         private const val TAG = "DsmusicListenTogether"
         private const val LOCAL_SERVICE_TYPE = "_dsmusic-listen._tcp."
+        private const val MAX_CHAT_MESSAGE_LENGTH = 500
+        private const val MAX_ROOM_CHAT_MESSAGES = 100
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -117,7 +127,20 @@ class DsmusicListenTogetherClient {
     private var lastTrack: SharedTrack? = null
     private var lastSharedQueue: List<SharedTrack> = emptyList()
     private var ownUserId: String? = null
+    private var localUserId: String? = null
+    private var localUserName: String? = null
     private var remoteSequence = 0L
+    private val chatLock = Any()
+    private val _chatMessages = MutableStateFlow<List<RoomChatMessage>>(emptyList())
+    val chatMessages: StateFlow<List<RoomChatMessage>> = _chatMessages.asStateFlow()
+    private val _unreadChatCount = MutableStateFlow(0)
+    val unreadChatCount: StateFlow<Int> = _unreadChatCount.asStateFlow()
+
+    val isChatAvailable: Boolean
+        get() = localMode && isInRoom && _connectionState.value == "Connected"
+
+    val currentUserId: String?
+        get() = if (localMode) localUserId else ownUserId
 
     private data class LocalPeer(
         val id: String,
@@ -193,6 +216,8 @@ class DsmusicListenTogetherClient {
         val pin = (100000 + java.security.SecureRandom().nextInt(900000)).toString()
         localMode = true
         localRoomPin = pin
+        localUserId = UUID.randomUUID().toString()
+        localUserName = cleanName
         localServer = server
         _roomCode.value = pin
         _role.value = "HOST"
@@ -436,6 +461,8 @@ class DsmusicListenTogetherClient {
         leaveRoom()
         localMode = true
         localRoomPin = cleanPin
+        localUserId = UUID.randomUUID().toString()
+        localUserName = cleanName
         _joinPending.value = true
         _connectionState.value = "Connecting"
         _message.value = "Connecting directly to the host…"
@@ -455,6 +482,7 @@ class DsmusicListenTogetherClient {
                 localClientWriter = writer
                 writeLocalLine(writer, JSONObject()
                     .put("type", "join")
+                    .put("id", localUserId.orEmpty())
                     .put("name", cleanName)
                     .put("pin", cleanPin)
                 )
@@ -474,6 +502,7 @@ class DsmusicListenTogetherClient {
                 _joinRequests.value = emptyList()
                 _connectionState.value = "Connected"
                 _message.value = "Connected directly to the host on your local network."
+                loadLocalChatHistory(approval.optJSONArray("chatHistory"))
                 approval.optJSONObject("state")?.let(::applyLocalPlayback)
                 while (isActive && !connection.isClosed) {
                     val line = reader.readLine() ?: break
@@ -530,7 +559,7 @@ class DsmusicListenTogetherClient {
                 return
             }
 
-            val id = UUID.randomUUID().toString()
+            val id = request.optString("id").trim().ifBlank { UUID.randomUUID().toString() }
             val name = request.optString("name").trim().ifBlank { "Listener" }.take(32)
             peer = LocalPeer(id, name, peerSocket, reader, writer)
             pendingLocalPeers[id] = peer
@@ -541,7 +570,28 @@ class DsmusicListenTogetherClient {
             while (scope.isActive && !peerSocket.isClosed && localMode) {
                 val line = reader.readLine() ?: break
                 val message = runCatching { JSONObject(line) }.getOrNull() ?: continue
-                if (message.optString("type") == "leave") break
+                when (message.optString("type")) {
+                    "leave" -> break
+                    "chat_send" -> {
+                        // Pending guests cannot send until their request is approved.
+                        if (localPeers[peer.id] !== peer) continue
+                        val text = message.optString("text")
+                            .replace("\u0000", "")
+                            .trim()
+                            .take(MAX_CHAT_MESSAGE_LENGTH)
+                        if (text.isNotBlank()) {
+                            val chat = RoomChatMessage(
+                                id = UUID.randomUUID().toString(),
+                                senderId = peer.id,
+                                senderName = peer.name,
+                                text = text,
+                                timestampMs = System.currentTimeMillis()
+                            )
+                            appendChatMessage(chat, countAsUnread = true)
+                            broadcastLocalMessage(localChatMessageJson(chat))
+                        }
+                    }
+                }
             }
         } catch (error: Exception) {
             Log.d(TAG, "Local listener disconnected: " + error.message, error)
@@ -581,6 +631,100 @@ class DsmusicListenTogetherClient {
             }
             null
         }.getOrNull()
+    }
+
+    private fun localChatMessageJson(message: RoomChatMessage): JSONObject =
+        JSONObject()
+            .put("type", "chat_message")
+            .put("id", message.id)
+            .put("senderId", message.senderId)
+            .put("senderName", message.senderName)
+            .put("text", message.text)
+            .put("timestampMs", message.timestampMs)
+
+    private fun parseLocalChatMessage(json: JSONObject): RoomChatMessage? {
+        val id = json.optString("id").takeIf { it.isNotBlank() } ?: return null
+        val senderId = json.optString("senderId").takeIf { it.isNotBlank() } ?: return null
+        val text = json.optString("text").trim().take(MAX_CHAT_MESSAGE_LENGTH)
+        if (text.isBlank()) return null
+        return RoomChatMessage(
+            id = id,
+            senderId = senderId,
+            senderName = json.optString("senderName").trim().ifBlank { "Listener" }.take(32),
+            text = text,
+            timestampMs = json.optLong("timestampMs").takeIf { it > 0L }
+                ?: System.currentTimeMillis()
+        )
+    }
+
+    private fun appendChatMessage(message: RoomChatMessage, countAsUnread: Boolean) {
+        synchronized(chatLock) {
+            val current = _chatMessages.value
+            if (current.any { it.id == message.id }) return
+            _chatMessages.value = (current + message).takeLast(MAX_ROOM_CHAT_MESSAGES)
+            if (countAsUnread && message.senderId != currentUserId) {
+                _unreadChatCount.value = (_unreadChatCount.value + 1).coerceAtMost(99)
+            }
+        }
+    }
+
+    private fun localChatHistoryJson(): JSONArray = JSONArray().apply {
+        _chatMessages.value.takeLast(MAX_ROOM_CHAT_MESSAGES).forEach { put(localChatMessageJson(it)) }
+    }
+
+    private fun loadLocalChatHistory(array: JSONArray?) {
+        val history = if (array == null) emptyList() else {
+            (0 until array.length()).mapNotNull { index ->
+                array.optJSONObject(index)?.let(::parseLocalChatMessage)
+            }.takeLast(MAX_ROOM_CHAT_MESSAGES)
+        }
+        synchronized(chatLock) {
+            _chatMessages.value = history
+            _unreadChatCount.value = 0
+        }
+    }
+
+    fun markChatRead() {
+        _unreadChatCount.value = 0
+    }
+
+    /**
+     * Sends a message over a room hosted on the same Wi-Fi or hotspot.
+     * The current internet relay does not implement a chat event, so this returns false
+     * for internet rooms instead of claiming that an undeliverable message was sent.
+     */
+    fun sendChatMessage(rawText: String): Boolean {
+        val text = rawText.trim().take(MAX_CHAT_MESSAGE_LENGTH)
+        if (text.isBlank() || !isChatAvailable) return false
+
+        val senderId = localUserId ?: return false
+        val senderName = localUserName ?: "Listener"
+        if (_role.value == "HOST") {
+            val chat = RoomChatMessage(
+                id = UUID.randomUUID().toString(),
+                senderId = senderId,
+                senderName = senderName,
+                text = text,
+                timestampMs = System.currentTimeMillis()
+            )
+            appendChatMessage(chat, countAsUnread = false)
+            scope.launch { broadcastLocalMessage(localChatMessageJson(chat)) }
+            return true
+        }
+
+        val writer = localClientWriter ?: return false
+        scope.launch {
+            runCatching {
+                writeLocalLine(
+                    writer,
+                    JSONObject().put("type", "chat_send").put("text", text)
+                )
+            }.onFailure {
+                Log.w(TAG, "Could not send local room message", it)
+                _message.value = "Message could not be sent. Check the room connection."
+            }
+        }
+        return true
     }
 
     private fun readLocalUsers(array: JSONArray?): List<String> {
@@ -680,6 +824,9 @@ class DsmusicListenTogetherClient {
     private fun handleLocalMessage(message: JSONObject) {
         when (message.optString("type")) {
             "playback" -> applyLocalPlayback(message)
+            "chat_message" -> parseLocalChatMessage(message)?.let { chat ->
+                appendChatMessage(chat, countAsUnread = chat.senderId != currentUserId)
+            }
             "user_joined" -> {
                 val name = message.optString("name")
                 if (name.isNotBlank()) _roomUsers.value = (_roomUsers.value + name).distinct()
@@ -1038,6 +1185,7 @@ class DsmusicListenTogetherClient {
                 .put("type", "approved")
                 .put("pin", localRoomPin.orEmpty())
                 .put("users", users)
+                .put("chatHistory", localChatHistoryJson())
                 .put(
                     "state",
                     localPlaybackMessage(
@@ -1123,6 +1271,12 @@ class DsmusicListenTogetherClient {
         _roomCode.value = null
         _role.value = "NONE"
         ownUserId = null
+        localUserId = null
+        localUserName = null
+        synchronized(chatLock) {
+            _chatMessages.value = emptyList()
+            _unreadChatCount.value = 0
+        }
         _roomUsers.value = emptyList()
         _joinRequests.value = emptyList()
         _remotePlayback.value = null
@@ -1148,6 +1302,12 @@ class DsmusicListenTogetherClient {
         _roomCode.value = null
         _role.value = "NONE"
         ownUserId = null
+        localUserId = null
+        localUserName = null
+        synchronized(chatLock) {
+            _chatMessages.value = emptyList()
+            _unreadChatCount.value = 0
+        }
         _roomUsers.value = emptyList()
         _joinRequests.value = emptyList()
         _remotePlayback.value = null

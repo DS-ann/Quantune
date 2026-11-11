@@ -16,6 +16,14 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -42,11 +50,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.ChatBubbleOutline
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Send
 import com.dsann.music.data.collaboration.DsmusicListenTogetherClient
 import com.dsann.music.data.collaboration.SharedTrack
 import com.dsann.music.data.collaboration.DsmusicListenTogetherSession
@@ -60,6 +72,9 @@ import com.dsann.music.ui.theme.Icon
 import com.dsann.music.ui.theme.OutlinedTextField
 import com.dsann.music.ui.theme.Text
 import com.dsann.music.viewmodel.PlayerSharedViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
@@ -79,6 +94,12 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
     val localAddress by client.localAddress.collectAsStateWithLifecycle()
     val discoveredLocalRooms by client.discoveredLocalRooms.collectAsStateWithLifecycle()
     val localDiscoveryStatus by client.localDiscoveryStatus.collectAsStateWithLifecycle()
+    val chatMessages by client.chatMessages.collectAsStateWithLifecycle()
+    val unreadChatCount by client.unreadChatCount.collectAsStateWithLifecycle()
+
+    var showChatPanel by rememberSaveable { mutableStateOf(false) }
+    var chatDraft by rememberSaveable { mutableStateOf("") }
+    val chatListState = rememberLazyListState()
 
     var networkMode by rememberSaveable { mutableStateOf("SAME_NETWORK") }
     var serverUrl by rememberSaveable { mutableStateOf(DsmusicListenTogetherClient.DEFAULT_SERVER) }
@@ -174,6 +195,15 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
         showJoinRequestDialog = joinRequests.isNotEmpty()
     }
 
+    LaunchedEffect(showChatPanel, chatMessages.size) {
+        if (showChatPanel) {
+            client.markChatRead()
+            if (chatMessages.isNotEmpty()) {
+                chatListState.animateScrollToItem(chatMessages.lastIndex)
+            }
+        }
+    }
+
     LaunchedEffect(networkMode, canStartSession, localNetworkPermissionGranted) {
         if (networkMode == "SAME_NETWORK" && canStartSession) {
             if (localNetworkPermissionGranted) client.discoverLocalRooms(context)
@@ -201,6 +231,46 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                 modifier = Modifier.weight(1f)
             )
             ListenTogetherStatusPill(statusLabel = statusLabel, active = isConnected || joinPending)
+            if (isConnected) {
+                Box {
+                    DsmusicIconButton(
+                        onClick = {
+                            showChatPanel = true
+                            client.markChatRead()
+                        },
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(
+                                DsmusicTheme.colorScheme.surfaceContainerLow,
+                                CircleShape
+                            ),
+                        shape = CircleShape
+                    ) {
+                        Icon(
+                            Icons.Rounded.ChatBubbleOutline,
+                            contentDescription = "Open room messages",
+                            tint = DsmusicTheme.colorScheme.onSurface
+                        )
+                    }
+                    if (unreadChatCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(19.dp)
+                                .clip(CircleShape)
+                                .background(DsmusicTheme.colorScheme.error),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                unreadChatCount.coerceAtMost(99).toString(),
+                                style = DsmusicTheme.typography.labelSmall,
+                                color = DsmusicTheme.colorScheme.onError,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
             DsmusicIconButton(
                 onClick = {
                     if (joinPending) client.cancelJoinRequest()
@@ -737,6 +807,261 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                 }
             }
         }
+
+    if (showChatPanel) {
+        val chatSupported = client.isChatAvailable
+        val currentUserId = client.currentUserId
+        Dialog(
+            onDismissRequest = { showChatPanel = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.42f))
+                        .clickable { showChatPanel = false }
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.82f)
+                        .padding(horizontal = 10.dp, vertical = 10.dp)
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(DsmusicTheme.colorScheme.surface)
+                        .navigationBarsPadding()
+                        .imePadding()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(DsmusicTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Rounded.ChatBubbleOutline,
+                                contentDescription = null,
+                                tint = DsmusicTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(21.dp)
+                            )
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                "Room messages",
+                                style = DsmusicTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = DsmusicTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                if (chatSupported) "${roomUsers.size} listeners · Same Wi-Fi"
+                                else "Internet room",
+                                style = DsmusicTheme.typography.labelSmall,
+                                color = DsmusicTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        DsmusicIconButton(
+                            onClick = { showChatPanel = false },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(
+                                    DsmusicTheme.colorScheme.surfaceContainerHigh,
+                                    CircleShape
+                                )
+                        ) {
+                            Icon(
+                                Icons.Rounded.Close,
+                                contentDescription = "Close messages",
+                                tint = DsmusicTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    if (!chatSupported) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(DsmusicTheme.colorScheme.surfaceContainerLow)
+                                .padding(22.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.ChatBubbleOutline,
+                                    contentDescription = null,
+                                    tint = DsmusicTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(34.dp)
+                                )
+                                Text(
+                                    "Internet chat isn't supported by this room server yet.",
+                                    style = DsmusicTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = DsmusicTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    "The current internet relay has no room-message event. Same-Wi-Fi rooms can use chat.",
+                                    style = DsmusicTheme.typography.bodySmall,
+                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        if (chatMessages.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(DsmusicTheme.colorScheme.surfaceContainerLow),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.ChatBubbleOutline,
+                                        contentDescription = null,
+                                        tint = DsmusicTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(30.dp)
+                                    )
+                                    Text(
+                                        "No messages yet",
+                                        style = DsmusicTheme.typography.titleMedium,
+                                        color = DsmusicTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "Say hello to everyone in the room.",
+                                        style = DsmusicTheme.typography.bodySmall,
+                                        color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                state = chatListState,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(9.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                    vertical = 4.dp
+                                )
+                            ) {
+                                items(chatMessages, key = { it.id }) { message ->
+                                    ListenTogetherChatMessageRow(
+                                        message = message,
+                                        isMine = message.senderId == currentUserId
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = chatDraft,
+                                onValueChange = { chatDraft = it.take(500) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                label = { Text("Message everyone") }
+                            )
+                            DsmusicButton(
+                                onClick = {
+                                    if (client.sendChatMessage(chatDraft)) {
+                                        chatDraft = ""
+                                    }
+                                },
+                                enabled = chatDraft.isNotBlank(),
+                                modifier = Modifier.size(48.dp),
+                                shape = CircleShape,
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Send,
+                                    contentDescription = "Send message",
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ListenTogetherChatMessageRow(
+    message: com.dsann.music.data.collaboration.RoomChatMessage,
+    isMine: Boolean
+) {
+    val colors = DsmusicTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 320.dp)
+                .clip(
+                    RoundedCornerShape(
+                        topStart = 17.dp,
+                        topEnd = 17.dp,
+                        bottomEnd = if (isMine) 5.dp else 17.dp,
+                        bottomStart = if (isMine) 17.dp else 5.dp
+                    )
+                )
+                .background(
+                    if (isMine) colors.primaryContainer else colors.surfaceContainerHigh
+                )
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            if (!isMine) {
+                Text(
+                    message.senderName,
+                    style = DsmusicTheme.typography.labelSmall,
+                    color = colors.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(
+                message.text,
+                style = DsmusicTheme.typography.bodyMedium,
+                color = if (isMine) colors.onPrimaryContainer else colors.onSurface
+            )
+            Text(
+                SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.timestampMs)),
+                modifier = Modifier.align(Alignment.End),
+                style = DsmusicTheme.typography.labelSmall,
+                color = if (isMine) colors.onPrimaryContainer.copy(alpha = 0.72f)
+                    else colors.onSurfaceVariant
+            )
+        }
+    }
 }
 
 @Composable
