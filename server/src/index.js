@@ -131,8 +131,8 @@ function crc32Text(value) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 function playbackStateHash(s) {
-  let value = `${s.track?.id || ""}\\n`;
-  for (const track of s.queue || []) value += `${track.id}\\n`;
+  let value = `${s.track?.id || ""}\n`;
+  for (const track of s.queue || []) value += `${track.id}\n`;
   return crc32Text(value);
 }
 function makeId() { return crypto.randomUUID(); }
