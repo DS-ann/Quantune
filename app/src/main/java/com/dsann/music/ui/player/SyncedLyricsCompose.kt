@@ -1,5 +1,7 @@
 package com.dsann.music.ui.player
 
+import com.dsann.music.CrashDiagnostics
+
 
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -38,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -251,6 +254,14 @@ internal fun SyncedLyricsCompose(
         active = isPlaying && isKaraokeMode,
         maximumFrameRate = karaokeFrameRateCeiling
     )
+
+    SideEffect {
+        CrashDiagnostics.updateLyricsRendering(
+            "Synced lyrics; renderer=${if (useLowCostLyricsRendering) "low-memory text-only" else "full karaoke effects"}; " +
+                "lines=${lyrics.size}; karaoke=$isKaraokeMode; playing=$isPlaying; " +
+                "frameCap=${karaokeFrameRateCeiling?.let { "$it FPS" } ?: "user/device setting"}"
+        )
+    }
 
     // ── Filter out interludes when in karaoke mode ──
     val displayItems = remember(lyrics, isKaraokeMode) {

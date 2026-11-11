@@ -61,6 +61,7 @@ import com.dsann.music.ui.theme.LocalPageTransitionDurationMillis
 import com.dsann.music.ui.theme.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -315,6 +316,15 @@ class MainActivity : AppCompatActivity() {
                 val isLandscapeLayout = configuration.orientation ==
                     android.content.res.Configuration.ORIENTATION_LANDSCAPE
                 var rootTabSelectionVersion by remember { mutableStateOf(0) }
+
+                SideEffect {
+                    CrashDiagnostics.updateBaseScreen(buildString {
+                        append("Root: ${rootBackRoute ?: "unknown"}")
+                        if (isPlayerBackActive) append(" | Full Player")
+                        if (showSongRecognizerSubpage) append(" | Song Recognizer")
+                        if (showListenTogetherSubpage) append(" | Listen Together")
+                    })
+                }
 
                 fun navigateToRootTab(route: String) {
                     rootTabSelectionVersion += 1

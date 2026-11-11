@@ -1,6 +1,7 @@
 package com.dsann.music
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
 import android.content.Intent
@@ -49,11 +50,48 @@ internal object CrashDiagnostics {
     private const val ANR_TIMEOUT_MS = 5_000L
     private const val HEARTBEAT_INTERVAL_MS = 500L
     private const val WATCHDOG_POLL_INTERVAL_MS = 500L
-    private const val MAX_REPORT_CHARS = 160_000
+    private const val MAX_REPORT_CHARS = 320_000
 
     private val installed = AtomicBoolean(false)
     private val anrAlreadyRecorded = AtomicBoolean(false)
     private val fileLock = Any()
+
+    @Volatile private var activeActivityClass: String = "Unknown"
+    @Volatile private var baseScreenContext: String = "Unknown"
+    @Volatile private var overlayScreenContext: String? = null
+    @Volatile private var uiDiagnosticDetails: String = "Not available"
+    @Volatile private var lyricsRenderingDetails: String = "Not available"
+
+    /** Called from the root Compose navigation host; contains labels only, never song data. */
+    fun updateBaseScreen(screen: String) {
+        baseScreenContext = sanitizeDiagnosticValue(screen)
+    }
+
+    /** Tracks transient full-screen UI layers such as the Lyrics overlay. */
+    fun updateOverlayScreen(screen: String?) {
+        overlayScreenContext = screen?.let(::sanitizeDiagnosticValue)
+    }
+
+    /** Records compact UI state useful for reproducing a rendering-related ANR. */
+    fun updateUiDetails(details: String) {
+        uiDiagnosticDetails = sanitizeDiagnosticValue(details)
+    }
+
+    /** Records the actual lyrics drawing path selected for this device. */
+    fun updateLyricsRendering(details: String) {
+        lyricsRenderingDetails = sanitizeDiagnosticValue(details)
+    }
+
+    private fun sanitizeDiagnosticValue(value: String): String =
+        value.replace('\n', ' ').replace('\r', ' ').take(600)
+
+    private fun currentScreenContext(): String = buildString {
+        append(baseScreenContext)
+        overlayScreenContext?.takeIf { it.isNotBlank() }?.let {
+            append(" | Overlay: ")
+            append(it)
+        }
+    }
 
     fun install(application: Application) {
         if (!installed.compareAndSet(false, true)) return
@@ -140,6 +178,7 @@ internal object CrashDiagnostics {
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 startedActivities.incrementAndGet()
+                activeActivityClass = activity.javaClass.name
                 // Give the UI a fresh response window when it becomes visible again.
                 lastMainResponse.set(SystemClock.uptimeMillis())
             }
@@ -148,6 +187,7 @@ internal object CrashDiagnostics {
                 val remaining = startedActivities.decrementAndGet()
                 if (remaining <= 0) {
                     startedActivities.set(0)
+                    activeActivityClass = "None (background)"
                     lastMainResponse.set(SystemClock.uptimeMillis())
                 }
             }
@@ -192,7 +232,13 @@ internal object CrashDiagnostics {
                 try {
                     val mainThread = Thread.getAllStackTraces().keys
                         .firstOrNull { it.name == "main" }
-                    val stackDump = captureAllThreadStacks()
+                    // Capture all threads, then sample the main and graphics threads
+                    // again to see whether a native renderer wait persists.
+                    val stackDump = buildString {
+                        append(captureAllThreadStacks())
+                        appendLine()
+                        append(captureCriticalThreadSamples())
+                    }
                     val report = buildReport(
                         context = application,
                         type = "ANR — APP NOT RESPONDING",
@@ -231,19 +277,141 @@ internal object CrashDiagnostics {
         }
     }
 
+    private fun isGraphicsThread(thread: Thread): Boolean {
+        val name = thread.name.lowercase(Locale.US)
+        return name.contains("render") ||
+            name.contains("hwui") ||
+            name.contains("gpu") ||
+            name.contains("glthread") ||
+            name.contains("graphics") ||
+            name.contains("crrenderer")
+    }
+
+    private fun threadDiagnosticPriority(thread: Thread): Int {
+        val name = thread.name.lowercase(Locale.US)
+        return when {
+            name == "main" -> 0
+            isGraphicsThread(thread) -> 1
+            name.contains("binder") -> 2
+            name.contains("audio") || name.contains("media") || name.contains("exo") -> 3
+            name.contains("okhttp") || name.contains("okio") -> 5
+            else -> 4
+        }
+    }
+
+    private fun appendThreadSnapshot(
+        output: StringBuilder,
+        thread: Thread,
+        stack: Array<StackTraceElement>
+    ) {
+        output.appendLine()
+        output.appendLine(
+            "===== THREAD: ${thread.name} | STATE: ${thread.state} | " +
+                "ID: ${thread.id} | PRIORITY: ${thread.priority} ====="
+        )
+        stack.take(80).forEach { frame -> output.appendLine("\\tat $frame") }
+        if (stack.size > 80) {
+            output.appendLine("... ${stack.size - 80} additional frames omitted.")
+        }
+    }
+
     private fun captureAllThreadStacks(): String {
         val entries = Thread.getAllStackTraces().entries
-            .sortedBy { if (it.key.name == "main") 0 else 1 }
-            .take(48)
+            .sortedWith(
+                compareBy<Map.Entry<Thread, Array<StackTraceElement>>> {
+                    threadDiagnosticPriority(it.key)
+                }.thenBy { it.key.name }
+            )
+            .take(64)
 
         return buildString {
-            appendLine("Main thread is listed first. Stack traces are captured at the time the watchdog detected the stall.")
+            appendLine(
+                "Thread stacks are ordered with main first, followed by graphics, " +
+                    "Binder, media and remaining workers. Up to 64 threads are included."
+            )
+            val graphicsFound = entries.any { isGraphicsThread(it.key) }
+            appendLine("Java graphics/render thread present in this snapshot: $graphicsFound")
             entries.forEach { entry ->
-                appendLine()
-                appendLine("===== THREAD: ${entry.key.name} | STATE: ${entry.key.state} =====")
-                entry.value.forEach { frame -> appendLine("\tat $frame") }
+                appendThreadSnapshot(this, entry.key, entry.value)
             }
         }
+    }
+
+    /**
+     * Sample the main and graphics threads three times. Repeated identical native
+     * frames help identify a persistent RenderThread/driver synchronization wait.
+     */
+    private fun captureCriticalThreadSamples(): String = buildString {
+        repeat(3) { sampleIndex ->
+            val stacks = Thread.getAllStackTraces()
+            val critical = stacks.entries
+                .filter { it.key.name == "main" || isGraphicsThread(it.key) }
+                .sortedWith(
+                    compareBy<Map.Entry<Thread, Array<StackTraceElement>>> {
+                        if (it.key.name == "main") 0 else 1
+                    }.thenBy { it.key.name }
+                )
+
+            appendLine()
+            appendLine(
+                "===== MAIN / GRAPHICS THREAD SAMPLE ${sampleIndex + 1}/3 " +
+                    "(approximately ${sampleIndex * 140} ms after detection) ====="
+            )
+            if (critical.isEmpty()) {
+                appendLine("No main or Java graphics thread stack was available.")
+            } else {
+                critical.take(12).forEach { entry ->
+                    appendThreadSnapshot(this, entry.key, entry.value)
+                }
+            }
+
+            if (sampleIndex < 2) {
+                try {
+                    Thread.sleep(140L)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
+                }
+            }
+        }
+    }
+
+    private fun appendRuntimeDiagnostics(output: StringBuilder, context: Context) {
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        val memoryInfo = ActivityManager.MemoryInfo()
+        val memoryAvailable = runCatching {
+            activityManager?.getMemoryInfo(memoryInfo)
+            activityManager != null
+        }.getOrDefault(false)
+
+        val runtime = Runtime.getRuntime()
+        val heapUsed = (runtime.totalMemory() - runtime.freeMemory()).coerceAtLeast(0L)
+        fun mib(bytes: Long): String = String.format(
+            Locale.US,
+            "%.1f MiB",
+            bytes.toDouble() / (1024.0 * 1024.0)
+        )
+
+        output.appendLine("Activity: $activeActivityClass")
+        output.appendLine("UI context: ${currentScreenContext()}")
+        output.appendLine("UI details: $uiDiagnosticDetails")
+        output.appendLine("Lyrics rendering details: $lyricsRenderingDetails")
+        output.appendLine("Device hardware: ${Build.HARDWARE}; board: ${Build.BOARD}; device code: ${Build.DEVICE}")
+        if (memoryAvailable) {
+            output.appendLine(
+                "System RAM: total=${mib(memoryInfo.totalMem)}, available=${mib(memoryInfo.availMem)}, " +
+                    "threshold=${mib(memoryInfo.threshold)}, lowMemory=${memoryInfo.lowMemory}"
+            )
+            output.appendLine("System low-RAM device flag: ${activityManager?.isLowRamDevice ?: "unknown"}")
+        } else {
+            output.appendLine("System RAM snapshot: unavailable")
+        }
+        output.appendLine(
+            "App Java heap: used=${mib(heapUsed)}, allocated=${mib(runtime.totalMemory())}, " +
+                "max=${mib(runtime.maxMemory())}"
+        )
+        output.appendLine("Process CPU time: ${Process.getElapsedCpuTime()} ms")
+        output.appendLine("Build fingerprint: ${Build.FINGERPRINT}")
     }
 
     private fun buildReport(
@@ -276,6 +444,7 @@ internal object CrashDiagnostics {
             appendLine("ABI: ${Build.SUPPORTED_ABIS?.joinToString().orEmpty()}")
             appendLine("Process ID: ${Process.myPid()}")
             appendLine("Thread: $threadName")
+            appendRuntimeDiagnostics(this, context)
             appendLine()
             appendLine("===== FULL ERROR / THREAD TRACE =====")
             append(body)

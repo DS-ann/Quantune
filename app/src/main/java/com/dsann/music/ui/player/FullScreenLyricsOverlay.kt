@@ -1,5 +1,7 @@
 package com.dsann.music.ui.player
 
+import com.dsann.music.CrashDiagnostics
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -58,6 +60,7 @@ import com.dsann.music.ui.theme.observeKey
 import android.content.SharedPreferences
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -428,6 +431,29 @@ internal fun FullScreenLyricsOverlay(
     val useLowCostReveal = remember(context) {
         isLowCostLyricsDevice(context)
     }
+
+    DisposableEffect(Unit) {
+        CrashDiagnostics.updateOverlayScreen("Full-screen Lyrics")
+        onDispose {
+            CrashDiagnostics.updateOverlayScreen(null)
+            CrashDiagnostics.updateUiDetails("Not available")
+            CrashDiagnostics.updateLyricsRendering("Not available")
+        }
+    }
+    SideEffect {
+        val revealPercent = (revealProgressProvider().coerceIn(0f, 1f) * 100f).toInt()
+        CrashDiagnostics.updateUiDetails(
+            "Lyrics overlay; reveal=${revealPercent}%; contentReady=$contentReady; " +
+                "loading=$isLoading; playing=$isPlaying; synced=${!syncedLyrics.isNullOrEmpty()}; " +
+                "plain=${!plainLyrics.isNullOrBlank()}; providers=${providerResults.size}; " +
+                "revealPath=${if (useLowCostReveal) "alpha graphics layer" else "circular clip path"}"
+        )
+        CrashDiagnostics.updateLyricsRendering(
+            "Overlay reveal path=${if (useLowCostReveal) "low-cost alpha layer" else "circular clip path"}; " +
+                "lyrics content=${when { !syncedLyrics.isNullOrEmpty() -> "synced"; !plainLyrics.isNullOrBlank() -> "plain"; else -> "none/loading" }}"
+        )
+    }
+
     val translationScope = rememberCoroutineScope()
     val translationSettingsStore = remember(context) { AiLyricsTranslationSettingsStore(context) }
     val featureSecretStore = remember(context) { EncryptedFeatureSecretStore(context) }
