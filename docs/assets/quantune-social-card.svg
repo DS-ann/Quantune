@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b0a13"/><stop offset=".55" stop-color="#19152b"/><stop offset="1" stop-color="#102329"/></linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#d7c8ff"/><stop offset=".52" stop-color="#a78bfa"/><stop offset="1" stop-color="#6ee7e0"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#7b5be6" stop-opacity=".34"/><stop offset="1" stop-color="#7b5be6" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="940" cy="310" r="420" fill="url(#glow)"/>
+  <g opacity=".19" fill="none" stroke="#cfc2ff"><ellipse cx="930" cy="315" rx="330" ry="165" transform="rotate(-25 930 315)"/><ellipse cx="930" cy="315" rx="270" ry="135" transform="rotate(-25 930 315)"/></g>
+  <g transform="translate(90 112)">
+    <rect width="88" height="88" rx="24" fill="#201a37" stroke="#8670c8"/>
+    <path d="M21 52c20-37 30 22 46-12M23 65c15-22 26 12 43-7" fill="none" stroke="url(#accent)" stroke-width="7" stroke-linecap="round"/>
+    <path d="M22 35c11-18 20-1 30-14 11 18 18-3 27 14" fill="none" stroke="#6ee7e0" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <text x="90" y="300" fill="#f7f4ff" font-family="Inter,Arial,sans-serif" font-size="104" font-weight="800" letter-spacing="-7">Quantune</text>
+  <text x="95" y="380" fill="url(#accent)" font-family="Inter,Arial,sans-serif" font-size="43" font-weight="700">Discover. Sync. Play.</text>
+  <text x="95" y="454" fill="#b6b1c6" font-family="Inter,Arial,sans-serif" font-size="25">Music discovery · Synchronized lyrics · Listen Together</text>
+  <text x="95" y="520" fill="#89839b" font-family="Inter,Arial,sans-serif" font-size="20">Open-source Android music app · Android 6.0+</text>
+</svg>
