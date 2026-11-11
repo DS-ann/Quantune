@@ -62,7 +62,10 @@ import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.ChatBubbleOutline
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.rounded.VpnKey
 import com.dsann.music.data.collaboration.DsmusicListenTogetherClient
 import com.dsann.music.data.collaboration.SharedTrack
 import com.dsann.music.data.collaboration.DsmusicListenTogetherSession
@@ -682,18 +685,31 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                     if (showLocalJoinPin && selectedLocalRoomEndpoint != null) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            OutlinedTextField(
-                                value = localJoinPin,
-                                onValueChange = { localJoinPin = it.filter(Char::isDigit).take(6) },
+                            Column(
                                 modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                label = { Text("6-digit room PIN") }
-                            )
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    "6-digit room PIN",
+                                    style = DsmusicTheme.typography.labelMedium,
+                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                )
+                                OutlinedTextField(
+                                    value = localJoinPin,
+                                    onValueChange = { localJoinPin = it.filter(Char::isDigit).take(6) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+                            }
                             if (localJoinPin.isNotBlank()) {
-                                ListenTogetherCopyButton("Copy room PIN") {
+                                ListenTogetherCopyButton(
+                                    "Copy room PIN",
+                                    modifier = Modifier.align(Alignment.Bottom),
+                                    buttonSize = 40.dp
+                                ) {
                                     copyValue(localJoinPin, "Room PIN")
                                 }
                             }
@@ -712,19 +728,32 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                     if (showManualLocalAddress) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            OutlinedTextField(
-                                value = localHostAddress,
-                                onValueChange = { localHostAddress = it.trim().take(80) },
+                            Column(
                                 modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                label = { Text("Host address (IP:port)") },
-                                placeholder = { Text("192.168.1.10:42173") }
-                            )
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    "Host address (IP:port)",
+                                    style = DsmusicTheme.typography.labelMedium,
+                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                )
+                                OutlinedTextField(
+                                    value = localHostAddress,
+                                    onValueChange = { localHostAddress = it.trim().take(80) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    placeholder = { Text("192.168.1.10:42173") }
+                                )
+                            }
                             if (localHostAddress.isNotBlank()) {
-                                ListenTogetherCopyButton("Copy host address") {
+                                ListenTogetherCopyButton(
+                                    "Copy host address",
+                                    modifier = Modifier.align(Alignment.Bottom),
+                                    buttonSize = 40.dp
+                                ) {
                                     copyValue(localHostAddress, "Host address")
                                 }
                             }
@@ -763,30 +792,82 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Create an internet room") }
 
-                    Text(
-                        if (showInternetJoinCode) "CLOSE ROOM CODE" else "JOIN WITH A ROOM CODE",
+                    Row(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(15.dp))
+                            .background(DsmusicTheme.colorScheme.surfaceContainerLow)
                             .clickable { showInternetJoinCode = !showInternetJoinCode }
-                            .padding(vertical = 5.dp, horizontal = 2.dp),
-                        style = DsmusicTheme.typography.labelMedium,
-                        color = DsmusicTheme.colorScheme.primary
-                    )
+                            .padding(horizontal = 12.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(11.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(13.dp))
+                                .background(DsmusicTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Rounded.VpnKey,
+                                contentDescription = null,
+                                tint = DsmusicTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(21.dp)
+                            )
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                if (showInternetJoinCode) "Enter room code" else "Join with a room code",
+                                style = DsmusicTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = DsmusicTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                if (showInternetJoinCode) "Type the code shared by the host."
+                                else "Have a code from the host? Tap here to join.",
+                                style = DsmusicTheme.typography.bodySmall,
+                                color = DsmusicTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            if (showInternetJoinCode) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                            contentDescription = if (showInternetJoinCode) "Hide room code" else "Show room code",
+                            tint = DsmusicTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                     if (showInternetJoinCode) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.Bottom
                         ) {
-                            OutlinedTextField(
-                                value = joinCode,
-                                onValueChange = { joinCode = it.uppercase().filter(Char::isLetterOrDigit).take(12) },
+                            Column(
                                 modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                label = { Text("Room code") }
-                            )
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    "Room code",
+                                    style = DsmusicTheme.typography.labelMedium,
+                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                )
+                                OutlinedTextField(
+                                    value = joinCode,
+                                    onValueChange = { joinCode = it.uppercase().filter(Char::isLetterOrDigit).take(12) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+                            }
                             if (joinCode.isNotBlank()) {
-                                ListenTogetherCopyButton("Copy room code") {
+                                ListenTogetherCopyButton(
+                                    "Copy room code",
+                                    modifier = Modifier.align(Alignment.Bottom),
+                                    buttonSize = 40.dp
+                                ) {
                                     copyValue(joinCode.uppercase(), "Room code")
                                 }
                             }
@@ -800,7 +881,9 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                                         actionMessage = error.message ?: "Could not join the room."
                                     }
                                 },
-                                enabled = canStartSession && joinCode.isNotBlank() && displayName.isNotBlank()
+                                enabled = canStartSession && joinCode.isNotBlank() && displayName.isNotBlank(),
+                                modifier = Modifier.align(Alignment.Bottom).height(46.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp)
                             ) { Text("Join") }
                         }
                     }
@@ -1089,16 +1172,25 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalAlignment = Alignment.Bottom,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            OutlinedTextField(
-                                value = chatDraft,
-                                onValueChange = { chatDraft = it.take(500) },
+                            Column(
                                 modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                label = { Text("Message everyone") }
-                            )
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    "Message everyone",
+                                    style = DsmusicTheme.typography.labelMedium,
+                                    color = DsmusicTheme.colorScheme.onSurfaceVariant
+                                )
+                                OutlinedTextField(
+                                    value = chatDraft,
+                                    onValueChange = { chatDraft = it.take(500) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+                            }
                             DsmusicButton(
                                 onClick = {
                                     if (client.sendChatMessage(chatDraft)) {
@@ -1106,7 +1198,7 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
                                     }
                                 },
                                 enabled = chatDraft.isNotBlank(),
-                                modifier = Modifier.size(48.dp),
+                                modifier = Modifier.align(Alignment.Bottom).size(48.dp),
                                 shape = CircleShape,
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                             ) {
@@ -1127,12 +1219,14 @@ fun ListenTogetherScreen(viewModel: PlayerSharedViewModel, onBack: () -> Unit) {
 @Composable
 private fun ListenTogetherCopyButton(
     contentDescription: String,
+    modifier: Modifier = Modifier,
+    buttonSize: androidx.compose.ui.unit.Dp = 32.dp,
     onClick: () -> Unit
 ) {
     DsmusicIconButton(
         onClick = onClick,
-        modifier = Modifier
-            .size(32.dp)
+        modifier = modifier
+            .size(buttonSize)
             .background(
                 DsmusicTheme.colorScheme.surfaceContainerLow,
                 CircleShape
