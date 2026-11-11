@@ -341,20 +341,39 @@ export class Room extends DurableObject {
       await this.send(connectionId,"sync_state",syncState(s)); return;
     }
     if(type==="playback_action") {
-      if(!user || user.id!==s.hostId) return this.fail(connectionId,"not_host","Only the host can control playback.");
+      if(!user) return this.fail(connectionId,"not_in_room","You are not an active room member.");
       const f=decodeFields(payload), action=str(f,1), trackField=one(f,4);
       if(!action) return this.fail(connectionId,"missing_action","Action is required.");
+      const isHost=user.id===s.hostId;
+      const queueFields=bytes(f,6);
+      const hasQueue=queueFields.length>0 || f.some(x=>x.n===12 && x.v!==0n) || action==="sync_queue";
+
+      // Any approved listener may pause or resume the shared session. Only the host
+      // can change tracks, seek, or replace the queue; guest payloads cannot smuggle
+      // track/queue mutations alongside a play/pause request.
+      if(!isHost) {
+        const hasTrackOrQueueMutation=!!trackField?.b || queueFields.length>0 ||
+          f.some(x=>(x.n===7 || x.n===12) && x.v!==0n);
+        if(!["play","pause"].includes(action) || hasTrackOrQueueMutation) {
+          return this.fail(connectionId,"not_host","Only the host can skip, seek, or edit the shared queue. Everyone can play or pause.");
+        }
+      }
+
       const now=Date.now();
-      if(trackField?.b) s.track=decodeTrack(trackField.b);
-      const queueFields=bytes(f,6), hasQueue=queueFields.length>0 || f.some(x=>x.n===12 && x.v!==0n) || action==="sync_queue";
-      if(hasQueue) s.queue=queueFields.map(decodeTrack).filter(Boolean);
+      if(isHost && trackField?.b) s.track=decodeTrack(trackField.b);
+      if(isHost && hasQueue) s.queue=queueFields.map(decodeTrack).filter(Boolean);
       if(action==="play") s.playing=true;
       else if(action==="pause") s.playing=false;
       else if(action==="change_track") s.playing=false;
       else if(action==="seek") s.position=num(f,3);
-      else if(action==="sync_queue" || action==="queue_clear") s.queue=queueFields.map(decodeTrack).filter(Boolean);
-      if(action==="play" || action==="pause" || action==="seek" || action==="change_track") s.position=num(f,3);
-      if(str(f,7)) s.queueTitle=clean(str(f,7),120);
+      else if(isHost && (action==="sync_queue" || action==="queue_clear")) s.queue=queueFields.map(decodeTrack).filter(Boolean);
+      if(action==="play" || action==="pause" || action==="seek" || action==="change_track") {
+        const requestedPosition=Math.max(0,num(f,3,s.position));
+        s.position=(!isHost && s.track?.durationMs>0)
+          ? Math.min(requestedPosition,s.track.durationMs)
+          : requestedPosition;
+      }
+      if(isHost && str(f,7)) s.queueTitle=clean(str(f,7),120);
       s.lastUpdate=now; s.revision++;
       await this.save();
       const out=[fieldString(1,action),fieldString(2,str(f,2)),fieldInt(3,s.position)];
