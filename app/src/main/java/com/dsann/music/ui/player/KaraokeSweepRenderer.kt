@@ -220,7 +220,10 @@ internal fun KaraokeSweepText(
     outlineWidthPx: Float = 0f,
     highlightShadow: androidx.compose.ui.graphics.Shadow? = null
 ) {
-    val layoutState = remember(text, style, maxLines) {
+    // Brush, shadow and color changes do not alter glyph geometry. Keep the measured
+    // layout alive across paint-only recompositions; Text replaces it via onTextLayout
+    // only when its actual layout changes.
+    val layoutState = remember(text, maxLines) {
         mutableStateOf<TextLayoutResult?>(null)
     }
     val spans = remember(text, words, wordOffset) {
