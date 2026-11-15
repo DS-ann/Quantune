@@ -259,9 +259,9 @@ internal fun PlayerLyricsContent(
                 lyricsColorStyle = lyricsColorStyle,
                 gradientFontBorderWidth = gradientFontBorderWidth,
                 centerLineLyrics = centerLineLyrics,
-                // Landscape lyrics have a shallow viewport whether shown in the
-                // side panel or the expanded dialog. Avoid GPU mask compositing there.
-                forceLowCostRendering = forceLowCostRendering || compactLandscapeLyrics,
+                // Landscape also uses the cached direct-draw karaoke renderer;
+                // only an explicit caller request may select the static fallback.
+                forceLowCostRendering = forceLowCostRendering,
                 modifier = Modifier.fillMaxSize()
             )
             !plainLyrics.isNullOrBlank() -> {
