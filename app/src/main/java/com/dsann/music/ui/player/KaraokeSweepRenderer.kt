@@ -1,6 +1,7 @@
 package com.dsann.music.ui.player
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -210,7 +211,7 @@ internal fun KaraokeSweepText(
     text: String,
     words: List<LyricWord>,
     wordOffset: Int,
-    currentPositionProvider: () -> Int,
+    positionState: State<Int>,
     style: TextStyle,
     baseColor: Color,
     highlightBrush: Brush,
@@ -253,7 +254,7 @@ internal fun KaraokeSweepText(
 
                 val sungOffset = calculateSungTextOffset(
                     spans = spans,
-                    positionMs = currentPositionProvider().toLong()
+                    positionMs = positionState.value.toLong()
                 )
                 if (sungOffset <= 0f) return@onDrawWithContent
 
