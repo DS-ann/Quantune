@@ -233,8 +233,8 @@ internal fun SyncedLyricsCompose(
     }
     val isLandscape = LocalConfiguration.current.orientation ==
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
-    // The cached direct-draw renderer is the normal path on every device. Only compact
-    // landscape callers explicitly request the simpler static text presentation.
+    // Cached direct drawing is the normal renderer on every device. Compact landscape
+    // callers may explicitly request the simpler static text presentation.
     val useLowCostLyricsRendering = forceLowCostRendering
 
     val currentView = LocalView.current
@@ -272,8 +272,8 @@ internal fun SyncedLyricsCompose(
             currentPositionProvider
         }
     }
-    // The shared animation clock publishes only on display VSYNC. Keep the selected
-    // global frame rate, with a conservative 30 FPS ceiling on constrained devices.
+    // The shared clock publishes on display VSYNC and respects the global frame-rate
+    // preference. Constrained devices retain a conservative 30 FPS ceiling.
     val karaokeFrameRateCeiling = if (forceLowCostRendering || isLowCostLyricsDevice(context)) 30 else null
     val karaokeFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
         active = isPlaying && isKaraokeMode,
@@ -641,6 +641,259 @@ private fun LyricLineItem(
                 maxLines = Int.MAX_VALUE
             )
             if (!line.backgroundContent.isNullOrBlank()) {
+                Text(
+                    text = line.backgroundContent,
+                    style = DsmusicTheme.typography.bodySmall.copy(
+                        fontFamily = lowCostFont,
+                        fontSize = 18.sp * textScale,
+                        lineHeight = 26.sp * textScale,
+                        textAlign = lowCostAlignment,
+                        shadow = null,
+                        brush = null
+                    ),
+                    color = lowCostColor.copy(alpha = if (isActive) 0.68f else 0.32f),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    maxLines = 2
+                )
+            }
+        }
+        return
+    }
+    // Keep the same 1 dp gradient font contour in the fullscreen renderer.
+    val lineSyncedGradientBorderWidth = gradientFontBorderWidth
+    val scale = 1.0f
+
+    // The active synced line must be fully legible on the exact frame its timestamp
+    // becomes active. Animating its alpha from the previous line's dim value made
+    // ordinary line-synced lyrics look like a delayed/loading word highlight.
+    val alpha = when {
+        isActive -> 1f
+        isPast -> 0.60f
+        else -> 0.38f
+    }
+
+
+    val bracketMatch = remember(line.content) {
+        Regex("""^(.*?)\s*([({\[].+?[)}\]])\s*$""").find(line.content)
+    }
+    
+    val hasValidMainContent = remember(bracketMatch) {
+        bracketMatch != null && bracketMatch.groupValues[1].isNotBlank()
+    }
+
+    val mainContent = remember(line.content, bracketMatch, hasValidMainContent) {
+        if (hasValidMainContent) {
+            bracketMatch!!.groupValues[1].trimEnd() + " "
+        } else {
+            line.content + " "
+        }
+    }
+    
+    val bracketContent = remember(line.content, bracketMatch, hasValidMainContent) {
+        if (hasValidMainContent) {
+            bracketMatch!!.groupValues[2] + " "
+        } else {
+            null
+        }
+    }
+    
+    val bracketStartIndex = remember(line.content, bracketMatch, hasValidMainContent) {
+        if (hasValidMainContent) bracketMatch!!.groups[2]?.range?.first ?: -1 else -1
+    }
+
+    val lyricFontFamily = when (fontFamilyChoice) {
+        "Sans" -> FontFamily.SansSerif
+        "Serif" -> FontFamily.Serif
+        "Mono" -> FontFamily.Monospace
+        else -> GoogleSansFlexNonRounded
+    }
+    val lyricsBrush = if (lyricsColorStyle == "Home Studio Gradient") {
+        dsmusicHomeStudioGradientBrush()
+    } else null
+    val renderedColor = when (lyricsColorStyle) {
+        "White" -> Color.White
+        // UI Matching uses the app accent for the active lyric line, so it remains
+        // visually distinct from the explicit pure-white mode on dark themes.
+        "UI Matching" -> accentColor
+        else -> contentColor
+    }
+    // Keep the original dim treatment for non-highlighted lyric lines.
+    val dimColor = renderedColor.copy(alpha = 0.35f)
+    val litColor = renderedColor
+
+    val commonModifier = Modifier
+        .fillMaxWidth()
+        .drawBehind {
+            // Keep only the slim leading indicator. The lyric row itself stays
+            // completely transparent so the player artwork/background remains visible.
+            if (isActive && !isKaraoke) {
+                val railHeight = (size.height - 20.dp.toPx()).coerceAtLeast(0f)
+                drawRoundRect(
+                    color = accentColor.copy(alpha = 0.98f),
+                    topLeft = androidx.compose.ui.geometry.Offset(5.dp.toPx(), 10.dp.toPx()),
+                    size = androidx.compose.ui.geometry.Size(3.dp.toPx(), railHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                        1.5.dp.toPx(),
+                        1.5.dp.toPx()
+                    )
+                )
+            }
+        }
+        .clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onClick
+        )
+        .padding(
+            start = if (centerLineLyrics) 24.dp else 28.dp,
+            end = 24.dp,
+            top = 12.dp,
+            bottom = 12.dp
+        )
+        .graphicsLayer {
+            this.alpha = alpha
+            scaleX = scale
+            scaleY = scale
+            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+
+            val driftProgress = if (isActive && isKaraoke) {
+                val pos = currentPositionProvider()
+                val duration = (lineEndMs - lineStartMs).coerceAtLeast(1)
+                ((pos - lineStartMs).toFloat() / duration).coerceIn(0f, 1f)
+            } else 0f
+
+            val driftDp = if (isActive && isKaraoke) {
+                val eased = easeOutCubic(driftProgress)
+                (-2f * eased)
+            } else 0f
+
+            translationY = driftDp * density
+        }
+
+    // In the immersive fullscreen player, all lyric lines use a fixed horizontal
+    // centre. The inline player continues to respect the saved lyrics alignment.
+    val lineAlignment = if (centerLineLyrics) {
+        TextAlign.Center
+    } else {
+        when (alignment) {
+            "Left" -> TextAlign.Start
+            "Center" -> TextAlign.Center
+            else -> if (line.isRightAligned) TextAlign.End else TextAlign.Start
+        }
+    }
+    // Ordinary line-synced lyrics are rendered once, without a backdrop or
+    // glow layer. Karaoke keeps its separate word-timing overlay below.
+    val mainTextStyle = DsmusicTheme.typography.headlineMedium.copy(
+        brush = lyricsBrush,
+        fontFamily = lyricFontFamily,
+        fontSize = 38.sp * textScale,
+        fontWeight = if (isActive && !isKaraoke) FontWeight.ExtraBold else FontWeight.Bold,
+        lineHeight = 50.sp * textScale,
+        textAlign = lineAlignment,
+        shadow = if (isActive && !isKaraoke && lyricsColorStyle == "White") {
+            androidx.compose.ui.graphics.Shadow(
+                color = Color.White.copy(alpha = 0.9f),
+                offset = androidx.compose.ui.geometry.Offset(0f, 0f),
+                blurRadius = 8f
+            )
+        } else null,
+        platformStyle = PlatformTextStyle(includeFontPadding = true)
+    )
+
+    val bracketTextStyle = DsmusicTheme.typography.bodyLarge.copy(
+        brush = lyricsBrush,
+        fontFamily = GoogleSansFlexNonRounded,
+        fontSize = 20.sp * textScale,
+        fontWeight = FontWeight.Medium,
+        lineHeight = 28.sp * textScale,
+        textAlign = lineAlignment,
+        platformStyle = PlatformTextStyle(includeFontPadding = true)
+    )
+
+    val gradientOutlineWidthPx = with(LocalDensity.current) {
+        gradientFontBorderWidth.toPx()
+    }
+
+    Column(modifier = commonModifier) {
+        // ── Main Text Box ──
+        // One text layout is reused for the dim line and the animated sung prefix.
+        Box(modifier = (if (centerLineLyrics) Modifier.fillMaxWidth() else Modifier)
+            .padding(horizontal = 6.dp)) {
+            if (isKaraoke && isActive) {
+                KaraokeSweepText(
+                    text = mainContent,
+                    words = line.words,
+                    wordOffset = 0,
+                    currentPositionProvider = currentPositionProvider,
+                    style = mainTextStyle,
+                    baseColor = dimColor,
+                    highlightBrush = lyricsBrush ?: SolidColor(litColor),
+                    highlightShadow = androidx.compose.ui.graphics.Shadow(
+                        color = if (lyricsColorStyle == "White") {
+                            Color.White.copy(alpha = 0.9f)
+                        } else {
+                            accentColor.copy(alpha = 0.5f)
+                        },
+                        offset = androidx.compose.ui.geometry.Offset.Zero,
+                        blurRadius = if (lyricsColorStyle == "White") 8f else 7f
+                    ),
+                    outlineWidthPx = if (lyricsBrush != null) gradientOutlineWidthPx else 0f
+                )
+            } else {
+                LyricsText(
+                    text = mainContent,
+                    style = if (isKaraoke || !isActive) mainTextStyle.copy(brush = null) else mainTextStyle,
+                    color = if (isKaraoke) dimColor else if (isActive && lyricsBrush != null) Color.Unspecified
+                        else if (isActive) renderedColor else dimColor,
+                    maxLines = Int.MAX_VALUE,
+                    outlineWidth = lineSyncedGradientBorderWidth,
+                    textAlign = lineAlignment,
+                    fillTextWidth = centerLineLyrics
+                )
+            }
+        }
+
+        // ── Bracket Text Box ──
+        if (bracketContent != null) {
+            Box(modifier = (if (centerLineLyrics) Modifier.fillMaxWidth() else Modifier)
+                .padding(start = 6.dp, end = 6.dp, top = 4.dp)) {
+                if (isKaraoke && isActive) {
+                    KaraokeSweepText(
+                        text = bracketContent,
+                        words = line.words,
+                        wordOffset = bracketStartIndex,
+                        currentPositionProvider = currentPositionProvider,
+                        style = bracketTextStyle,
+                        baseColor = dimColor,
+                        highlightBrush = lyricsBrush ?: SolidColor(litColor),
+                        maxLines = 1,
+                        highlightShadow = androidx.compose.ui.graphics.Shadow(
+                            color = if (lyricsColorStyle == "White") {
+                                Color.White.copy(alpha = 0.9f)
+                            } else {
+                                accentColor.copy(alpha = 0.4f)
+                            },
+                            offset = androidx.compose.ui.geometry.Offset.Zero,
+                            blurRadius = if (lyricsColorStyle == "White") 8f else 7f
+                        ),
+                        outlineWidthPx = if (lyricsBrush != null) gradientOutlineWidthPx else 0f
+                    )
+                } else {
+                    LyricsText(
+                        text = bracketContent,
+                        style = if (isKaraoke || !isActive) bracketTextStyle.copy(brush = null) else bracketTextStyle,
+                        color = if (isKaraoke) dimColor else if (isActive && lyricsBrush != null) Color.Unspecified
+                            else if (isActive) renderedColor else dimColor,
+                        maxLines = 1,
+                        outlineWidth = lineSyncedGradientBorderWidth,
+                        textAlign = lineAlignment,
+                        fillTextWidth = centerLineLyrics
+                    )
+                }
+            }
+        }
+
+        if (!line.backgroundContent.isNullOrBlank()) {
             val backgroundText = line.backgroundContent + " "
             val backgroundStyle = bracketTextStyle.copy(
                 fontSize = 18.sp,
