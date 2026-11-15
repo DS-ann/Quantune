@@ -317,6 +317,7 @@ internal fun SyncedLyricsCompose(
         karaokePlaybackClock.reset(initialPosition)
         lyricClock.intValue = initialPosition
 
+        var previousVsyncNanos = Long.MIN_VALUE
         while (true) {
             if (!isPlaying) {
                 // Keep paused seeks responsive without running an idle display-frame loop.
@@ -345,30 +346,31 @@ internal fun SyncedLyricsCompose(
                 if (lyricClock.intValue != actualMs) lyricClock.intValue = actualMs
                 previousPosition = actualMs
             } else {
-                withFrameNanos {
-                    val frameNanos = karaokeFrameTimeNanos.value
-                    if (frameNanos <= 0L) return@withFrameNanos
+                // Consume the timestamp emitted by the shared VSYNC clock itself. This
+                // avoids a second frame loop and ensures the configured FPS cap is honoured.
+                val frameNanos = snapshotFlow { karaokeFrameTimeNanos.value }
+                    .first { it > 0L && it > previousVsyncNanos }
+                previousVsyncNanos = frameNanos
 
-                    val actualMs = timedPositionProvider().coerceAtLeast(0)
-                    val framePosition = if (
-                        actualMs < previousPosition - 750 &&
-                        actualMs <= (displayItems.firstOrNull()?.line?.startTimeMs ?: 0L) + 1200L
-                    ) {
-                        // Re-anchor word timing when a track restarts from the beginning.
-                        karaokePlaybackClock.reset(actualMs)
-                        actualMs
-                    } else {
-                        karaokePlaybackClock.update(
-                            frameTimeNanos = frameNanos,
-                            actualPositionMs = actualMs,
-                            playbackSpeed = playbackSpeedProvider(),
-                            isPlaying = true
-                        )
-                    }
-                    previousPosition = actualMs
-                    if (lyricClock.intValue != framePosition) {
-                        lyricClock.intValue = framePosition
-                    }
+                val actualMs = timedPositionProvider().coerceAtLeast(0)
+                val framePosition = if (
+                    actualMs < previousPosition - 750 &&
+                    actualMs <= (displayItems.firstOrNull()?.line?.startTimeMs ?: 0L) + 1200L
+                ) {
+                    // Re-anchor word timing when a track restarts from the beginning.
+                    karaokePlaybackClock.reset(actualMs)
+                    actualMs
+                } else {
+                    karaokePlaybackClock.update(
+                        frameTimeNanos = frameNanos,
+                        actualPositionMs = actualMs,
+                        playbackSpeed = playbackSpeedProvider(),
+                        isPlaying = true
+                    )
+                }
+                previousPosition = actualMs
+                if (lyricClock.intValue != framePosition) {
+                    lyricClock.intValue = framePosition
                 }
             }
         }
