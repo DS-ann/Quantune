@@ -273,8 +273,11 @@ internal fun SyncedLyricsCompose(
         }
     }
     // The shared clock publishes on display VSYNC and respects the global frame-rate
-    // preference. Constrained devices retain a conservative 30 FPS ceiling.
-    val karaokeFrameRateCeiling = if (forceLowCostRendering || isLowCostLyricsDevice(context)) 30 else null
+    // preference. Cache the device capability check; do not query ActivityManager on
+    // every animated lyric recomposition.
+    val isConstrainedLyricsDevice = remember(context) { isLowCostLyricsDevice(context) }
+    val karaokeFrameRateCeiling =
+        if (forceLowCostRendering || isConstrainedLyricsDevice) 30 else null
     val karaokeFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
         active = isPlaying && isKaraokeMode,
         maximumFrameRate = karaokeFrameRateCeiling
