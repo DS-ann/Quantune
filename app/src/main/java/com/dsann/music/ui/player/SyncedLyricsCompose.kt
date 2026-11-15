@@ -48,6 +48,7 @@ import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.max
@@ -320,60 +321,61 @@ internal fun SyncedLyricsCompose(
         karaokePlaybackClock.reset(initialPosition)
         lyricClock.intValue = initialPosition
 
-        var previousVsyncNanos = Long.MIN_VALUE
-        while (true) {
-            if (!isPlaying) {
-                // Keep paused seeks responsive without running an idle display-frame loop.
-                val actualMs = timedPositionProvider().coerceAtLeast(0)
-                val rewoundToStart = actualMs < previousPosition - 750 &&
-                    actualMs <= (displayItems.firstOrNull()?.line?.startTimeMs ?: 0L) + 1200L
-                karaokePlaybackClock.reset(actualMs)
-                if (rewoundToStart) listState.scrollToItem(0)
-                if (lyricClock.intValue != actualMs) lyricClock.intValue = actualMs
-                previousPosition = actualMs
-                delay(if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.M) 80L else 60L)
-            } else if (!isKaraokeMode) {
-                // Ordinary synced lyrics only need accurate line changes, not word-sweep FPS.
-                val interval = if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.M) 84L else 40L
-                delay(interval)
-                val actualMs = timedPositionProvider().coerceAtLeast(0)
-                val rewoundToStart = actualMs < previousPosition - 750 &&
-                    actualMs <= (displayItems.firstOrNull()?.line?.startTimeMs ?: 0L) + 1200L
-                if (rewoundToStart) {
-                    // A replay/restart of the same song does not change currentSong.id.
-                    // Reset the active clock and list offset together, rather than waiting
-                    // for a smooth-scroll animation from the previous song's final line.
-                    karaokePlaybackClock.reset(actualMs)
-                    listState.scrollToItem(0)
+        if (isPlaying && isKaraokeMode) {
+            // Collect one continuous stream from the shared display-VSYNC clock.
+            // No timer or second frame loop competes with the renderer.
+            snapshotFlow { karaokeFrameTimeNanos.value }
+                .filter { it > 0L }
+                .collect { frameNanos ->
+                    val actualMs = timedPositionProvider().coerceAtLeast(0)
+                    val framePosition = if (
+                        actualMs < previousPosition - 750 &&
+                        actualMs <= (displayItems.firstOrNull()?.line?.startTimeMs ?: 0L) + 1200L
+                    ) {
+                        // Re-anchor word timing when a track restarts from the beginning.
+                        karaokePlaybackClock.reset(actualMs)
+                        actualMs
+                    } else {
+                        karaokePlaybackClock.update(
+                            frameTimeNanos = frameNanos,
+                            actualPositionMs = actualMs,
+                            playbackSpeed = playbackSpeedProvider(),
+                            isPlaying = true
+                        )
+                    }
+                    previousPosition = actualMs
+                    if (lyricClock.intValue != framePosition) {
+                        lyricClock.intValue = framePosition
+                    }
                 }
-                if (lyricClock.intValue != actualMs) lyricClock.intValue = actualMs
-                previousPosition = actualMs
-            } else {
-                // Consume the timestamp emitted by the shared VSYNC clock itself. This
-                // avoids a second frame loop and ensures the configured FPS cap is honoured.
-                val frameNanos = snapshotFlow { karaokeFrameTimeNanos.value }
-                    .first { it > 0L && it > previousVsyncNanos }
-                previousVsyncNanos = frameNanos
-
-                val actualMs = timedPositionProvider().coerceAtLeast(0)
-                val framePosition = if (
-                    actualMs < previousPosition - 750 &&
-                    actualMs <= (displayItems.firstOrNull()?.line?.startTimeMs ?: 0L) + 1200L
-                ) {
-                    // Re-anchor word timing when a track restarts from the beginning.
+        } else {
+            while (true) {
+                if (!isPlaying) {
+                    // Keep paused seeks responsive without running an idle display-frame loop.
+                    val actualMs = timedPositionProvider().coerceAtLeast(0)
+                    val rewoundToStart = actualMs < previousPosition - 750 &&
+                        actualMs <= (displayItems.firstOrNull()?.line?.startTimeMs ?: 0L) + 1200L
                     karaokePlaybackClock.reset(actualMs)
-                    actualMs
+                    if (rewoundToStart) listState.scrollToItem(0)
+                    if (lyricClock.intValue != actualMs) lyricClock.intValue = actualMs
+                    previousPosition = actualMs
+                    delay(if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.M) 80L else 60L)
                 } else {
-                    karaokePlaybackClock.update(
-                        frameTimeNanos = frameNanos,
-                        actualPositionMs = actualMs,
-                        playbackSpeed = playbackSpeedProvider(),
-                        isPlaying = true
-                    )
-                }
-                previousPosition = actualMs
-                if (lyricClock.intValue != framePosition) {
-                    lyricClock.intValue = framePosition
+                    // Ordinary synced lyrics only need accurate line changes, not word-sweep FPS.
+                    val interval = if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.M) 84L else 40L
+                    delay(interval)
+                    val actualMs = timedPositionProvider().coerceAtLeast(0)
+                    val rewoundToStart = actualMs < previousPosition - 750 &&
+                        actualMs <= (displayItems.firstOrNull()?.line?.startTimeMs ?: 0L) + 1200L
+                    if (rewoundToStart) {
+                        // A replay/restart of the same song does not change currentSong.id.
+                        // Reset the active clock and list offset together, rather than waiting
+                        // for a smooth-scroll animation from the previous song's final line.
+                        karaokePlaybackClock.reset(actualMs)
+                        listState.scrollToItem(0)
+                    }
+                    if (lyricClock.intValue != actualMs) lyricClock.intValue = actualMs
+                    previousPosition = actualMs
                 }
             }
         }
