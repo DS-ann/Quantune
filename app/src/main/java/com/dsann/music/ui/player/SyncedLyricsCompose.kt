@@ -365,8 +365,6 @@ internal fun SyncedLyricsCompose(
             }
         }
     }
-    val lyricPositionProvider = remember(lyricClock) { { lyricClock.intValue } }
-
     // Derived line selection now reads precomputed tail timing rather than scanning
     // the final karaoke word list during each playback-clock update.
     val activeIndex by remember(displayItems, lyricClock, currentSong?.duration, preparedSyncedLyrics) {
@@ -507,7 +505,7 @@ internal fun SyncedLyricsCompose(
                             line = line,
                             isActive = isActive,
                             isPast = isPast,
-                            currentPositionProvider = lyricPositionProvider,
+                            currentPositionState = lyricClock,
                             lineStartMs = line.startTimeMs,
                             lineEndMs = if (item.originalIndex + 1 < lyrics.size) {
                                 lyrics[item.originalIndex + 1].startTimeMs
@@ -556,7 +554,7 @@ private fun LyricLineItem(
     line: LyricLine,
     isActive: Boolean,
     isPast: Boolean,
-    currentPositionProvider: () -> Int,
+    currentPositionState: androidx.compose.runtime.State<Int>,
     lineStartMs: Long,
     lineEndMs: Long,
     contentColor: Color,
@@ -573,9 +571,9 @@ private fun LyricLineItem(
     val isKaraoke = line.isWordByWord && line.words.isNotEmpty()
 
     if (lowCostRendering) {
-        // On constrained phones, preserve synced line changes and tap-to-seek but
-        // avoid per-character geometry, stroked glyph passes, GPU glow and offscreen
-        // masks. Karaoke therefore falls back to a clean active-line highlight.
+        // Keep the compact renderer inexpensive, but do not remove time-synchronized
+        // highlighting. The cached single-layout sweep has no offscreen layer or glyph
+        // geometry rebuild, so it is suitable for the landscape/low-cost path as well.
         val lowCostAlignment = if (centerLineLyrics) {
             TextAlign.Center
         } else {
@@ -589,6 +587,11 @@ private fun LyricLineItem(
             "White" -> Color.White
             "UI Matching" -> accentColor
             else -> contentColor
+        }
+        val lowCostHighlightBrush = if (lyricsColorStyle == "Home Studio Gradient") {
+            dsmusicHomeStudioGradientBrush()
+        } else {
+            SolidColor(lowCostColor)
         }
         val lowCostAlpha = when {
             isActive -> 1f
@@ -611,9 +614,33 @@ private fun LyricLineItem(
             textAlign = lowCostAlignment,
             platformStyle = PlatformTextStyle(includeFontPadding = true)
         )
+        val lowCostBackgroundStyle = DsmusicTheme.typography.bodySmall.copy(
+            fontFamily = lowCostFont,
+            fontSize = 18.sp * textScale,
+            lineHeight = 26.sp * textScale,
+            textAlign = lowCostAlignment,
+            shadow = null,
+            brush = null
+        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .drawBehind {
+                    // Keep the existing no-background design: the accent rail is the
+                    // persistent, unambiguous indicator for ordinary synced lyrics.
+                    if (isActive && !isKaraoke) {
+                        val railHeight = (size.height - 20.dp.toPx()).coerceAtLeast(0f)
+                        drawRoundRect(
+                            color = accentColor.copy(alpha = 0.98f),
+                            topLeft = androidx.compose.ui.geometry.Offset(5.dp.toPx(), 10.dp.toPx()),
+                            size = androidx.compose.ui.geometry.Size(3.dp.toPx(), railHeight),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                                1.5.dp.toPx(),
+                                1.5.dp.toPx()
+                            )
+                        )
+                    }
+                }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -626,27 +653,48 @@ private fun LyricLineItem(
                     bottom = 12.dp
                 )
         ) {
-            Text(
-                text = line.content,
-                style = lowCostStyle,
-                color = lowCostColor.copy(alpha = lowCostAlpha),
-                maxLines = Int.MAX_VALUE
-            )
-            if (!line.backgroundContent.isNullOrBlank()) {
-                Text(
-                    text = line.backgroundContent,
-                    style = DsmusicTheme.typography.bodySmall.copy(
-                        fontFamily = lowCostFont,
-                        fontSize = 18.sp * textScale,
-                        lineHeight = 26.sp * textScale,
-                        textAlign = lowCostAlignment,
-                        shadow = null,
-                        brush = null
-                    ),
-                    color = lowCostColor.copy(alpha = if (isActive) 0.68f else 0.32f),
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    maxLines = 2
+            if (isKaraoke && isActive) {
+                KaraokeSweepText(
+                    text = line.content,
+                    words = line.words,
+                    wordOffset = 0,
+                    positionState = currentPositionState,
+                    style = lowCostStyle,
+                    baseColor = lowCostColor.copy(alpha = 0.34f),
+                    highlightBrush = lowCostHighlightBrush,
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = Int.MAX_VALUE
                 )
+            } else {
+                Text(
+                    text = line.content,
+                    style = lowCostStyle,
+                    color = lowCostColor.copy(alpha = lowCostAlpha),
+                    maxLines = Int.MAX_VALUE
+                )
+            }
+            if (!line.backgroundContent.isNullOrBlank()) {
+                if (isKaraoke && isActive && line.backgroundWords.isNotEmpty()) {
+                    KaraokeSweepText(
+                        text = line.backgroundContent,
+                        words = line.backgroundWords,
+                        wordOffset = 0,
+                        positionState = currentPositionState,
+                        style = lowCostBackgroundStyle,
+                        baseColor = lowCostColor.copy(alpha = 0.50f),
+                        highlightBrush = lowCostHighlightBrush,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        maxLines = 2
+                    )
+                } else {
+                    Text(
+                        text = line.backgroundContent,
+                        style = lowCostBackgroundStyle,
+                        color = lowCostColor.copy(alpha = if (isActive) 0.68f else 0.32f),
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        maxLines = 2
+                    )
+                }
             }
         }
         return
@@ -749,7 +797,7 @@ private fun LyricLineItem(
             transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
 
             val driftProgress = if (isActive && isKaraoke) {
-                val pos = currentPositionProvider()
+                val pos = currentPositionState.value
                 val duration = (lineEndMs - lineStartMs).coerceAtLeast(1)
                 ((pos - lineStartMs).toFloat() / duration).coerceIn(0f, 1f)
             } else 0f
@@ -816,7 +864,7 @@ private fun LyricLineItem(
                     text = mainContent,
                     words = line.words,
                     wordOffset = 0,
-                    currentPositionProvider = currentPositionProvider,
+                    positionState = currentPositionState,
                     style = mainTextStyle,
                     baseColor = dimColor,
                     highlightBrush = lyricsBrush ?: SolidColor(litColor),
@@ -854,7 +902,7 @@ private fun LyricLineItem(
                         text = bracketContent,
                         words = line.words,
                         wordOffset = bracketStartIndex,
-                        currentPositionProvider = currentPositionProvider,
+                        positionState = currentPositionState,
                         style = bracketTextStyle,
                         baseColor = dimColor,
                         highlightBrush = lyricsBrush ?: SolidColor(litColor),
@@ -903,7 +951,7 @@ private fun LyricLineItem(
                         text = backgroundText,
                         words = line.backgroundWords,
                         wordOffset = 0,
-                        currentPositionProvider = currentPositionProvider,
+                        positionState = currentPositionState,
                         style = backgroundStyle,
                         baseColor = contentColor.copy(alpha = 0.82f),
                         highlightBrush = SolidColor(litColor),
