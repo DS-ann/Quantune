@@ -613,7 +613,6 @@ private fun LandscapePlayerDetailsPane(
             contentColor = contentColor,
             dynamicAccentColor = accentColor,
             lyricsColorStyle = lyricsColorStyle,
-            forceLowCostRendering = true,
             onRetryLyrics = onRetryLyrics,
             onFetchLyrics = onFetchLyrics,
             onSeekTo = onSeekTo,
