@@ -1,0 +1,294 @@
+package com.dsann.music.ui.player
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.style.ResolvedTextDirection
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.dsann.music.data.lyrics.LyricWord
+import com.dsann.music.ui.theme.Text
+import kotlin.math.floor
+import kotlin.math.max
+
+/**
+ * A word's visible range inside the displayed lyric string. The range is half-open so
+ * a fractional character offset can represent the moving karaoke frontier.
+ */
+internal data class KaraokeWordSpan(
+    val startOffset: Int,
+    val endOffsetExclusive: Int,
+    val startTimeMs: Long,
+    val durationMs: Long
+)
+
+/**
+ * Resolve provider offsets once when the text changes. A few older provider payloads
+ * leave every charRange at its default value; those are aligned by searching the
+ * original word text instead of letting every word point at character zero.
+ */
+internal fun buildKaraokeWordSpans(
+    text: String,
+    words: List<LyricWord>,
+    wordOffset: Int = 0
+): List<KaraokeWordSpan> {
+    if (text.isEmpty() || words.isEmpty()) return emptyList()
+
+    val spans = ArrayList<KaraokeWordSpan>(words.size)
+    var fallbackCursor = 0
+
+    for (word in words) {
+        if (word.text.isEmpty()) continue
+
+        val explicitStart = word.charRange.first - wordOffset
+        val explicitEnd = word.charRange.last - wordOffset + 1
+        val explicitLength = explicitEnd - explicitStart
+        val expectedLength = word.text.length
+        val hasUsableExplicitRange =
+            explicitStart >= 0 &&
+                explicitEnd <= text.length &&
+                explicitLength > 0 &&
+                explicitLength >= expectedLength
+
+        val start = if (hasUsableExplicitRange) {
+            explicitStart
+        } else {
+            val found = text.indexOf(word.text, fallbackCursor)
+            if (found >= 0) found else fallbackCursor.coerceAtMost(text.length)
+        }
+        val end = if (hasUsableExplicitRange) {
+            explicitEnd
+        } else {
+            (start + expectedLength).coerceAtMost(text.length)
+        }
+
+        if (end > start) {
+            spans += KaraokeWordSpan(
+                startOffset = start,
+                endOffsetExclusive = end,
+                startTimeMs = word.absoluteStartTimeMs,
+                durationMs = word.durationMs.coerceAtLeast(1L)
+            )
+            fallbackCursor = max(fallbackCursor, end)
+        }
+    }
+
+    return spans.sortedBy { it.startOffset }
+}
+
+/**
+ * Return the exclusive character offset that has been sung at [positionMs]. This is
+ * deliberately a small timeline calculation: all provider range resolution happens
+ * once in [buildKaraokeWordSpans], not in the frame draw callback.
+ */
+internal fun calculateSungTextOffset(
+    spans: List<KaraokeWordSpan>,
+    positionMs: Long
+): Float {
+    var completedOffset = 0f
+
+    for (span in spans) {
+        if (positionMs < span.startTimeMs) return completedOffset
+
+        val elapsed = (positionMs - span.startTimeMs).coerceAtLeast(0L)
+        val progress = (elapsed.toDouble() / span.durationMs.toDouble())
+            .toFloat()
+            .coerceIn(0f, 1f)
+        val wordOffset = span.startOffset +
+            (span.endOffsetExclusive - span.startOffset) * progress
+        completedOffset = max(completedOffset, wordOffset)
+
+        if (progress < 1f) return completedOffset
+    }
+
+    return completedOffset
+}
+
+private data class SweptRow(
+    val top: Float,
+    val bottom: Float,
+    val isRtl: Boolean
+)
+
+/**
+ * Caches the line bands for a TextLayoutResult and reuses one clip path. Only the
+ * current frontier moves; line geometry is rebuilt only when Compose produces a new
+ * text layout (text, font, width, or configuration change).
+ */
+private class SweptRows {
+    private var cachedLayout: TextLayoutResult? = null
+    private var rows: List<SweptRow> = emptyList()
+    private val clip = Path()
+
+    fun rowsFor(layout: TextLayoutResult): List<SweptRow> {
+        if (layout === cachedLayout) return rows
+
+        rows = List(layout.lineCount) { index ->
+            val lineStart = layout.getLineStart(index)
+            SweptRow(
+                top = layout.getLineTop(index),
+                bottom = layout.getLineBottom(index),
+                isRtl = layout.getParagraphDirection(lineStart) ==
+                    ResolvedTextDirection.Rtl
+            )
+        }
+        cachedLayout = layout
+        return rows
+    }
+
+    fun clipFor(
+        layout: TextLayoutResult,
+        sungOffset: Float,
+        width: Float
+    ): Path {
+        clip.reset()
+        if (rows.isEmpty() || sungOffset <= 0f || width <= 0f) return clip
+
+        val textLength = layout.layoutInput.text.length
+        if (sungOffset >= textLength.toFloat()) {
+            rows.forEach { row ->
+                clip.addRect(Rect(0f, row.top, width, row.bottom))
+            }
+            return clip
+        }
+
+        val characterIndex = floor(sungOffset)
+            .toInt()
+            .coerceIn(0, (textLength - 1).coerceAtLeast(0))
+        val partialCharacter = (sungOffset - characterIndex).coerceIn(0f, 1f)
+        val lineIndex = layout.getLineForOffset(characterIndex)
+            .coerceIn(0, rows.lastIndex)
+        val row = rows[lineIndex]
+        val characterBounds = layout.getBoundingBox(characterIndex)
+        val characterDirection = layout.getBidiRunDirection(characterIndex)
+
+        val boundaryX = if (characterBounds.width > 0f) {
+            if (characterDirection == ResolvedTextDirection.Rtl) {
+                characterBounds.right - characterBounds.width * partialCharacter
+            } else {
+                characterBounds.left + characterBounds.width * partialCharacter
+            }
+        } else {
+            layout.getCursorRect(characterIndex).left
+        }.coerceIn(0f, width)
+
+        for (index in 0..lineIndex) {
+            val current = rows[index]
+            if (index < lineIndex) {
+                clip.addRect(Rect(0f, current.top, width, current.bottom))
+            } else {
+                val left = if (current.isRtl) boundaryX else 0f
+                val right = if (current.isRtl) width else boundaryX
+                if (right > left) {
+                    clip.addRect(Rect(left, current.top, right, current.bottom))
+                }
+            }
+        }
+        return clip
+    }
+}
+
+/**
+ * One Compose text node owns layout and semantics. Its draw pass paints the dim line
+ * once, then draws the sung portion directly from that same cached layout. No duplicate
+ * Text composables, per-character Paths, DstOut masks, or offscreen graphics layers.
+ */
+@Composable
+internal fun KaraokeSweepText(
+    text: String,
+    words: List<LyricWord>,
+    wordOffset: Int,
+    currentPositionProvider: () -> Int,
+    style: TextStyle,
+    baseColor: Color,
+    highlightBrush: Brush,
+    modifier: Modifier = Modifier,
+    maxLines: Int = Int.MAX_VALUE,
+    outlineWidthPx: Float = 0f,
+    highlightShadow: androidx.compose.ui.graphics.Shadow? = null
+) {
+    val layoutState = remember(text, style, maxLines) {
+        mutableStateOf<TextLayoutResult?>(null)
+    }
+    val spans = remember(text, words, wordOffset) {
+        buildKaraokeWordSpans(text, words, wordOffset)
+    }
+    val sweptRows = remember { SweptRows() }
+    val layoutStyle = remember(style) {
+        style.copy(brush = null, shadow = null)
+    }
+
+    Text(
+        text = text,
+        style = layoutStyle,
+        color = baseColor,
+        modifier = modifier.drawWithCache {
+            val layout = layoutState.value
+            val cachedRows = layout?.let(sweptRows::rowsFor)
+
+            onDrawWithContent {
+                if (layout == null || cachedRows.isNullOrEmpty()) {
+                    drawContent()
+                    return@onDrawWithContent
+                }
+
+                // Base pass: every glyph is drawn once in its unsung colour.
+                drawText(
+                    textLayoutResult = layout,
+                    color = baseColor,
+                    topLeft = Offset.Zero
+                )
+
+                val sungOffset = calculateSungTextOffset(
+                    spans = spans,
+                    positionMs = currentPositionProvider().toLong()
+                )
+                if (sungOffset <= 0f) return@onDrawWithContent
+
+                val sungClip = sweptRows.clipFor(
+                    layout = layout,
+                    sungOffset = sungOffset,
+                    width = size.width
+                )
+                if (sungClip.isEmpty) return@onDrawWithContent
+
+                // Both the optional contour and the active fill use the same layout
+                // and prefix clip. They are direct Canvas text draws, not extra layers.
+                clipPath(sungClip) {
+                    if (outlineWidthPx > 0f) {
+                        drawText(
+                            textLayoutResult = layout,
+                            brush = SolidColor(Color.Black),
+                            topLeft = Offset.Zero,
+                            drawStyle = Stroke(width = outlineWidthPx)
+                        )
+                    }
+                    drawText(
+                        textLayoutResult = layout,
+                        brush = highlightBrush,
+                        topLeft = Offset.Zero,
+                        alpha = 1f,
+                        shadow = highlightShadow
+                    )
+                }
+            }
+        },
+        maxLines = maxLines,
+        softWrap = true,
+        overflow = TextOverflow.Clip,
+        onTextLayout = { layoutState.value = it }
+    )
+}
