@@ -10,6 +10,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -91,7 +93,11 @@ internal fun rememberAppAnimationFrameTimeNanos(
     val frameTimeNanos = remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(context) {
-        AppAnimationFrameRateController.load(context)
+        // The frame-rate preference may trigger the first SharedPreferences disk load.
+        // Keep it off the UI thread so lyrics/player overlays can render their first frame.
+        withContext(Dispatchers.IO) {
+            AppAnimationFrameRateController.load(context)
+        }
     }
 
     LaunchedEffect(active, frameRate, forceDisplayRefresh, maximumFrameRate) {
