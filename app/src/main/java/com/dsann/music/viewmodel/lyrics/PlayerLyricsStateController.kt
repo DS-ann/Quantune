@@ -40,9 +40,6 @@ class PlayerLyricsStateController(private val logTag: String) {
     @Volatile private var activeLyricsSongId: Long? = null
     @Volatile private var providerSelectionGeneration: Long = 0L
     @Volatile private var lyricsRequestGeneration: Long = 0L
-    private val pendingParseCallbacks =
-        HashMap<String, MutableList<(List<LyricLine>?) -> Unit>>()
-
     private val mainHandler = Handler(Looper.getMainLooper())
     private val parsedLyricsCache = object : LruCache<String, List<LyricLine>>(512 * 1024) {
         override fun sizeOf(key: String, value: List<LyricLine>): Int {
@@ -583,60 +580,60 @@ class PlayerLyricsStateController(private val logTag: String) {
         requestGeneration: Long,
         onApplied: () -> Unit
     ) {
-        val synced = result.syncedLyrics?.takeIf { it.isNotBlank() }
-        val plain = result.plainLyrics?.takeIf { it.isNotBlank() }
-        val rawPlain = plain?.trim()
-        val plainIsTtml = rawPlain != null && (
-            rawPlain.contains("<tt", ignoreCase = true) ||
-                rawPlain.contains("<?xml", ignoreCase = true) ||
-                rawPlain.contains("<p begin=", ignoreCase = true)
-            )
-
-        val parseCandidates = buildList {
-            synced?.let(::add)
-            if (plainIsTtml && rawPlain != synced) rawPlain?.let(::add)
-        }
-
-        if (parseCandidates.isEmpty()) {
-            applyPlainLyrics(plain)
-            onApplied()
-            return
-        }
-
+        // Result strings may contain a complete TTML/LRC document. Even trim(), format
+        // checks, regex cleanup and cache sizing are linear in the payload, so keep the
+        // whole preparation path on the parser worker rather than only the parser call.
         _isLoading.value = true
-        parseLyricsCandidatesAsync(
-            candidates = parseCandidates,
-            requestSongId = requestSongId,
-            selectionRequestGeneration = selectionRequestGeneration,
-            requestGeneration = requestGeneration
-        ) { lines ->
-            if (!lines.isNullOrEmpty()) {
-                _syncedLyrics.value = lines
-                _plainLyrics.value = null
-            } else {
-                if (synced != null) {
-                    Log.w(logTag, "Synced lyrics could not be parsed; trying plain lyrics fallback")
-                }
-                applyPlainLyrics(plain)
-            }
-            onApplied()
-        }
-    }
+        LYRICS_PARSE_EXECUTOR.execute {
+            val synced = result.syncedLyrics?.takeIf { it.isNotBlank() }
+            val plain = result.plainLyrics?.takeIf { it.isNotBlank() }
+            val rawPlain = plain?.trim()
+            val plainIsTtml = rawPlain != null && (
+                rawPlain.contains("<tt", ignoreCase = true) ||
+                    rawPlain.contains("<?xml", ignoreCase = true) ||
+                    rawPlain.contains("<p begin=", ignoreCase = true)
+                )
 
-    private fun applyPlainLyrics(plain: String?) {
-        if (!plain.isNullOrBlank()) {
-            val normalized = sanitizePlainLyrics(plain.trim())
-            _syncedLyrics.value = null
-            _plainLyrics.value = normalized.takeIf { it.isNotBlank() }
-        } else {
-            _syncedLyrics.value = null
-            _plainLyrics.value = null
+            val parseCandidates = buildList {
+                synced?.let(::add)
+                if (plainIsTtml && rawPlain != synced) rawPlain?.let(::add)
+            }
+            val parsedLines = parseLyricsCandidatesOnWorker(parseCandidates)
+            val normalizedPlain = if (parsedLines.isNullOrEmpty() && !plain.isNullOrBlank()) {
+                runCatching { sanitizePlainLyrics(plain.trim()) }
+                    .getOrDefault(plain.trim())
+                    .takeIf { it.isNotBlank() }
+            } else {
+                null
+            }
+
+            mainHandler.post {
+                if (!isActiveCallback(
+                        requestSongId,
+                        selectionRequestGeneration,
+                        requestGeneration
+                    )
+                ) return@post
+
+                if (!parsedLines.isNullOrEmpty()) {
+                    _syncedLyrics.value = parsedLines
+                    _plainLyrics.value = null
+                } else {
+                    if (synced != null) {
+                        Log.w(logTag, "Synced lyrics could not be parsed; trying plain lyrics fallback")
+                    }
+                    _syncedLyrics.value = null
+                    _plainLyrics.value = normalizedPlain
+                }
+                onApplied()
+            }
         }
     }
 
     /**
-     * Parse provider payloads off the main thread. A size-bounded LRU retains recent
-     * parsed results, and identical in-flight payloads share one parse operation.
+     * Parse provider payloads on one worker. Cache access and LRU size accounting also
+     * stay on that worker; otherwise a cache hit/put can hash or walk an entire song
+     * while the UI thread is opening the lyrics screen.
      */
     private fun parseLyricsCandidatesAsync(
         candidates: List<String>,
@@ -645,64 +642,39 @@ class PlayerLyricsStateController(private val logTag: String) {
         requestGeneration: Long,
         onParsed: (List<LyricLine>?) -> Unit
     ) {
-        val guardedCallback: (List<LyricLine>?) -> Unit = { parsed ->
-            if (isActiveCallback(
-                    requestSongId,
-                    selectionRequestGeneration,
-                    requestGeneration
-                )
-            ) {
-                onParsed(parsed)
+        LYRICS_PARSE_EXECUTOR.execute {
+            val parsed = parseLyricsCandidatesOnWorker(candidates)
+            mainHandler.post {
+                if (isActiveCallback(
+                        requestSongId,
+                        selectionRequestGeneration,
+                        requestGeneration
+                    )
+                ) {
+                    onParsed(parsed)
+                }
             }
         }
+    }
 
-        val uncached = ArrayList<String>(candidates.size)
+    /** Must only be called from LYRICS_PARSE_EXECUTOR. */
+    private fun parseLyricsCandidatesOnWorker(
+        candidates: List<String>
+    ): List<LyricLine>? {
         for (candidate in candidates) {
             val cached = parsedLyricsCache.get(candidate)
             if (cached != null) {
-                if (cached.isNotEmpty()) {
-                    guardedCallback(cached)
-                    return
-                }
-            } else {
-                uncached.add(candidate)
-            }
-        }
-
-        if (uncached.isEmpty()) {
-            guardedCallback(null)
-            return
-        }
-
-        val workKey = uncached.joinToString("|") { "${it.length}:$it" }
-        val waitingCallbacks = pendingParseCallbacks[workKey]
-        if (waitingCallbacks != null) {
-            waitingCallbacks.add(guardedCallback)
-            return
-        }
-        pendingParseCallbacks[workKey] = mutableListOf(guardedCallback)
-
-        LYRICS_PARSE_EXECUTOR.execute {
-            val parsedCandidates = ArrayList<Pair<String, List<LyricLine>>>(uncached.size)
-            var bestLines: List<LyricLine>? = null
-            for (candidate in uncached) {
-                val parsed = runCatching { LrcParser.parse(candidate) }
-                    .getOrDefault(emptyList())
-                parsedCandidates.add(candidate to parsed)
-                if (bestLines.isNullOrEmpty() && parsed.isNotEmpty()) {
-                    bestLines = parsed
-                }
-                if (!bestLines.isNullOrEmpty()) break
+                if (cached.isNotEmpty()) return cached
+                continue
             }
 
-            mainHandler.post {
-                parsedCandidates.forEach { (raw, lines) ->
-                    parsedLyricsCache.put(raw, lines)
-                }
-                val callbacks = pendingParseCallbacks.remove(workKey).orEmpty()
-                callbacks.forEach { callback -> callback(bestLines) }
-            }
+            val parsed = runCatching { LrcParser.parse(candidate) }
+                .getOrDefault(emptyList())
+            // LruCache.sizeOf walks every line/word; put on this worker, never Main.
+            parsedLyricsCache.put(candidate, parsed)
+            if (parsed.isNotEmpty()) return parsed
         }
+        return null
     }
 
     /**
