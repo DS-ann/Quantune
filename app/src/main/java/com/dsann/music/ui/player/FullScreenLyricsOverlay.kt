@@ -215,6 +215,18 @@ internal fun PlayerLyricsContent(
         }
     }
     val context = LocalContext.current
+    var isNoInternetFailure by remember(lyricsError, context) {
+        mutableStateOf(false)
+    }
+    LaunchedEffect(lyricsError, context) {
+        isNoInternetFailure = false
+        val error = lyricsError ?: return@LaunchedEffect
+        isNoInternetFailure = withContext(Dispatchers.IO) {
+            runCatching {
+                NetworkFailureClassifier.isNoInternetFailure(error, context.applicationContext)
+            }.getOrDefault(false)
+        }
+    }
     val appearancePreferences = remember(context) {
         context.getSharedPreferences("AppSettings", android.content.Context.MODE_PRIVATE)
     }
@@ -335,7 +347,7 @@ internal fun PlayerLyricsContent(
                     }
                 }
             }
-            NetworkFailureClassifier.isNoInternetFailure(lyricsError, context) -> {
+            isNoInternetFailure -> {
                 com.dsann.music.ui.theme.NoInternetState(
                     modifier = Modifier.fillMaxSize(),
                     onRetry = onRetryLyrics
