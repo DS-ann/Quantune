@@ -261,7 +261,16 @@ internal fun SyncedLyricsCompose(
     // The shared clock publishes on display VSYNC and respects the global frame-rate
     // preference. Cache the device capability check; do not query ActivityManager on
     // every animated lyric recomposition.
-    val isConstrainedLyricsDevice = remember(context) { isLowCostLyricsDevice(context) }
+    // ActivityManager capability queries can cross Binder. Do not run them
+    // synchronously in composition, especially while the full-screen lyrics
+    // window is opening. Start conservatively and lift the cap after the probe.
+    var isConstrainedLyricsDevice by remember(context) { mutableStateOf(true) }
+    LaunchedEffect(context) {
+        isConstrainedLyricsDevice = withContext(Dispatchers.IO) {
+            runCatching { isLowCostLyricsDevice(context.applicationContext) }
+                .getOrDefault(true)
+        }
+    }
     val karaokeFrameRateCeiling =
         if (forceLowCostRendering || isConstrainedLyricsDevice) 30 else null
     val karaokeFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
