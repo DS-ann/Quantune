@@ -29,11 +29,17 @@ class PlayerLyricsStateController(private val logTag: String) {
         val LYRICS_PARSE_EXECUTOR = Executors.newSingleThreadExecutor { runnable ->
             Thread(runnable, "DSMusicLyricsParser").apply { isDaemon = true }
         }
+
+        // Constructing LyricsRepository also constructs the provider router and its
+        // provider instances. Keep first-use initialization away from the main thread.
+        val LYRICS_REPOSITORY_EXECUTOR = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "DSMusicLyricsRepositoryInit").apply { isDaemon = true }
+        }
     }
 
-    private var activeLyricsSongId: Long? = null
-    private var providerSelectionGeneration: Long = 0L
-    private var lyricsRequestGeneration: Long = 0L
+    @Volatile private var activeLyricsSongId: Long? = null
+    @Volatile private var providerSelectionGeneration: Long = 0L
+    @Volatile private var lyricsRequestGeneration: Long = 0L
     private val pendingParseCallbacks =
         HashMap<String, MutableList<(List<LyricLine>?) -> Unit>>()
 
@@ -104,13 +110,12 @@ class PlayerLyricsStateController(private val logTag: String) {
     fun fetchLyrics(context: Context, song: SongItem?) {
         if (song == null) return
 
-        val repository = LyricsRepository.getInstance(context)
         val requestGeneration = beginLyricsRequest()
         activeLyricsSongId = song.id
         providerSelectionGeneration += 1L
-        repository.cancelCurrent()
 
-        // Reset state
+        // Reset and expose the loading state immediately. Repository initialization is
+        // deliberately deferred because it builds all lyric providers synchronously.
         _lyricsState.value = LyricsState.IDLE
         _syncedLyrics.value = null
         _plainLyrics.value = null
@@ -121,21 +126,46 @@ class PlayerLyricsStateController(private val logTag: String) {
         setLyricsState(LyricsState.FETCHING)
         _statusMessage.value = "Searching for lyrics..."
 
-        repository.fetchLyrics(
-            song.title,
-            song.artist,
-            song.albumName,
-            song.duration,
-            song.path,
-            createCallback(
-                requestSongId = song.id,
-                keepExistingLyricsOnNotFound = true,
-                instrumentalMessage = "Instrumental track - no vocals",
-                logUpgrades = true,
-                requestGeneration = requestGeneration
-            ),
-            song.videoId
+        val callback = createCallback(
+            requestSongId = song.id,
+            keepExistingLyricsOnNotFound = true,
+            instrumentalMessage = "Instrumental track - no vocals",
+            logUpgrades = true,
+            requestGeneration = requestGeneration
         )
+        val appContext = context.applicationContext
+
+        LYRICS_REPOSITORY_EXECUTOR.execute {
+            try {
+                if (!isActiveCallback(song.id, null, requestGeneration)) {
+                    return@execute
+                }
+                val repository = LyricsRepository.getInstance(appContext)
+                // A newer song/request may have arrived while the provider graph was built.
+                if (!isActiveCallback(song.id, null, requestGeneration)) {
+                    return@execute
+                }
+                repository.fetchLyrics(
+                    song.title,
+                    song.artist,
+                    song.albumName,
+                    song.duration,
+                    song.path,
+                    callback,
+                    song.videoId
+                )
+            } catch (error: Exception) {
+                mainHandler.post {
+                    if (!isActiveCallback(song.id, null, requestGeneration)) {
+                        return@post
+                    }
+                    _lyricsState.value = LyricsState.FAILED
+                    _isLoading.value = false
+                    _error.value = error
+                    _statusMessage.value = null
+                }
+            }
+        }
     }
 
     fun retryLyrics(context: Context, song: SongItem?) {
