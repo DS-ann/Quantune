@@ -1,6 +1,9 @@
 package com.dsann.music.ui.player
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -226,9 +229,19 @@ internal fun KaraokeSweepText(
     val layoutState = remember(text, maxLines) {
         mutableStateOf<TextLayoutResult?>(null)
     }
-    val spans = remember(text, words, wordOffset) {
-        buildKaraokeWordSpans(text, words, wordOffset)
+    // Provider word ranges can be large and may require fallback string searches.
+    // Never resolve them during composition: prepare them on Default and let the
+    // base text render immediately while the karaoke sweep data is being built.
+    val spanState = remember(text, words, wordOffset) {
+        mutableStateOf<List<KaraokeWordSpan>?>(null)
     }
+    LaunchedEffect(text, words, wordOffset) {
+        spanState.value = null
+        spanState.value = withContext(Dispatchers.Default) {
+            buildKaraokeWordSpans(text, words, wordOffset)
+        }
+    }
+    val spans = spanState.value
     val sweptRows = remember { SweptRows() }
     val layoutStyle = remember(style) {
         style.copy(brush = null, shadow = null)
@@ -255,8 +268,11 @@ internal fun KaraokeSweepText(
                     topLeft = Offset.Zero
                 )
 
+                // Word geometry may still be preparing on a worker. Keep the
+                // unsung line visible and begin the sweep as soon as its spans arrive.
+                val readySpans = spans ?: return@onDrawWithContent
                 val sungOffset = calculateSungTextOffset(
-                    spans = spans,
+                    spans = readySpans,
                     positionMs = positionState.value.toLong()
                 )
                 if (sungOffset <= 0f) return@onDrawWithContent
