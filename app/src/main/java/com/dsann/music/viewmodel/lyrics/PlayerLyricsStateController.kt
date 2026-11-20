@@ -142,6 +142,7 @@ class PlayerLyricsStateController(private val logTag: String) {
                 if (!isActiveCallback(song.id, null, requestGeneration)) {
                     return@execute
                 }
+                repository.cancelCurrent()
                 repository.fetchLyrics(
                     song.title,
                     song.artist,
