@@ -5,6 +5,8 @@ import com.dsann.music.data.lyrics.LyricLine
 import com.dsann.music.util.EncryptedFeatureSecretStore
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,18 +43,24 @@ object AiLyricsTranslationSession {
         val appContext = context.applicationContext
         val settingsStore = AiLyricsTranslationSettingsStore(appContext)
         val secretStore = EncryptedFeatureSecretStore(appContext)
-        val settings = settingsStore.load()
+        val settings = withContext(Dispatchers.IO) {
+            settingsStore.load()
+        }
         check(settings.enabled) { "Enable AI lyrics translation in Settings → Playback." }
 
-        val normalizedSource = source.replace("\r\n", "\n").replace('\r', '\n')
+        val normalizedSource = withContext(Dispatchers.Default) {
+            source.replace("\r\n", "\n").replace('\r', '\n')
+        }
         require(normalizedSource.isNotBlank()) { "Load lyrics before requesting a translation." }
-        val key = cacheKey(songId, normalizedSource, settings)
+        val key = withContext(Dispatchers.Default) {
+            cacheKey(songId, normalizedSource, settings)
+        }
 
         return requestLock.withLock {
             _entries.value[key]?.let { return@withLock it }
-            val apiKey = secretStore.read(
-                AiLyricsTranslationCatalog.secretNameFor(settings.provider)
-            ).orEmpty()
+            val apiKey = withContext(Dispatchers.IO) {
+                secretStore.read(AiLyricsTranslationCatalog.secretNameFor(settings.provider))
+            }.orEmpty()
             require(apiKey.isNotBlank()) {
                 "Add the API key for ${settings.provider} in Settings → Playback."
             }
