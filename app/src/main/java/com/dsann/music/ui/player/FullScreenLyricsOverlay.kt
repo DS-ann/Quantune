@@ -94,10 +94,10 @@ import com.dsann.music.data.lyrics.LyricLine
 import com.dsann.music.data.lyrics.LyricsResult
 import com.dsann.music.model.SongItem
 import com.dsann.music.data.features.AiLyricsTranslationService
+import com.dsann.music.data.features.AiLyricsTranslationSettings
 import com.dsann.music.data.features.AiLyricsTranslationSettingsStore
 import com.dsann.music.data.features.AiLyricsTranslationSession
 import com.dsann.music.data.features.AiLyricsTranslationCatalog
-import com.dsann.music.util.EncryptedFeatureSecretStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -430,16 +430,26 @@ internal fun FullScreenLyricsOverlay(
 
     val translationScope = rememberCoroutineScope()
     val translationSettingsStore = remember(context) { AiLyricsTranslationSettingsStore(context) }
-    val featureSecretStore = remember(context) { EncryptedFeatureSecretStore(context) }
-    val translationSettings = remember(translationSettingsStore) { translationSettingsStore.load() }
+    // SharedPreferences may need to load from disk on first access. Keep that work
+    // off the fullscreen dialog's first composition.
+    var translationSettings by remember(translationSettingsStore) {
+        mutableStateOf(AiLyricsTranslationSettings(enabled = false))
+    }
+    var translationEnabled by remember { mutableStateOf(false) }
+    var translationSettingsLoaded by remember { mutableStateOf(false) }
+    LaunchedEffect(translationSettingsStore) {
+        val loadedSettings = withContext(Dispatchers.IO) {
+            translationSettingsStore.load()
+        }
+        translationSettings = loadedSettings
+        translationEnabled = loadedSettings.enabled
+        translationSettingsLoaded = true
+    }
     val translationPreferences = remember(context) {
         context.applicationContext.getSharedPreferences(
             "lyrics_translation_settings",
             android.content.Context.MODE_PRIVATE
         )
-    }
-    var translationEnabled by remember(translationSettings.enabled) {
-        mutableStateOf(translationSettings.enabled)
     }
 
     // Do not build a second whole-song lyrics string or hash it during composition when
@@ -740,7 +750,7 @@ internal fun FullScreenLyricsOverlay(
                     if (translationEnabled) {
                         IconButton(
                             onClick = requestLyricsTranslation,
-                            enabled = !translationBusy,
+                            enabled = translationSettingsLoaded && !translationBusy,
                             interactionSource = remember { MutableInteractionSource() }
                         ) {
                             Icon(
