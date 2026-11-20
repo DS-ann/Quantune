@@ -60,6 +60,8 @@ import com.dsann.music.ui.theme.Icon
 import com.dsann.music.ui.theme.dsmusicHomeStudioGradientBrush
 import com.dsann.music.ui.theme.Text
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.cos
 import kotlin.math.sin
@@ -499,9 +501,16 @@ private fun VisualizerSyncedLyricLine(
     brush: Brush,
     modifier: Modifier = Modifier
 ) {
-    val timeline = remember(lyrics) {
-        LineSyncedLyricTimeline.build(lyrics.orEmpty())
+    var preparedTimeline by remember(lyrics) {
+        mutableStateOf<List<LineSyncedLyricTimeline.Entry>?>(null)
     }
+    LaunchedEffect(lyrics) {
+        preparedTimeline = null
+        preparedTimeline = withContext(Dispatchers.Default) {
+            LineSyncedLyricTimeline.build(lyrics.orEmpty())
+        }
+    }
+    val timeline = preparedTimeline.orEmpty()
     val songDurationMs = currentSong?.duration?.takeIf { it > 0L } ?: 0L
     val activeLineText by produceState<String?>(
         initialValue = null,
