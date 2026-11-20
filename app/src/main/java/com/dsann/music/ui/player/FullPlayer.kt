@@ -107,6 +107,7 @@ import com.dsann.music.ui.SettingsViewModel
 import com.dsann.music.ui.explore.QueueSongActionsBottomSheet
 import com.dsann.music.R
 import com.dsann.music.data.lyrics.LyricLine
+import com.dsann.music.data.features.AiLyricsTranslationSettings
 import com.dsann.music.data.features.AiLyricsTranslationSettingsStore
 import com.dsann.music.data.features.AiLyricsTranslationSession
 import com.dsann.music.data.lyrics.LineSyncedLyricTimeline
@@ -149,9 +150,16 @@ private fun PortraitSyncedLyricPreview(
     onLineBoundsChanged: (Rect?) -> Unit,
     onLineNeedsMoreSpace: () -> Unit
 ) {
-    val displayTimeline = remember(lyrics) {
-        LineSyncedLyricTimeline.build(lyrics)
+    var preparedDisplayTimeline by remember(lyrics) {
+        mutableStateOf<List<LineSyncedLyricTimeline.Entry>?>(null)
     }
+    LaunchedEffect(lyrics) {
+        preparedDisplayTimeline = null
+        preparedDisplayTimeline = withContext(Dispatchers.Default) {
+            LineSyncedLyricTimeline.build(lyrics)
+        }
+    }
+    val displayTimeline = preparedDisplayTimeline.orEmpty()
     val displayLines = remember(displayTimeline) {
         displayTimeline.map { it.line }
     }
@@ -415,8 +423,16 @@ private fun LandscapePlayerDetailsPane(
     val translationSettingsStore = remember(context) {
         AiLyricsTranslationSettingsStore(context)
     }
-    val translationSettings = remember(translationSettingsStore) {
-        translationSettingsStore.load()
+    var translationSettings by remember(translationSettingsStore) {
+        mutableStateOf(AiLyricsTranslationSettings(enabled = false))
+    }
+    var translationEnabled by remember { mutableStateOf(false) }
+    LaunchedEffect(translationSettingsStore) {
+        val loadedSettings = withContext(Dispatchers.IO) {
+            translationSettingsStore.load()
+        }
+        translationSettings = loadedSettings
+        translationEnabled = loadedSettings.enabled
     }
     // Do not join and hash the entire lyrics payload on the UI thread while the
     // two-pane player is being created after a rotation.
@@ -430,9 +446,6 @@ private fun LandscapePlayerDetailsPane(
             "lyrics_translation_settings",
             Context.MODE_PRIVATE
         )
-    }
-    var translationEnabled by remember(translationSettings.enabled) {
-        mutableStateOf(translationSettings.enabled)
     }
 
     LaunchedEffect(
