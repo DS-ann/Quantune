@@ -3,6 +3,8 @@ package com.dsann.music.ui.player
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
@@ -46,14 +48,18 @@ internal data class KaraokeWordSpan(
 internal fun buildKaraokeWordSpans(
     text: String,
     words: List<LyricWord>,
-    wordOffset: Int = 0
+    wordOffset: Int = 0,
+    checkCancellation: (() -> Unit)? = null
 ): List<KaraokeWordSpan> {
     if (text.isEmpty() || words.isEmpty()) return emptyList()
 
     val spans = ArrayList<KaraokeWordSpan>(words.size)
     var fallbackCursor = 0
 
-    for (word in words) {
+    for ((wordIndex, word) in words.withIndex()) {
+        // Allow a superseded song or a dismissed lyrics screen to cancel preparation
+        // even when a provider returns an unusually large word list.
+        if ((wordIndex and 0x3F) == 0) checkCancellation?.invoke()
         if (word.text.isEmpty()) continue
 
         val explicitStart = word.charRange.first - wordOffset
@@ -237,8 +243,11 @@ internal fun KaraokeSweepText(
     }
     LaunchedEffect(text, words, wordOffset) {
         spanState.value = null
+        val preparationContext = currentCoroutineContext()
         spanState.value = withContext(Dispatchers.Default) {
-            buildKaraokeWordSpans(text, words, wordOffset)
+            buildKaraokeWordSpans(text, words, wordOffset) {
+                preparationContext.ensureActive()
+            }
         }
     }
     val spans = spanState.value
