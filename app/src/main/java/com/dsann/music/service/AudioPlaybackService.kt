@@ -1355,7 +1355,9 @@ class AudioPlaybackService : MediaSessionService() {
                 setupMediaSession()
                 loadAudioPreferences()
                 setupPreferenceListener()
-                AppAnimationFrameRateController.load(applicationContext)
+                withContext(Dispatchers.IO) {
+                    AppAnimationFrameRateController.load(applicationContext)
+                }
                 setupProgressTracking()
                 isPlayerInitialized = true
                 if (pendingWidgetRefreshAfterScreenWake) {
