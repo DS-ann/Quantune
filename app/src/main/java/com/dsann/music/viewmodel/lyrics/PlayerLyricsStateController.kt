@@ -174,9 +174,8 @@ class PlayerLyricsStateController(private val logTag: String) {
         val requestGeneration = beginLyricsRequest()
         activeLyricsSongId = song.id
         providerSelectionGeneration += 1L
-        LyricsRepository.getInstance(context).cancelProviderFetch()
 
-        // Reset state
+        // Reset state immediately; repository construction and provider setup stay off-main.
         _syncedLyrics.value = null
         _plainLyrics.value = null
         _error.value = null
@@ -187,26 +186,49 @@ class PlayerLyricsStateController(private val logTag: String) {
         setLyricsState(LyricsState.FETCHING)
         _statusMessage.value = "Retrying all sources..."
 
-        LyricsRepository.getInstance(context).retryLyrics(
-            song.title,
-            song.artist,
-            song.albumName,
-            song.duration,
-            song.path,
-            createCallback(
-                requestSongId = song.id,
-                keepExistingLyricsOnNotFound = false,
-                instrumentalMessage = "Instrumental track",
-                logUpgrades = false,
-                requestGeneration = requestGeneration
-            ),
-            song.videoId
+        val callback = createCallback(
+            requestSongId = song.id,
+            keepExistingLyricsOnNotFound = false,
+            instrumentalMessage = "Instrumental track",
+            logUpgrades = false,
+            requestGeneration = requestGeneration
         )
+        val appContext = context.applicationContext
+        LYRICS_REPOSITORY_EXECUTOR.execute {
+            try {
+                if (!isActiveCallback(song.id, null, requestGeneration)) {
+                    return@execute
+                }
+                val repository = LyricsRepository.getInstance(appContext)
+                if (!isActiveCallback(song.id, null, requestGeneration)) {
+                    return@execute
+                }
+                repository.cancelProviderFetch()
+                repository.retryLyrics(
+                    song.title,
+                    song.artist,
+                    song.albumName,
+                    song.duration,
+                    song.path,
+                    callback,
+                    song.videoId
+                )
+            } catch (error: Exception) {
+                mainHandler.post {
+                    if (!isActiveCallback(song.id, null, requestGeneration)) {
+                        return@post
+                    }
+                    _lyricsState.value = LyricsState.FAILED
+                    _isLoading.value = false
+                    _error.value = error
+                    _statusMessage.value = null
+                }
+            }
+        }
     }
 
     fun selectProvider(context: Context, song: SongItem?, providerName: String) {
         if (song == null || providerName.isBlank()) return
-        val repository = LyricsRepository.getInstance(context)
         val result = _providerResults.value[providerName]
 
         // Reuse an in-memory result only when its payload is still present. Results marked as
@@ -216,7 +238,16 @@ class PlayerLyricsStateController(private val logTag: String) {
             activeLyricsSongId = song.id
             providerSelectionGeneration += 1L
             val selectionRequestGeneration = providerSelectionGeneration
-            repository.cancelProviderFetch()
+            // The cached result can be displayed immediately. Cancel any background provider
+            // sweep asynchronously so a cold repository cannot block this selection tap.
+            val appContext = context.applicationContext
+            LYRICS_REPOSITORY_EXECUTOR.execute {
+                runCatching {
+                    LyricsRepository.getInstance(appContext).cancelProviderFetch()
+                }.onFailure {
+                    Log.w(logTag, "Could not cancel background lyrics provider fetch", it)
+                }
+            }
             val compacted = _providerResults.value.toMutableMap()
             clearInactiveProviderPayloads(compacted, providerName)
             _providerResults.value = compacted
@@ -245,8 +276,6 @@ class PlayerLyricsStateController(private val logTag: String) {
         activeLyricsSongId = song.id
         providerSelectionGeneration += 1L
         val selectionRequestGeneration = providerSelectionGeneration
-        repository.cancelProviderFetch()
-
         _selectedProvider.value = providerName
         _syncedLyrics.value = null
         _plainLyrics.value = null
@@ -255,23 +284,47 @@ class PlayerLyricsStateController(private val logTag: String) {
         setLyricsState(LyricsState.FETCHING)
         _statusMessage.value = "Fetching lyrics from $providerName…"
 
-        repository.fetchProviderLyrics(
-            song.title,
-            song.artist,
-            song.albumName,
-            song.duration,
-            song.path,
-            providerName,
-            createCallback(
-                requestSongId = song.id,
-                keepExistingLyricsOnNotFound = false,
-                instrumentalMessage = "Instrumental track",
-                logUpgrades = false,
-                selectionRequestGeneration = selectionRequestGeneration,
-                requestGeneration = requestGeneration
-            ),
-            song.videoId
+        val callback = createCallback(
+            requestSongId = song.id,
+            keepExistingLyricsOnNotFound = false,
+            instrumentalMessage = "Instrumental track",
+            logUpgrades = false,
+            selectionRequestGeneration = selectionRequestGeneration,
+            requestGeneration = requestGeneration
         )
+        val appContext = context.applicationContext
+        LYRICS_REPOSITORY_EXECUTOR.execute {
+            try {
+                if (!isActiveCallback(song.id, selectionRequestGeneration, requestGeneration)) {
+                    return@execute
+                }
+                val repository = LyricsRepository.getInstance(appContext)
+                if (!isActiveCallback(song.id, selectionRequestGeneration, requestGeneration)) {
+                    return@execute
+                }
+                repository.cancelProviderFetch()
+                repository.fetchProviderLyrics(
+                    song.title,
+                    song.artist,
+                    song.albumName,
+                    song.duration,
+                    song.path,
+                    providerName,
+                    callback,
+                    song.videoId
+                )
+            } catch (error: Exception) {
+                mainHandler.post {
+                    if (!isActiveCallback(song.id, selectionRequestGeneration, requestGeneration)) {
+                        return@post
+                    }
+                    _lyricsState.value = LyricsState.FAILED
+                    _isLoading.value = false
+                    _error.value = error
+                    _statusMessage.value = null
+                }
+            }
+        }
     }
 
     /**
