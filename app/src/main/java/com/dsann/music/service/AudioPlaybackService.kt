@@ -830,7 +830,9 @@ class AudioPlaybackService : MediaSessionService() {
     private var lastWidgetLyricContentKey: String? = null
     private var lastWidgetLyricPublishedAtMs = 0L
     @Volatile private var widgetSyncedLyrics: List<LyricLine> = emptyList()
+    @Volatile private var widgetSyncedTimeline: List<LineSyncedLyricTimeline.Entry> = emptyList()
     @Volatile private var widgetPlainLyrics: String? = null
+    @Volatile private var widgetLyricPreparationGeneration: Long = 0L
     @Volatile private var lyricsWidgetInstalledCached = false
     @Volatile private var lastLyricsWidgetInstalledCheckAtMs = 0L
     private var widgetLyricUpdateRunnable: Runnable? = null
@@ -3640,7 +3642,9 @@ class AudioPlaybackService : MediaSessionService() {
             return
         }
         // Service may start before the user has opened Playback settings.
-        AppAnimationFrameRateController.load(applicationContext)
+        serviceScope.launch(Dispatchers.IO) {
+            AppAnimationFrameRateController.load(applicationContext)
+        }
         progressFrameUpdatesRunning = true
         lastUiFrameBucket = Long.MIN_VALUE
         Choreographer.getInstance().postFrameCallback(progressFrameCallback)
@@ -3774,19 +3778,33 @@ class AudioPlaybackService : MediaSessionService() {
         val songKey = widgetLyricsSongKey(song)
         if (vm.currentSong.value?.let(::widgetLyricsSongKey) != songKey) return
 
-        widgetSyncedLyrics = vm.syncedLyrics.value.orEmpty()
-            .sortedBy { widgetLyricStartMs(it) }
-        widgetPlainLyrics = vm.plainLyrics.value?.takeIf { it.isNotBlank() }
-
-        val hasLyrics = widgetSyncedLyrics.isNotEmpty() || !widgetPlainLyrics.isNullOrBlank()
+        val sourceLines = vm.syncedLyrics.value.orEmpty()
+        val sourcePlain = vm.plainLyrics.value?.takeIf { it.isNotBlank() }
+        val hasLyrics = sourceLines.isNotEmpty() || !sourcePlain.isNullOrBlank()
         val position = player.currentPosition.coerceAtLeast(0L)
         val duration = player.duration.coerceAtLeast(0L)
         if (hasLyrics) {
             widgetLyricsWaitingForExistingFetchSongKey = null
-            updateWidgetProgress(position, duration)
-            scheduleNextWidgetLyricRefresh(position)
+            // A new song must not keep displaying the previous song's line while its
+            // derived timeline is being prepared.
+            widgetSyncedLyrics = emptyList()
+            widgetSyncedTimeline = emptyList()
+            widgetPlainLyrics = null
+            prepareWidgetLyricLines(
+                lines = sourceLines,
+                plainLyrics = sourcePlain,
+                expectedSongKey = songKey,
+                isStillCurrent = { vm.currentSong.value?.let(::widgetLyricsSongKey) == songKey }
+            ) {
+                updateWidgetProgress(position, duration)
+                scheduleNextWidgetLyricRefresh(position)
+            }
             return
         }
+
+        widgetSyncedLyrics = emptyList()
+        widgetSyncedTimeline = emptyList()
+        widgetPlainLyrics = null
 
         // Check our own request guard before the shared loading flag. This prevents a
         // second observer callback from marking our fetch as an external request.
@@ -3808,6 +3826,38 @@ class AudioPlaybackService : MediaSessionService() {
         vm.fetchLyricsForCurrentSong()
     }
 
+    /**
+     * Sort and derive word-aware line boundaries away from the service looper.
+     * Progress and boundary callbacks reuse the prepared timeline until the song changes.
+     */
+    private fun prepareWidgetLyricLines(
+        lines: List<LyricLine>,
+        plainLyrics: String?,
+        expectedMediaId: String? = null,
+        expectedSongKey: String? = null,
+        isStillCurrent: (() -> Boolean)? = null,
+        onReady: (() -> Unit)? = null
+    ) {
+        val generation = widgetLyricPreparationGeneration + 1L
+        widgetLyricPreparationGeneration = generation
+        serviceScope.launch(Dispatchers.Default) {
+            val sortedLines = lines.sortedBy { widgetLyricStartMs(it) }
+            val timeline = LineSyncedLyricTimeline.build(sortedLines)
+            handler.post {
+                if (generation != widgetLyricPreparationGeneration) return@post
+                if (expectedMediaId != null &&
+                    player.currentMediaItem?.mediaId != expectedMediaId
+                ) return@post
+                if (expectedSongKey != null && isStillCurrent?.invoke() == false) return@post
+
+                widgetSyncedLyrics = sortedLines
+                widgetSyncedTimeline = timeline
+                widgetPlainLyrics = plainLyrics
+                onReady?.invoke()
+            }
+        }
+    }
+
     private fun requestWidgetLyrics() {
         if (!hasLyricsWidgetInstalled(forceRefresh = true)) {
             cancelWidgetLyricRefresh()
@@ -3827,51 +3877,80 @@ class AudioPlaybackService : MediaSessionService() {
             return
         }
 
-        // A widget can be tapped while the Activity (and its ViewModel) is not bound.
-        // Recover the current track from the active Media3 item and use the same lyrics
-        // provider pipeline instead of leaving the lyrics page permanently blank.
+        // Media3 is thread-confined to the application looper. Snapshot its current item
+        // here, but perform metadata reads and provider construction on an IO worker.
         val item = player.currentMediaItem ?: return
         val requestedMediaId = item.mediaId
-        widgetSyncedLyrics = emptyList()
-        widgetPlainLyrics = null
         val title = item.mediaMetadata.title?.toString()?.trim().orEmpty()
         val artist = item.mediaMetadata.artist?.toString()?.trim().orEmpty()
         if (title.isBlank()) return
         val uri = item.localConfiguration?.uri
-        val cachedMetadata = uri?.let { getCachedMediaMetadata(applicationContext, it.toString()) }
-        val durationMs = player.duration.takeIf {
+        val album = item.mediaMetadata.albumTitle?.toString()
+        val durationSnapshot = player.duration.takeIf {
             it > 0L && it != androidx.media3.common.C.TIME_UNSET
-        } ?: cachedMetadata?.durationMs ?: 0L
+        } ?: 0L
 
-        com.dsann.music.data.lyrics.LyricsRepository.getInstance(applicationContext).fetchLyrics(
-            title = title,
-            artist = artist.ifBlank { "Unknown Artist" },
-            album = item.mediaMetadata.albumTitle?.toString(),
-            durationMs = durationMs,
-            filePath = uri?.toString(),
-            videoId = cachedMetadata?.videoId,
-            callback = object : com.dsann.music.data.lyrics.LyricsRepository.ExtendedLyricsCallback {
-                override fun onLyricsFound(result: com.dsann.music.data.lyrics.LyricsResult) {
-                    publishWidgetLyrics(result, expectedMediaId = requestedMediaId)
+        widgetSyncedLyrics = emptyList()
+        widgetSyncedTimeline = emptyList()
+        widgetPlainLyrics = null
+        widgetLyricPreparationGeneration += 1L
+        widgetLyricsRequestedSongKey = "media:$requestedMediaId"
+        publishWidgetLyricStatus("Searching for lyrics…")
+
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                val cachedMetadata = uri?.let {
+                    getCachedMediaMetadata(applicationContext, it.toString())
                 }
+                val durationMs = durationSnapshot.takeIf { it > 0L }
+                    ?: cachedMetadata?.durationMs
+                    ?: 0L
+                val repository = com.dsann.music.data.lyrics.LyricsRepository.getInstance(
+                    applicationContext
+                )
+                repository.fetchLyrics(
+                    title = title,
+                    artist = artist.ifBlank { "Unknown Artist" },
+                    album = album,
+                    durationMs = durationMs,
+                    filePath = uri?.toString(),
+                    videoId = cachedMetadata?.videoId,
+                    callback = object :
+                        com.dsann.music.data.lyrics.LyricsRepository.ExtendedLyricsCallback {
+                        override fun onLyricsFound(
+                            result: com.dsann.music.data.lyrics.LyricsResult
+                        ) {
+                            publishWidgetLyrics(result, expectedMediaId = requestedMediaId)
+                        }
 
-                override fun onLyricsUpgraded(betterResult: com.dsann.music.data.lyrics.LyricsResult) {
-                    publishWidgetLyrics(betterResult, expectedMediaId = requestedMediaId)
-                }
+                        override fun onLyricsUpgraded(
+                            betterResult: com.dsann.music.data.lyrics.LyricsResult
+                        ) {
+                            publishWidgetLyrics(betterResult, expectedMediaId = requestedMediaId)
+                        }
 
-                override fun onLyricsNotFound(reason: String) {
-                    publishWidgetLyrics(null, "Lyrics not found", requestedMediaId)
-                }
+                        override fun onLyricsNotFound(reason: String) {
+                            publishWidgetLyrics(null, "Lyrics not found", requestedMediaId)
+                        }
 
-                override fun onInstrumental() {
-                    publishWidgetLyrics(null, "Instrumental", requestedMediaId)
-                }
+                        override fun onInstrumental() {
+                            publishWidgetLyrics(null, "Instrumental", requestedMediaId)
+                        }
 
-                override fun onSearchStatus(message: String) {
-                    publishWidgetLyrics(null, message, requestedMediaId)
+                        override fun onSearchStatus(message: String) {
+                            publishWidgetLyrics(null, message, requestedMediaId)
+                        }
+                    }
+                )
+            } catch (error: Exception) {
+                Log.w(TAG, "Widget lyrics request failed", error)
+                handler.post {
+                    if (player.currentMediaItem?.mediaId == requestedMediaId) {
+                        publishWidgetLyricStatus("Lyrics unavailable")
+                    }
                 }
             }
-        )
+        }
     }
 
     private fun publishWidgetLyrics(
@@ -3879,23 +3958,37 @@ class AudioPlaybackService : MediaSessionService() {
         fallbackText: String? = null,
         expectedMediaId: String? = null
     ) {
-        handler.post {
-            if (expectedMediaId != null && player.currentMediaItem?.mediaId != expectedMediaId) {
-                return@post
+        val rawSynced = result?.syncedLyrics?.takeIf { it.isNotBlank() }
+        val plain = result?.plainLyrics?.takeIf { it.isNotBlank() }
+            ?: fallbackText?.takeIf { it.isNotBlank() }
+        val generation = widgetLyricPreparationGeneration + 1L
+        widgetLyricPreparationGeneration = generation
+
+        serviceScope.launch(Dispatchers.Default) {
+            val parsed = rawSynced?.let { raw ->
+                runCatching { com.dsann.music.data.lyrics.LrcParser.parse(raw) }
+                    .getOrDefault(emptyList())
+            }.orEmpty()
+            val sorted = parsed.sortedBy { widgetLyricStartMs(it) }
+            val timeline = LineSyncedLyricTimeline.build(sorted)
+
+            handler.post {
+                if (generation != widgetLyricPreparationGeneration) return@post
+                if (expectedMediaId != null &&
+                    player.currentMediaItem?.mediaId != expectedMediaId
+                ) return@post
+
+                widgetSyncedLyrics = sorted
+                widgetSyncedTimeline = timeline
+                widgetPlainLyrics = plain
+                if (widgetSyncedLyrics.isEmpty() && widgetPlainLyrics.isNullOrBlank()) {
+                    widgetPlainLyrics = fallbackText
+                }
+                val position = player.currentPosition.coerceAtLeast(0L)
+                val duration = player.duration.coerceAtLeast(0L)
+                updateWidgetProgress(position, duration)
+                scheduleNextWidgetLyricRefresh(position)
             }
-            val position = player.currentPosition.coerceAtLeast(0L)
-            val duration = player.duration.coerceAtLeast(0L)
-            widgetSyncedLyrics = result?.syncedLyrics
-                ?.takeIf { it.isNotBlank() }
-                ?.let { com.dsann.music.data.lyrics.LrcParser.parse(it).sortedBy { line -> widgetLyricStartMs(line) } }
-                .orEmpty()
-            widgetPlainLyrics = result?.plainLyrics?.takeIf { it.isNotBlank() }
-                ?: fallbackText?.takeIf { it.isNotBlank() }
-            if (widgetSyncedLyrics.isEmpty() && widgetPlainLyrics.isNullOrBlank()) {
-                widgetPlainLyrics = fallbackText
-            }
-            updateWidgetProgress(position, duration)
-            scheduleNextWidgetLyricRefresh(position)
         }
     }
 
@@ -3923,7 +4016,7 @@ class AudioPlaybackService : MediaSessionService() {
      * until the next line begins, matching the portrait player's one-active-line model.
      */
     private fun currentWidgetLyricContent(positionMs: Long, playbackDurationMs: Long): String {
-        val timeline = LineSyncedLyricTimeline.build(widgetSyncedLyrics)
+        val timeline = widgetSyncedTimeline
         // Use the duration snapshot captured on the player's application looper. This
         // renderer is also called from Dispatchers.Default during widget progress updates,
         // where touching ExoPlayer would violate Media3's thread-affinity requirement.
@@ -4051,7 +4144,7 @@ class AudioPlaybackService : MediaSessionService() {
             return
         }
 
-        val timeline = LineSyncedLyricTimeline.build(widgetSyncedLyrics)
+        val timeline = widgetSyncedTimeline
         val nextEvent = LineSyncedLyricTimeline.nextBoundaryAfter(
             timeline = timeline,
             positionMs = positionMs.coerceAtLeast(0L)
