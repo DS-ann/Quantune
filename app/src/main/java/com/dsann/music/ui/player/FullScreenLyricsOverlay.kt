@@ -171,6 +171,68 @@ internal fun LyricsProviderPickerSheet(
 }
 
 
+private data class LyricsAppearanceSettings(
+    val alignment: String = "Original",
+    val textSize: String = "Standard",
+    val fontFamily: String = "Rounded"
+)
+
+/**
+ * Read lyrics appearance preferences away from the UI thread. SharedPreferences
+ * getters can wait for the preferences XML to finish loading, so they must not
+ * be called from the first composition of the fullscreen lyrics dialog.
+ */
+@Composable
+private fun rememberLyricsAppearanceSettings(
+    context: android.content.Context
+): LyricsAppearanceSettings {
+    val preferences = remember(context) {
+        context.applicationContext.getSharedPreferences(
+            "AppSettings",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+    val scope = rememberCoroutineScope()
+    var preferenceRevision by remember(preferences) { mutableStateOf(0) }
+    var settings by remember(preferences) {
+        mutableStateOf(LyricsAppearanceSettings())
+    }
+
+    DisposableEffect(preferences, scope) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (
+                key == null ||
+                key == "lyrics_alignment" ||
+                key == "lyrics_text_size" ||
+                key == "lyrics_font_family"
+            ) {
+                // Listener callbacks may arrive on a worker; schedule Compose state
+                // changes on the remembered main-thread composition scope.
+                scope.launch { preferenceRevision += 1 }
+            }
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            preferences.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
+    LaunchedEffect(preferences, preferenceRevision) {
+        settings = withContext(Dispatchers.IO) {
+            LyricsAppearanceSettings(
+                alignment = preferences.getString("lyrics_alignment", "Original")
+                    ?: "Original",
+                textSize = preferences.getString("lyrics_text_size", "Standard")
+                    ?: "Standard",
+                fontFamily = preferences.getString("lyrics_font_family", "Rounded")
+                    ?: "Rounded"
+            )
+        }
+    }
+
+    return settings
+}
+
 /**
  * Single source of truth for lyrics rendering in the landscape side pane and the
  * immersive lyrics screen. Provider state, timing, karaoke highlighting and plain
@@ -227,12 +289,14 @@ internal fun PlayerLyricsContent(
             }.getOrDefault(false)
         }
     }
-    val appearancePreferences = remember(context) {
-        context.getSharedPreferences("AppSettings", android.content.Context.MODE_PRIVATE)
-    }
-    val lyricsAlignment by appearancePreferences.observeKey("lyrics_alignment", "Original")
-    val lyricsTextSize by appearancePreferences.observeKey("lyrics_text_size", "Standard")
-    val lyricsFontFamilyChoice by appearancePreferences.observeKey("lyrics_font_family", "Rounded")
+    // These three values were previously read with observeKey(), whose initial
+    // SharedPreferences getters run synchronously during composition. A cold or large
+    // AppSettings file can make the lyrics dialog's first frame wait on disk I/O.
+    // Load them on IO and keep the listener for live updates without blocking Compose.
+    val lyricsAppearance = rememberLyricsAppearanceSettings(context)
+    val lyricsAlignment = lyricsAppearance.alignment
+    val lyricsTextSize = lyricsAppearance.textSize
+    val lyricsFontFamilyChoice = lyricsAppearance.fontFamily
     val configuredLyricsScale = when (lyricsTextSize) {
         "Small" -> 0.85f
         "Large" -> 1.18f
