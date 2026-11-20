@@ -854,7 +854,10 @@ fun FullPlayer(
     val contentSecondary = contentColor.copy(alpha = 0.6f)
     var showFullScreenVisualizer by remember { mutableStateOf(false) }
     val playerFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
-        active = isPlayerVisible && uiState.isPlaying && !showFullScreenVisualizer
+        // The fullscreen lyrics dialog covers this player surface. Stop the hidden
+        // player's frame-driven slider/waveform recompositions while the overlay is open.
+        active = isPlayerVisible && uiState.isPlaying &&
+            !showFullScreenVisualizer && !isLyricsModeEnabled
     )
     val artistOptions = remember(
         uiState.currentSong?.artistRefs,
