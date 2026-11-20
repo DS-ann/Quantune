@@ -1266,7 +1266,9 @@ class AudioPlaybackService : MediaSessionService() {
             cancelCurrentTrackCache()
             cacheAssetsSongId = null
             widgetSyncedLyrics = emptyList()
+            widgetSyncedTimeline = emptyList()
             widgetPlainLyrics = null
+            widgetLyricPreparationGeneration += 1L
             widgetLyricsRequestedSongKey = null
             widgetLyricsWaitingForExistingFetchSongKey = null
             lastWidgetLyricContentKey = null
@@ -1652,15 +1654,27 @@ class AudioPlaybackService : MediaSessionService() {
         widgetLyricsObserverJob?.cancel()
         widgetLyricsObserverJob = serviceScope.launch {
             vm.syncedLyrics.collect { lyrics ->
-                widgetSyncedLyrics = lyrics.orEmpty().sortedBy { widgetLyricStartMs(it) }
-                if (widgetSyncedLyrics.isNotEmpty()) widgetPlainLyrics = null
-                else if (vm.plainLyrics.value.isNullOrBlank()) widgetPlainLyrics = null
-
-                val position = player.currentPosition.coerceAtLeast(0L)
-                val duration = player.duration.coerceAtLeast(0L)
-                if (hasLyricsWidgetInstalled()) {
-                    updateWidgetProgress(position, duration)
-                    scheduleNextWidgetLyricRefresh(position)
+                val songKey = vm.currentSong.value?.let(::widgetLyricsSongKey)
+                val sourceLines = lyrics.orEmpty()
+                val plain = if (sourceLines.isEmpty()) {
+                    vm.plainLyrics.value?.takeIf { it.isNotBlank() }
+                } else {
+                    null
+                }
+                prepareWidgetLyricLines(
+                    lines = sourceLines,
+                    plainLyrics = plain,
+                    expectedSongKey = songKey,
+                    isStillCurrent = {
+                        songKey == null || vm.currentSong.value?.let(::widgetLyricsSongKey) == songKey
+                    }
+                ) {
+                    if (hasLyricsWidgetInstalled()) {
+                        val position = player.currentPosition.coerceAtLeast(0L)
+                        val duration = player.duration.coerceAtLeast(0L)
+                        updateWidgetProgress(position, duration)
+                        scheduleNextWidgetLyricRefresh(position)
+                    }
                 }
             }
         }
@@ -1668,10 +1682,19 @@ class AudioPlaybackService : MediaSessionService() {
         widgetPlainLyricsObserverJob = serviceScope.launch {
             vm.plainLyrics.collect { plain ->
                 if (vm.syncedLyrics.value.isNullOrEmpty()) {
-                    widgetPlainLyrics = plain?.takeIf { it.isNotBlank() }
-                    if (hasLyricsWidgetInstalled() && !plain.isNullOrBlank()) {
-                        val position = player.currentPosition.coerceAtLeast(0L)
-                        updateWidgetProgress(position, player.duration.coerceAtLeast(0L))
+                    val songKey = vm.currentSong.value?.let(::widgetLyricsSongKey)
+                    prepareWidgetLyricLines(
+                        lines = emptyList(),
+                        plainLyrics = plain?.takeIf { it.isNotBlank() },
+                        expectedSongKey = songKey,
+                        isStillCurrent = {
+                            songKey == null || vm.currentSong.value?.let(::widgetLyricsSongKey) == songKey
+                        }
+                    ) {
+                        if (hasLyricsWidgetInstalled() && !plain.isNullOrBlank()) {
+                            val position = player.currentPosition.coerceAtLeast(0L)
+                            updateWidgetProgress(position, player.duration.coerceAtLeast(0L))
+                        }
                     }
                 }
             }
@@ -1719,12 +1742,12 @@ class AudioPlaybackService : MediaSessionService() {
                     lastWidgetLyricContentKey = null
                     lastWidgetLyricPublishedAtMs = 0L
 
-                    // Read the ViewModel's current lyric snapshot instead of unconditionally
-                    // clearing it. The synced/plain observers may already have delivered
-                    // their initial values before this song observer gets scheduled.
-                    widgetSyncedLyrics = vm.syncedLyrics.value.orEmpty()
-                        .sortedBy { widgetLyricStartMs(it) }
-                    widgetPlainLyrics = vm.plainLyrics.value?.takeIf { it.isNotBlank() }
+                    // Invalidate any previous song's preparation. The shared helper takes
+                    // a fresh ViewModel snapshot and derives its timeline on Dispatchers.Default.
+                    widgetSyncedLyrics = emptyList()
+                    widgetSyncedTimeline = emptyList()
+                    widgetPlainLyrics = null
+                    widgetLyricPreparationGeneration += 1L
                     cancelWidgetLyricRefresh()
 
                     if (song != null) {
