@@ -104,6 +104,8 @@ import com.dsann.music.model.SongItem
 import com.dsann.music.data.lyrics.LineSyncedLyricTimeline
 import androidx.compose.runtime.produceState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.dsann.music.ui.theme.DsmusicAppThemeFromPreferences
 import com.dsann.music.viewmodel.PlayerSharedViewModel
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -574,9 +576,16 @@ internal fun QueueSyncedLyricPreview(
     val duration by viewModel.duration.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val audioService by viewModel.audioServiceState.collectAsStateWithLifecycle()
-    val timeline = remember(lyrics) {
-        LineSyncedLyricTimeline.build(lyrics.orEmpty())
+    var preparedTimeline by remember(lyrics) {
+        mutableStateOf<List<LineSyncedLyricTimeline.Entry>?>(null)
     }
+    LaunchedEffect(lyrics) {
+        preparedTimeline = null
+        preparedTimeline = withContext(Dispatchers.Default) {
+            LineSyncedLyricTimeline.build(lyrics.orEmpty())
+        }
+    }
+    val timeline = preparedTimeline.orEmpty()
     val songKey = currentSong?.videoId?.takeIf { it.isNotBlank() }
         ?: currentSong?.path?.takeIf { it.isNotBlank() }
         ?: currentSong?.id?.toString()
