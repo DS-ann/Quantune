@@ -539,7 +539,9 @@ internal fun FullScreenLyricsOverlay(
                 translationStatus = "Translating lyrics…"
                 translationJob = translationScope.launch {
                     try {
-                        val settings = translationSettingsStore.load()
+                        val settings = withContext(Dispatchers.IO) {
+                            translationSettingsStore.load()
+                        }
                         if (!settings.enabled) {
                             throw IllegalStateException(
                                 "Enable AI lyrics translation in Settings → Playback."
