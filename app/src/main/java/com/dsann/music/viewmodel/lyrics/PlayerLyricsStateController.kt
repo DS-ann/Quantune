@@ -586,6 +586,13 @@ class PlayerLyricsStateController(private val logTag: String) {
         // whole preparation path on the parser worker rather than only the parser call.
         _isLoading.value = true
         LYRICS_PARSE_EXECUTOR.execute {
+            if (!isActiveCallback(
+                    requestSongId,
+                    selectionRequestGeneration,
+                    requestGeneration
+                )
+            ) return@execute
+
             val synced = result.syncedLyrics?.takeIf { it.isNotBlank() }
             val plain = result.plainLyrics?.takeIf { it.isNotBlank() }
             val rawPlain = plain?.trim()
@@ -644,6 +651,13 @@ class PlayerLyricsStateController(private val logTag: String) {
         onParsed: (List<LyricLine>?) -> Unit
     ) {
         LYRICS_PARSE_EXECUTOR.execute {
+            if (!isActiveCallback(
+                    requestSongId,
+                    selectionRequestGeneration,
+                    requestGeneration
+                )
+            ) return@execute
+
             val parsed = parseLyricsCandidatesOnWorker(candidates)
             mainHandler.post {
                 if (isActiveCallback(
