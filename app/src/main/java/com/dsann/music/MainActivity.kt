@@ -1144,7 +1144,7 @@ onNavigateToLibrary = {
                                 {
                                     if (!diagnosticLyricsRequestStarted) {
                                         diagnosticLyricsRequestStarted = true
-                                        Log.i(TAG, "FULL_PLAYER_LAYOUT_READY api=${Build.VERSION.SDK_INT}")
+                                        Log.i("QuantuneANRTest", "FULL_PLAYER_LAYOUT_READY api=${Build.VERSION.SDK_INT}")
                                         lifecycleScope.launch {
                                             // The callback is sent by the expanded player's
                                             // measured root. Let that layout settle before opening
