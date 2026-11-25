@@ -69,9 +69,6 @@ for _ in $(seq 1 60); do
     OPENED=1
     break
   fi
-  if ! adb shell pidof com.dsann.music >/dev/null 2>&1; then
-    break
-  fi
   sleep 1
 done
 
