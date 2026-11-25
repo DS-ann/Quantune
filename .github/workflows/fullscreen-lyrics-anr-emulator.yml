@@ -64,6 +64,11 @@ jobs:
 
       - name: Boot Android 6 emulator, open fullscreen lyrics and capture ANR data
         id: emulator
+        # GitHub-hosted runners may expose no usable /dev/kvm. The emulator's
+        # -accel off fallback refuses to start unless TCG software CPU emulation
+        # is explicitly enabled with this opt-in environment variable.
+        env:
+          ANDROID_I_WANT_MY_TCG: "yes"
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
