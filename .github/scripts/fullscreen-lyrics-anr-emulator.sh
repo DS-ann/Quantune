@@ -2,6 +2,7 @@
 set -u
 
 ARTIFACT_DIR="${GITHUB_WORKSPACE:-$PWD}/anr-artifacts"
+API_LEVEL="${ANDROID_API_LEVEL:-unknown}"
 APK="app/build/outputs/apk/debug/app-x86_64-debug.apk"
 mkdir -p "$ARTIFACT_DIR"
 RESULT=0
@@ -165,7 +166,7 @@ if [[ "$OVERLAY_MEASURED" -ne 1 ]]; then
 fi
 
 {
-  echo "api_level=23"
+  echo "api_level=$API_LEVEL"
   echo "test=expanded_player_then_fullscreen_lyrics"
   echo "player_layout_ready=$PLAYER_LAYOUT_READY"
   echo "player_first_draw_completed=$PLAYER_FIRST_DRAW"
