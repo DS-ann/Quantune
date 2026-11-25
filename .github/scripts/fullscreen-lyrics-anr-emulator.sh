@@ -86,7 +86,7 @@ fi
 
 capture_logs
 
-if grep -Eqi 'ANR in com\\.dsann\\.music|Input dispatching timed out' "$ARTIFACT_DIR/logcat-all.txt"; then
+if grep -Eqi 'ANR in com\.dsann\.music|Input dispatching timed out' "$ARTIFACT_DIR/logcat-all.txt"; then
   ANR_FOUND=1
 fi
 if grep -Eqi 'Type: ANR|APP NOT RESPONDING' "$ARTIFACT_DIR/quantune-diagnostic-report.txt"; then
