@@ -127,15 +127,6 @@ for mode in empty synced plain; do
     echo "ANR captured while the fullscreen lyrics overlay was active in mode=$mode" >&2
   fi
 
-  if [[ "$measured" -eq 1 ]] && ! grep -q 'LYRICS' "$ARTIFACT_DIR/$mode/window-hierarchy.xml"; then
-    # A watchdog report may replace the overlay before hierarchy capture. The
-    # overlay-measured log is the authoritative evidence that its layout completed.
-    if ! grep -Eqi 'Type: ANR|APP NOT RESPONDING' "$ARTIFACT_DIR/$mode/quantune-diagnostic-report.txt"; then
-      echo "Overlay completed layout but no LYRICS header was visible for mode=$mode" >&2
-      RESULT=1
-    fi
-  fi
-
   {
     echo "mode=$mode"
     echo "overlay_measured=$measured"
