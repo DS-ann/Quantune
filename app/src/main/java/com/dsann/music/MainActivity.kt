@@ -1143,18 +1143,31 @@ onNavigateToLibrary = {
                             onDiagnosticFullPlayerLayoutReady = if (runFullscreenLyricsAnrTest) {
                                 {
                                     if (!diagnosticLyricsRequestStarted) {
+                                        Log.i(
+                                            "QuantuneANRTest",
+                                            "FULL_PLAYER_LAYOUT_READY api=${Build.VERSION.SDK_INT}"
+                                        )
+                                    }
+                                }
+                            } else null,
+                            onDiagnosticFullPlayerFirstDraw = if (runFullscreenLyricsAnrTest) {
+                                {
+                                    if (!diagnosticLyricsRequestStarted) {
                                         diagnosticLyricsRequestStarted = true
-                                        Log.i("QuantuneANRTest", "FULL_PLAYER_LAYOUT_READY api=${Build.VERSION.SDK_INT}")
+                                        Log.i(
+                                            "QuantuneANRTest",
+                                            "FULL_PLAYER_FIRST_DRAW_COMPLETED api=${Build.VERSION.SDK_INT}"
+                                        )
                                         lifecycleScope.launch {
-                                            // The callback is sent by the expanded player's
-                                            // measured root. Let that layout settle before opening
-                                            // the production fullscreen lyrics dialog.
-                                            delay(750L)
+                                            // Do not overlay the player while its first frame
+                                            // is still being recorded. This matches the real
+                                            // flow where users open Lyrics from a visible player.
+                                            delay(1_000L)
                                             if (!isFinishing && !isDestroyed) {
                                                 playerViewModel.setLyricsModeEnabled(true)
                                                 Log.i(
                                                     "QuantuneANRTest",
-                                                    "FULLSCREEN_LYRICS_REQUESTED after_expanded_player_layout api=${Build.VERSION.SDK_INT}"
+                                                    "FULLSCREEN_LYRICS_REQUESTED after_expanded_player_first_draw api=${Build.VERSION.SDK_INT}"
                                                 )
                                             }
                                         }
