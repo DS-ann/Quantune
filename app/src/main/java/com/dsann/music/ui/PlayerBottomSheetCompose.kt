@@ -902,6 +902,7 @@ fun PlayerBottomSheetCompose(
     onNavigateToListenTogether: () -> Unit,
     onNavigateToSongRecognizer: () -> Unit,
     showSongRecognizerShortcut: Boolean = false,
+    onDiagnosticFullPlayerLayoutReady: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -1748,7 +1749,12 @@ fun PlayerBottomSheetCompose(
                                 playerContentExpansionFraction = playerContentExpansionFraction,
                                 isSheetExpanded = currentSheetContentState == PlayerSheetState.EXPANDED,
                                 onNavigateToListenTogether = onNavigateToListenTogether,
-                                onFullPlayerLayoutReady = { fullPlayerLayoutReady = true },
+                                onFullPlayerLayoutReady = {
+                                    if (!fullPlayerLayoutReady) {
+                                        fullPlayerLayoutReady = true
+                                        onDiagnosticFullPlayerLayoutReady?.invoke()
+                                    }
+                                },
                                 containerHeight = containerHeight,
                                 onCollapse = { collapsePlayerFully() },
                                 onExpand = { currentSheetContentState = PlayerSheetState.EXPANDED },
