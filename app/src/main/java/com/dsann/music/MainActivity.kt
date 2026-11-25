@@ -142,6 +142,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
+private const val EXTRA_OPEN_FULLSCREEN_LYRICS_ANR_TEST = "com.dsann.music.EXTRA_OPEN_FULLSCREEN_LYRICS_ANR_TEST"
+
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
@@ -198,6 +200,20 @@ class MainActivity : AppCompatActivity() {
 
         super.onCreate(savedInstanceState)
 
+        // The emulator-only repro uses the ordinary player and fullscreen lyrics UI,
+        // but seeds a local placeholder song so the no-lyrics screen can be opened
+        // deterministically without network or real media fixtures.
+        val runFullscreenLyricsAnrTest =
+            BuildConfig.DEBUG && intent.getBooleanExtra(
+                EXTRA_OPEN_FULLSCREEN_LYRICS_ANR_TEST,
+                false
+            )
+        if (runFullscreenLyricsAnrTest) {
+            getSharedPreferences("AppSettings", Context.MODE_PRIVATE).edit {
+                putBoolean("has_seen_onboarding_1_8", true)
+            }
+        }
+
         // A previous process may have died before it could show its diagnostic report.
         // Route to the recovery page before starting playback, navigation or network work.
         if (
@@ -237,6 +253,30 @@ class MainActivity : AppCompatActivity() {
             val dynamicAlbumColor = if (currentSong != null) playerBackgroundColor else null
 
             DsmusicAppTheme(darkTheme = isDarkTheme, dynamicAlbumColor = dynamicAlbumColor) {
+                LaunchedEffect(runFullscreenLyricsAnrTest) {
+                    if (runFullscreenLyricsAnrTest) {
+                        // Wait for the root player host to enter composition, then open
+                        // the actual fullscreen dialog with an intentionally empty lyric state.
+                        delay(1_200L)
+                        playerViewModel.setCurrentSong(
+                            SongItem(
+                                id = -23_001L,
+                                title = "Quantune Fullscreen Lyrics ANR Test",
+                                artist = "Quantune Emulator",
+                                albumId = -1L,
+                                path = null,
+                                duration = 180_000L,
+                                dateAdded = System.currentTimeMillis(),
+                                data = null
+                            )
+                        )
+                        playerViewModel.setLyricsModeEnabled(true)
+                        Log.i(
+                            "QuantuneANRTest",
+                            "FULLSCREEN_LYRICS_OPENED song=synthetic_no_lyrics api=${Build.VERSION.SDK_INT}"
+                        )
+                    }
+                }
                 ListenTogetherPlaybackBridge(viewModel = playerViewModel)
                 // Observe room messages at the app root so notifications work on every screen,
                 // not only while the Listen Together page is open.
