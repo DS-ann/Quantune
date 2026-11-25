@@ -1,6 +1,9 @@
 package com.dsann.music.ui.player
 
 import com.dsann.music.CrashDiagnostics
+import com.dsann.music.BuildConfig
+
+import android.util.Log
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -79,6 +82,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import com.dsann.music.util.NetworkFailureClassifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -458,6 +462,7 @@ internal fun FullScreenLyricsOverlay(
     var showProvidersSheet by remember { mutableStateOf(false) }
     var syncOffsetMs by remember(currentSong?.id) { mutableStateOf(0L) }
     var lyricsContentReady by remember { mutableStateOf(false) }
+    var hasLoggedFullscreenLyricsLayout by remember { mutableStateOf(false) }
 
     // Let the platform Dialog finish its entrance transition before creating the
     // first populated lyrics text layout and karaoke geometry.
@@ -716,6 +721,15 @@ internal fun FullScreenLyricsOverlay(
             .statusBarsPadding()
             .navigationBarsPadding()
             .padding(vertical = 12.dp)
+            .onGloballyPositioned {
+                if (BuildConfig.DEBUG && !hasLoggedFullscreenLyricsLayout) {
+                    hasLoggedFullscreenLyricsLayout = true
+                    Log.i(
+                        "QuantuneANRTest",
+                        "FULLSCREEN_LYRICS_OVERLAY_MEASURED api=${android.os.Build.VERSION.SDK_INT}"
+                    )
+                }
+            }
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Centered Title Header Layout
