@@ -216,8 +216,8 @@ class MainActivity : AppCompatActivity() {
                 putBoolean("has_seen_onboarding_1_8", true)
             }
 
-            // Seed the normal player host before its first composition. The test
-            // opens lyrics only after the expanded player has completed real layout.
+            // Seed a song while keeping the normal root screen collapsed. The test
+            // expands the player only after the initial app frame has settled.
             playerViewModel.setCurrentSong(
                 SongItem(
                     id = -23_001L,
@@ -230,8 +230,6 @@ class MainActivity : AppCompatActivity() {
                     data = null
                 )
             )
-            playerViewModel.setPlayerExpanded(true)
-            playerViewModel.setPlayerExpansionFraction(1f)
             Log.i(TAG, "FULLSCREEN_LYRICS_PLAYER_HOST_SEEDED api=${Build.VERSION.SDK_INT}")
         }
 
@@ -278,6 +276,18 @@ class MainActivity : AppCompatActivity() {
             val dynamicAlbumColor = if (currentSong != null) playerBackgroundColor else null
 
             DsmusicAppTheme(darkTheme = isDarkTheme, dynamicAlbumColor = dynamicAlbumColor) {
+                LaunchedEffect(runFullscreenLyricsAnrTest) {
+                    if (runFullscreenLyricsAnrTest) {
+                        // Match a real user opening the player after the Explore screen is
+                        // already on screen; do not combine cold app startup with expansion.
+                        delay(2_500L)
+                        if (!isFinishing && !isDestroyed) {
+                            Log.i("QuantuneANRTest", "TEST_PLAYER_EXPANSION_REQUESTED api=${Build.VERSION.SDK_INT}")
+                            playerViewModel.setPlayerExpanded(true)
+                            playerViewModel.setPlayerExpansionFraction(1f)
+                        }
+                    }
+                }
                 ListenTogetherPlaybackBridge(viewModel = playerViewModel)
                 // Observe room messages at the app root so notifications work on every screen,
                 // not only while the Listen Together page is open.
