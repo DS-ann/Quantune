@@ -1,0 +1,100 @@
+name: Quantune Fullscreen Lyrics ANR Emulator
+
+on:
+  push:
+    branches:
+      - debug/fullscreen-lyrics-anr
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: quantune-lyrics-anr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reproduce:
+    name: API 23 emulator — open fullscreen lyrics and capture diagnostics
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: Install Android SDK, NDK and CMake
+        run: |
+          sdkmanager --channel=3 \
+            "platforms;android-37.0" \
+            "build-tools;37.0.0" \
+            "cmake;3.22.1" \
+            "ndk;27.2.12479018"
+
+      - name: Prepare diagnostics directory
+        run: mkdir -p anr-artifacts
+
+      - name: Build debuggable x86_64 APK for emulator
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --build-cache assembleDebug -PquantuneEmulatorAbi=x86_64
+          APK="app/build/outputs/apk/debug/app-x86_64-debug.apk"
+          test -s "$APK"
+          cp "$APK" anr-artifacts/Quantune-debug-x86_64.apk
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" > anr-artifacts/apk-badging.txt
+
+      - name: Boot Android 6 emulator, open fullscreen lyrics and capture ANR data
+        id: emulator
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 23
+          target: default
+          arch: x86_64
+          profile: Nexus 5
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory 3072 -camera-back none
+          disable-animations: true
+          script: bash .github/scripts/fullscreen-lyrics-anr-emulator.sh
+
+      - name: Upload emulator logs, app report, tombstones and ANR traces
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Quantune-fullscreen-lyrics-anr-api23-${{ github.run_number }}
+          path: |
+            anr-artifacts/**
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Fail when reproduction or diagnostics indicate an ANR
+        if: always()
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.emulator.outcome }}" != "success" ]]; then
+            echo "::error::The fullscreen lyrics emulator test failed. Download the diagnostics artifact."
+            exit 1
+          fi
+          if grep -Eqi 'ANR in com|APP NOT RESPONDING|Type: ANR' anr-artifacts/logcat-all.txt anr-artifacts/quantune-diagnostic-report.txt 2>/dev/null; then
+            echo "::error::Fullscreen lyrics ANR detected. Diagnostics were uploaded."
+            exit 1
+          fi
+          echo "Fullscreen lyrics opened on API 23 with no captured ANR."
