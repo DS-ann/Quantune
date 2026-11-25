@@ -79,6 +79,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -373,6 +374,7 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
     isSheetExpanded: Boolean,
     onNavigateToListenTogether: () -> Unit,
     onFullPlayerLayoutReady: () -> Unit,
+    onFullPlayerFirstDraw: () -> Unit,
     containerHeight: Dp,
     onCollapse: () -> Unit,
     onExpand: () -> Unit,
@@ -391,6 +393,9 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
     val currentSong = uiState.currentSong ?: return
     val isPlaying = uiState.isPlaying
     val fullPlayerStateHolder = rememberSaveableStateHolder()
+    val fullPlayerFirstDrawDispatched = remember(viewModel) {
+        java.util.concurrent.atomic.AtomicBoolean(false)
+    }
     // The compact controls and full player must both respect the room host's queue authority.
     val listenTogetherRole by DsmusicListenTogetherSession.client.role.collectAsStateWithLifecycle()
     val canSkipTracks = listenTogetherRole != "GUEST"
@@ -491,6 +496,14 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                 .onGloballyPositioned { coordinates ->
                     if (coordinates.size.width > 0 && coordinates.size.height > 0) {
                         onFullPlayerLayoutReady()
+                    }
+                }
+                .drawWithContent {
+                    // This callback is dispatched only after Compose has actually drawn
+                    // the expanded player's content once, not merely after its first measure.
+                    drawContent()
+                    if (fullPlayerFirstDrawDispatched.compareAndSet(false, true)) {
+                        onFullPlayerFirstDraw()
                     }
                 }
                 .graphicsLayer {
@@ -903,6 +916,7 @@ fun PlayerBottomSheetCompose(
     onNavigateToSongRecognizer: () -> Unit,
     showSongRecognizerShortcut: Boolean = false,
     onDiagnosticFullPlayerLayoutReady: (() -> Unit)? = null,
+    onDiagnosticFullPlayerFirstDraw: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -1754,6 +1768,9 @@ fun PlayerBottomSheetCompose(
                                         fullPlayerLayoutReady = true
                                         onDiagnosticFullPlayerLayoutReady?.invoke()
                                     }
+                                },
+                                onFullPlayerFirstDraw = {
+                                    onDiagnosticFullPlayerFirstDraw?.invoke()
                                 },
                                 containerHeight = containerHeight,
                                 onCollapse = { collapsePlayerFully() },
