@@ -9,16 +9,16 @@ OPENED=0
 ANR_FOUND=0
 
 capture_logs() {
-  adb logcat -b all -d -v threadtime > "$ARTIFACT_DIR/logcat-all.txt" 2>&1 || true
-  adb shell dumpsys activity lastanr > "$ARTIFACT_DIR/activity-lastanr.txt" 2>&1 || true
-  adb shell dumpsys dropbox --print data_app_anr > "$ARTIFACT_DIR/dropbox-app-anr.txt" 2>&1 || true
-  adb shell dumpsys dropbox --print data_app_native_crash > "$ARTIFACT_DIR/dropbox-native-crash.txt" 2>&1 || true
-  adb shell uiautomator dump /sdcard/quantune-window.xml >/dev/null 2>&1 || true
-  adb pull /sdcard/quantune-window.xml "$ARTIFACT_DIR/window-hierarchy.xml" >/dev/null 2>&1 || true
-  adb shell screencap -p /sdcard/quantune-screen.png >/dev/null 2>&1 || true
-  adb pull /sdcard/quantune-screen.png "$ARTIFACT_DIR/fullscreen-lyrics-screen.png" >/dev/null 2>&1 || true
+  timeout 20s adb logcat -b all -d -v threadtime > "$ARTIFACT_DIR/logcat-all.txt" 2>&1 || true
+  timeout 15s adb shell dumpsys activity lastanr > "$ARTIFACT_DIR/activity-lastanr.txt" 2>&1 || true
+  timeout 15s adb shell dumpsys dropbox --print data_app_anr > "$ARTIFACT_DIR/dropbox-app-anr.txt" 2>&1 || true
+  timeout 15s adb shell dumpsys dropbox --print data_app_native_crash > "$ARTIFACT_DIR/dropbox-native-crash.txt" 2>&1 || true
+  timeout 15s adb shell uiautomator dump /sdcard/quantune-window.xml >/dev/null 2>&1 || true
+  timeout 15s adb pull /sdcard/quantune-window.xml "$ARTIFACT_DIR/window-hierarchy.xml" >/dev/null 2>&1 || true
+  timeout 15s adb shell screencap -p /sdcard/quantune-screen.png >/dev/null 2>&1 || true
+  timeout 15s adb pull /sdcard/quantune-screen.png "$ARTIFACT_DIR/fullscreen-lyrics-screen.png" >/dev/null 2>&1 || true
 
-  adb shell run-as com.dsann.music cat files/diagnostics/latest-report.txt \
+  timeout 15s adb shell run-as com.dsann.music cat files/diagnostics/latest-report.txt \
     > "$ARTIFACT_DIR/quantune-diagnostic-report.txt" 2> "$ARTIFACT_DIR/diagnostic-report-read-error.txt" || true
   if [[ ! -s "$ARTIFACT_DIR/quantune-diagnostic-report.txt" ]]; then
     printf 'No app-generated ANR/error report was present.\n' > "$ARTIFACT_DIR/quantune-diagnostic-report.txt"
@@ -27,12 +27,12 @@ capture_logs() {
   # Emulator images are normally userdebug and permit root access to native crash
   # tombstones and framework ANR traces. Keep the test useful if a particular image
   # denies adb root or either directory is empty.
-  adb root >/dev/null 2>&1 || true
-  adb wait-for-device >/dev/null 2>&1 || true
-  adb pull /data/tombstones "$ARTIFACT_DIR/tombstones" >/dev/null 2>&1 || true
-  adb pull /data/anr "$ARTIFACT_DIR/anr-traces" >/dev/null 2>&1 || true
-  adb shell ls -la /data/tombstones > "$ARTIFACT_DIR/tombstones-listing.txt" 2>&1 || true
-  adb shell ls -la /data/anr > "$ARTIFACT_DIR/anr-traces-listing.txt" 2>&1 || true
+  timeout 15s adb root >/dev/null 2>&1 || true
+  timeout 30s adb wait-for-device >/dev/null 2>&1 || true
+  timeout 30s adb pull /data/tombstones "$ARTIFACT_DIR/tombstones" >/dev/null 2>&1 || true
+  timeout 30s adb pull /data/anr "$ARTIFACT_DIR/anr-traces" >/dev/null 2>&1 || true
+  timeout 15s adb shell ls -la /data/tombstones > "$ARTIFACT_DIR/tombstones-listing.txt" 2>&1 || true
+  timeout 15s adb shell ls -la /data/anr > "$ARTIFACT_DIR/anr-traces-listing.txt" 2>&1 || true
 }
 
 if [[ ! -s "$APK" ]]; then
@@ -40,11 +40,11 @@ if [[ ! -s "$APK" ]]; then
   exit 2
 fi
 
-adb wait-for-device
+timeout 60s adb wait-for-device
 adb shell settings put global window_animation_scale 0 || true
 adb shell settings put global transition_animation_scale 0 || true
 adb shell settings put global animator_duration_scale 0 || true
-adb install -r "$APK"
+timeout 60s adb install -r "$APK"
 
 for permission in \
   android.permission.READ_EXTERNAL_STORAGE \
@@ -57,7 +57,7 @@ done
 
 adb logcat -c
 adb shell am force-stop com.dsann.music || true
-adb shell am start -W -n com.dsann.music/.MainActivity \
+timeout 30s adb shell am start -W -n com.dsann.music/.MainActivity \
   --ez com.dsann.music.EXTRA_OPEN_FULLSCREEN_LYRICS_ANR_TEST true \
   --ez com.dsann.music.EXTRA_SKIP_DIAGNOSTIC_RECOVERY true \
   > "$ARTIFACT_DIR/activity-start.txt" 2>&1 || RESULT=1
