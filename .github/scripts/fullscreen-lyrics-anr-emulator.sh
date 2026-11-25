@@ -81,6 +81,7 @@ printf '%s\n' "$PACKAGE_PATH" > "$ARTIFACT_DIR/installed-package-path.txt"
 # network fan-out, so each captured stack identifies the renderer path being tested.
 for mode in empty synced plain; do
   echo "Starting isolated fullscreen lyrics mode=$mode"
+  mkdir -p "$ARTIFACT_DIR/$mode"
 
   timeout 30s adb shell am force-stop com.dsann.music >/dev/null 2>&1 || true
   timeout 15s adb shell run-as com.dsann.music rm -f \
