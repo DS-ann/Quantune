@@ -278,8 +278,6 @@ class MainActivity : AppCompatActivity() {
             val dynamicAlbumColor = if (currentSong != null) playerBackgroundColor else null
 
             DsmusicAppTheme(darkTheme = isDarkTheme, dynamicAlbumColor = dynamicAlbumColor) {
-                // The diagnostic opens fullscreen lyrics from the one-shot
-                // expanded-player layout callback below, never during root composition.
                 ListenTogetherPlaybackBridge(viewModel = playerViewModel)
                 // Observe room messages at the app root so notifications work on every screen,
                 // not only while the Listen Together page is open.
