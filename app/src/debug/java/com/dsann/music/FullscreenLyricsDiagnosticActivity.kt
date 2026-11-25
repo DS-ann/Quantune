@@ -73,7 +73,7 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
                                 Log.i(TAG, "DIAGNOSTIC_BASE_LAYOUT_READY mode=$mode")
                             }
                         }
-                )
+                ) { }
 
                 LaunchedEffect(baseLayoutReady) {
                     if (baseLayoutReady) {
