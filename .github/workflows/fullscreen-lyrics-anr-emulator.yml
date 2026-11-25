@@ -16,8 +16,12 @@ concurrency:
 
 jobs:
   reproduce:
-    name: API 23 emulator — open fullscreen lyrics and capture diagnostics
+    name: API ${{ matrix.api-level }} emulator — open fullscreen lyrics and capture diagnostics
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [23, 31, 35]
     timeout-minutes: 90
 
     steps:
@@ -72,7 +76,7 @@ jobs:
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 23
+          api-level: ${{ matrix.api-level }}
           target: default
           arch: x86_64
           profile: Nexus 5
@@ -84,7 +88,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: Quantune-fullscreen-lyrics-anr-api23-${{ github.run_number }}
+          name: Quantune-fullscreen-lyrics-anr-api${{ matrix.api-level }}-${{ github.run_number }}
           path: |
             anr-artifacts/**
           if-no-files-found: warn
@@ -102,4 +106,4 @@ jobs:
             echo "::error::Fullscreen lyrics ANR detected. Diagnostics were uploaded."
             exit 1
           fi
-          echo "Fullscreen lyrics opened on API 23 with no captured ANR."
+          echo "Fullscreen lyrics opened on API ${{ matrix.api-level }} with no captured ANR."
