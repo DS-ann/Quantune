@@ -157,6 +157,8 @@ class MainActivity : AppCompatActivity() {
     private var navController: NavController? = null
     private var previousDestination = "explore"
     private var isNavigating = false
+    private var isRunningFullscreenLyricsAnrDiagnostic = false
+    private var diagnosticLyricsRequestStarted = false
 
     var audioService: AudioPlaybackService? = null
     var isServiceBound = false
@@ -208,10 +210,29 @@ class MainActivity : AppCompatActivity() {
                 EXTRA_OPEN_FULLSCREEN_LYRICS_ANR_TEST,
                 false
             )
+        isRunningFullscreenLyricsAnrDiagnostic = runFullscreenLyricsAnrTest
         if (runFullscreenLyricsAnrTest) {
             getSharedPreferences("AppSettings", Context.MODE_PRIVATE).edit {
                 putBoolean("has_seen_onboarding_1_8", true)
             }
+
+            // Seed the normal player host before its first composition. The test
+            // opens lyrics only after the expanded player has completed real layout.
+            playerViewModel.setCurrentSong(
+                SongItem(
+                    id = -23_001L,
+                    title = "Quantune Fullscreen Lyrics Player-Host Test",
+                    artist = "Quantune Emulator",
+                    albumId = -1L,
+                    path = null,
+                    duration = 180_000L,
+                    dateAdded = System.currentTimeMillis(),
+                    data = null
+                )
+            )
+            playerViewModel.setPlayerExpanded(true)
+            playerViewModel.setPlayerExpansionFraction(1f)
+            Log.i(TAG, "FULLSCREEN_LYRICS_PLAYER_HOST_SEEDED api=${Build.VERSION.SDK_INT}")
         }
 
         // A previous process may have died before it could show its diagnostic report.
@@ -229,13 +250,17 @@ class MainActivity : AppCompatActivity() {
 
         // Keep the live ViewModel position during a configuration change. Only read the
         // persisted checkpoint when creating a fresh playback ViewModel after process death.
-        if (savedInstanceState == null || playerViewModel.currentSong.value == null) {
+        if (!runFullscreenLyricsAnrTest &&
+            (savedInstanceState == null || playerViewModel.currentSong.value == null)
+        ) {
             playerViewModel.loadLastPlaybackState()
         }
 
-        // Media3 cache index loading can be slow on cold/large caches. Prepare it off
-        // the UI thread before creating the playback service.
-        prepareAndStartAudioService()
+        // This diagnostic has no media source or playback work. Keep cache/service
+        // startup out of the measurement so a captured stall belongs to the UI tree.
+        if (!runFullscreenLyricsAnrTest) {
+            prepareAndStartAudioService()
+        }
         // Permissions are now handled in Onboarding Screen
 
         setContent {
@@ -253,30 +278,8 @@ class MainActivity : AppCompatActivity() {
             val dynamicAlbumColor = if (currentSong != null) playerBackgroundColor else null
 
             DsmusicAppTheme(darkTheme = isDarkTheme, dynamicAlbumColor = dynamicAlbumColor) {
-                LaunchedEffect(runFullscreenLyricsAnrTest) {
-                    if (runFullscreenLyricsAnrTest) {
-                        // Wait for the root player host to enter composition, then open
-                        // the actual fullscreen dialog with an intentionally empty lyric state.
-                        delay(1_200L)
-                        playerViewModel.setCurrentSong(
-                            SongItem(
-                                id = -23_001L,
-                                title = "Quantune Fullscreen Lyrics ANR Test",
-                                artist = "Quantune Emulator",
-                                albumId = -1L,
-                                path = null,
-                                duration = 180_000L,
-                                dateAdded = System.currentTimeMillis(),
-                                data = null
-                            )
-                        )
-                        playerViewModel.setLyricsModeEnabled(true)
-                        Log.i(
-                            "QuantuneANRTest",
-                            "FULLSCREEN_LYRICS_OPENED song=synthetic_no_lyrics api=${Build.VERSION.SDK_INT}"
-                        )
-                    }
-                }
+                // The diagnostic opens fullscreen lyrics from the one-shot
+                // expanded-player layout callback below, never during root composition.
                 ListenTogetherPlaybackBridge(viewModel = playerViewModel)
                 // Observe room messages at the app root so notifications work on every screen,
                 // not only while the Listen Together page is open.
@@ -1139,6 +1142,27 @@ onNavigateToLibrary = {
                             },
                             showSongRecognizerShortcut = currentRoute == "search" &&
                                 showSongRecognizerShortcutOnSearch && !showSongRecognizerSubpage,
+                            onDiagnosticFullPlayerLayoutReady = if (runFullscreenLyricsAnrTest) {
+                                {
+                                    if (!diagnosticLyricsRequestStarted) {
+                                        diagnosticLyricsRequestStarted = true
+                                        Log.i(TAG, "FULL_PLAYER_LAYOUT_READY api=${Build.VERSION.SDK_INT}")
+                                        lifecycleScope.launch {
+                                            // The callback is sent by the expanded player's
+                                            // measured root. Let that layout settle before opening
+                                            // the production fullscreen lyrics dialog.
+                                            delay(750L)
+                                            if (!isFinishing && !isDestroyed) {
+                                                playerViewModel.setLyricsModeEnabled(true)
+                                                Log.i(
+                                                    "QuantuneANRTest",
+                                                    "FULLSCREEN_LYRICS_REQUESTED after_expanded_player_layout api=${Build.VERSION.SDK_INT}"
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            } else null,
                             modifier = Modifier.layout { measurable, constraints ->
                                 // Portrait retains its existing rail inset behavior. In landscape,
                                 // keep the player host full-width and morph only the collapsed capsule
@@ -1562,7 +1586,9 @@ onNavigateToLibrary = {
 
     override fun onStart() {
         super.onStart()
-        ensureServiceRunning()
+        if (!isRunningFullscreenLyricsAnrDiagnostic) {
+            ensureServiceRunning()
+        }
 
         val activeRoute = navController?.currentDestination?.route
         if (activeRoute == "library" || activeRoute == "local_music") {
