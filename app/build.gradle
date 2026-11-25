@@ -55,7 +55,13 @@ android {
         abi {
             enable true
             reset()
-            include 'armeabi-v7a', 'arm64-v8a'
+            // Production artifacts remain ARM-only. The dedicated emulator workflow
+            // opts into x86_64 so an API 23 hosted emulator can execute the debug APK.
+            def quantuneAbis = ['armeabi-v7a', 'arm64-v8a']
+            if (project.findProperty('quantuneEmulatorAbi') == 'x86_64') {
+                quantuneAbis.add('x86_64')
+            }
+            include(*quantuneAbis)
             universalApk true
         }
     }
