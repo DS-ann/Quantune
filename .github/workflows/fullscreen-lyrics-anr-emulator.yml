@@ -73,6 +73,7 @@ jobs:
         # is explicitly enabled with this opt-in environment variable.
         env:
           ANDROID_I_WANT_MY_TCG: "yes"
+          ANDROID_API_LEVEL: ${{ matrix.api-level }}
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
