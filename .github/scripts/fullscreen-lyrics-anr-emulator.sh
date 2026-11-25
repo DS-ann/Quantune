@@ -5,47 +5,36 @@ ARTIFACT_DIR="${GITHUB_WORKSPACE:-$PWD}/anr-artifacts"
 APK="app/build/outputs/apk/debug/app-x86_64-debug.apk"
 mkdir -p "$ARTIFACT_DIR"
 RESULT=0
-TARGET_ANR_FOUND=0
-OVERLAY_MODES_REACHED=0
+PLAYER_LAYOUT_READY=0
+LYRICS_REQUESTED=0
+OVERLAY_MEASURED=0
+ANR_FOUND=0
+ANR_STAGE="none"
 
-capture_mode() {
-  local mode="$1"
-  local dest="$ARTIFACT_DIR/$mode"
-  mkdir -p "$dest"
-
-  timeout 25s adb logcat -b all -d -v threadtime > "$dest/logcat-all.txt" 2>&1 || true
-  timeout 15s adb shell dumpsys activity activities > "$dest/activity-stack.txt" 2>&1 || true
-  timeout 15s adb shell dumpsys dropbox --print data_app_anr > "$dest/dropbox-app-anr.txt" 2>&1 || true
-  timeout 15s adb shell dumpsys dropbox --print data_app_native_crash > "$dest/dropbox-native-crash.txt" 2>&1 || true
-  timeout 15s adb shell uiautomator dump "/sdcard/quantune-$mode-window.xml" >/dev/null 2>&1 || true
-  timeout 15s adb pull "/sdcard/quantune-$mode-window.xml" "$dest/window-hierarchy.xml" >/dev/null 2>&1 || true
-  timeout 15s adb shell screencap -p "/sdcard/quantune-$mode-screen.png" >/dev/null 2>&1 || true
-  timeout 15s adb pull "/sdcard/quantune-$mode-screen.png" "$dest/screenshot.png" >/dev/null 2>&1 || true
+capture_logs() {
+  timeout 25s adb logcat -b all -d -v threadtime > "$ARTIFACT_DIR/logcat-all.txt" 2>&1 || true
+  timeout 15s adb shell dumpsys activity activities > "$ARTIFACT_DIR/activity-stack.txt" 2>&1 || true
+  timeout 15s adb shell dumpsys activity lastanr > "$ARTIFACT_DIR/activity-lastanr.txt" 2>&1 || true
+  timeout 15s adb shell dumpsys dropbox --print data_app_anr > "$ARTIFACT_DIR/dropbox-app-anr.txt" 2>&1 || true
+  timeout 15s adb shell dumpsys dropbox --print data_app_native_crash > "$ARTIFACT_DIR/dropbox-native-crash.txt" 2>&1 || true
+  timeout 15s adb shell uiautomator dump /sdcard/quantune-player-host-window.xml >/dev/null 2>&1 || true
+  timeout 15s adb pull /sdcard/quantune-player-host-window.xml "$ARTIFACT_DIR/window-hierarchy.xml" >/dev/null 2>&1 || true
+  timeout 15s adb shell screencap -p /sdcard/quantune-player-host-screen.png >/dev/null 2>&1 || true
+  timeout 15s adb pull /sdcard/quantune-player-host-screen.png "$ARTIFACT_DIR/screenshot.png" >/dev/null 2>&1 || true
 
   timeout 15s adb shell run-as com.dsann.music cat files/diagnostics/latest-report.txt \
-    > "$dest/quantune-diagnostic-report.txt" 2> "$dest/diagnostic-report-read-error.txt" || true
-  if [[ ! -s "$dest/quantune-diagnostic-report.txt" ]]; then
-    printf 'No app-generated ANR/error report was present for mode=%s.\n' "$mode" \
-      > "$dest/quantune-diagnostic-report.txt"
+    > "$ARTIFACT_DIR/quantune-diagnostic-report.txt" 2> "$ARTIFACT_DIR/diagnostic-report-read-error.txt" || true
+  if [[ ! -s "$ARTIFACT_DIR/quantune-diagnostic-report.txt" ]]; then
+    printf 'No app-generated ANR/error report was present.\n' > "$ARTIFACT_DIR/quantune-diagnostic-report.txt"
   fi
 
-  if grep -q 'FULLSCREEN_LYRICS_OVERLAY_MEASURED' "$dest/logcat-all.txt"; then
-    echo "overlay_measured=1" > "$dest/test-result.txt"
-  else
-    echo "overlay_measured=0" > "$dest/test-result.txt"
-  fi
-
-  if grep -Eqi 'Type: ANR|APP NOT RESPONDING' "$dest/quantune-diagnostic-report.txt"; then
-    echo "app_watchdog_anr=1" >> "$dest/test-result.txt"
-  else
-    echo "app_watchdog_anr=0" >> "$dest/test-result.txt"
-  fi
-
-  if grep -q 'Overlay: Full-screen Lyrics' "$dest/quantune-diagnostic-report.txt"; then
-    echo "anr_inside_fullscreen_overlay=1" >> "$dest/test-result.txt"
-  else
-    echo "anr_inside_fullscreen_overlay=0" >> "$dest/test-result.txt"
-  fi
+  timeout 15s adb root >/dev/null 2>&1 || true
+  timeout 30s adb wait-for-device >/dev/null 2>&1 || true
+  mkdir -p "$ARTIFACT_DIR/system-tombstones" "$ARTIFACT_DIR/system-anr-traces"
+  timeout 30s adb pull /data/tombstones "$ARTIFACT_DIR/system-tombstones" >/dev/null 2>&1 || true
+  timeout 30s adb pull /data/anr "$ARTIFACT_DIR/system-anr-traces" >/dev/null 2>&1 || true
+  timeout 15s adb shell ls -la /data/tombstones > "$ARTIFACT_DIR/tombstones-listing.txt" 2>&1 || true
+  timeout 15s adb shell ls -la /data/anr > "$ARTIFACT_DIR/anr-traces-listing.txt" 2>&1 || true
 }
 
 if [[ ! -s "$APK" ]]; then
@@ -57,10 +46,10 @@ timeout 90s adb wait-for-device
 timeout 30s adb shell settings put global window_animation_scale 0 || true
 timeout 30s adb shell settings put global transition_animation_scale 0 || true
 timeout 30s adb shell settings put global animator_duration_scale 0 || true
+# Dismiss Android 6's first-use immersive-mode confirmation so screenshots show
+# the actual fullscreen player/lyrics UI, not the operating-system tip.
+timeout 20s adb shell settings put secure immersive_mode_confirmations confirmed >/dev/null 2>&1 || true
 
-# This is a 38 MB multidex APK. Android 6 on a TCG-only runner can spend minutes
-# in dex2oat, so the install timeout is intentionally generous and its output is
-# retained for diagnosis.
 INSTALL_LOG="$ARTIFACT_DIR/install-output.txt"
 if ! timeout 600s adb install -r "$APK" > "$INSTALL_LOG" 2>&1; then
   echo "Quantune APK installation failed or exceeded the 600-second TCG allowance:" >&2
@@ -76,82 +65,101 @@ if [[ -z "$PACKAGE_PATH" ]]; then
 fi
 printf '%s\n' "$PACKAGE_PATH" > "$ARTIFACT_DIR/installed-package-path.txt"
 
-# Run the exact production fullscreen overlay in isolation, for three content
-# states. This excludes Explore, the player sheet, service startup and provider
-# network fan-out, so each captured stack identifies the renderer path being tested.
-for mode in empty synced plain; do
-  echo "Starting isolated fullscreen lyrics mode=$mode"
-  mkdir -p "$ARTIFACT_DIR/$mode"
+timeout 30s adb shell am force-stop com.dsann.music >/dev/null 2>&1 || true
+timeout 15s adb shell run-as com.dsann.music rm -f \
+  files/diagnostics/latest-report.txt files/diagnostics/latest-report.tmp >/dev/null 2>&1 || true
+timeout 20s adb logcat -c || true
 
-  timeout 30s adb shell am force-stop com.dsann.music >/dev/null 2>&1 || true
-  timeout 15s adb shell run-as com.dsann.music rm -f \
-    files/diagnostics/latest-report.txt files/diagnostics/latest-report.tmp >/dev/null 2>&1 || true
-  timeout 20s adb logcat -c || true
+if ! timeout 90s adb shell am start -W -n com.dsann.music/.MainActivity \
+  --ez com.dsann.music.EXTRA_OPEN_FULLSCREEN_LYRICS_ANR_TEST true \
+  --ez com.dsann.music.EXTRA_SKIP_DIAGNOSTIC_RECOVERY true \
+  > "$ARTIFACT_DIR/activity-start.txt" 2>&1; then
+  echo "Android failed to launch MainActivity for the expanded-player test." >&2
+  cat "$ARTIFACT_DIR/activity-start.txt" >&2 || true
+  capture_logs
+  RESULT=1
+fi
 
-  if ! timeout 90s adb shell am start -W -n com.dsann.music/.FullscreenLyricsDiagnosticActivity \
-    --es com.dsann.music.EXTRA_LYRICS_DIAGNOSTIC_MODE "$mode" \
-    > "$ARTIFACT_DIR/$mode/activity-start.txt" 2>&1; then
-    echo "Could not launch isolated lyrics diagnostic activity for mode=$mode" >&2
-    cat "$ARTIFACT_DIR/$mode/activity-start.txt" >&2 2>/dev/null || true
-    RESULT=1
-    capture_mode "$mode"
-    continue
+if ! grep -q 'Status: ok' "$ARTIFACT_DIR/activity-start.txt" 2>/dev/null; then
+  echo "MainActivity launch did not report Status: ok." >&2
+  capture_logs
+  RESULT=1
+fi
+
+# The app logs these milestones from the actual measured expanded player and
+# the actual production FullScreenLyricsOverlay. The watchdog report is also
+# checked in case the player tree blocks before either milestone can be reached.
+for _ in $(seq 1 60); do
+  timeout 3s adb logcat -d -s QuantuneANRTest:I > "$ARTIFACT_DIR/test-markers-current.txt" 2>/dev/null || true
+  if grep -q 'FULL_PLAYER_LAYOUT_READY' "$ARTIFACT_DIR/test-markers-current.txt"; then
+    PLAYER_LAYOUT_READY=1
+  fi
+  if grep -q 'FULLSCREEN_LYRICS_REQUESTED' "$ARTIFACT_DIR/test-markers-current.txt"; then
+    LYRICS_REQUESTED=1
+  fi
+  if grep -q 'FULLSCREEN_LYRICS_OVERLAY_MEASURED' "$ARTIFACT_DIR/test-markers-current.txt"; then
+    OVERLAY_MEASURED=1
+    break
   fi
 
-  measured=0
-  for _ in $(seq 1 90); do
-    if timeout 12s adb logcat -d -s QuantuneANRTest:I 2>/dev/null \
-      | grep -q 'FULLSCREEN_LYRICS_OVERLAY_MEASURED'; then
-      measured=1
-      break
-    fi
-    sleep 1
-  done
-
-  if [[ "$measured" -eq 1 ]]; then
-    OVERLAY_MODES_REACHED=$((OVERLAY_MODES_REACHED + 1))
-    # The app watchdog threshold is 5 seconds. Observe for a further 8 seconds
-    # after the overlay has actually completed layout, not just after an intent.
-    sleep 8
-  else
-    echo "Fullscreen lyrics overlay never completed layout for mode=$mode" >&2
-    RESULT=1
-    sleep 2
+  REPORT_PRESENT="$(timeout 5s adb shell run-as com.dsann.music test -s files/diagnostics/latest-report.txt >/dev/null 2>&1; echo $?)"
+  if [[ "$REPORT_PRESENT" -eq 0 ]]; then
+    echo "Quantune's watchdog report appeared before fullscreen lyrics completed layout." >&2
+    break
   fi
-
-  capture_mode "$mode"
-
-  if grep -q 'anr_inside_fullscreen_overlay=1' "$ARTIFACT_DIR/$mode/test-result.txt"; then
-    TARGET_ANR_FOUND=1
-    RESULT=1
-    echo "ANR captured while the fullscreen lyrics overlay was active in mode=$mode" >&2
-  fi
-
-  {
-    echo "mode=$mode"
-    echo "overlay_measured=$measured"
-    echo "app_watchdog_anr=$(grep -c 'app_watchdog_anr=1' "$ARTIFACT_DIR/$mode/test-result.txt" || true)"
-    echo "anr_inside_fullscreen_overlay=$(grep -c 'anr_inside_fullscreen_overlay=1' "$ARTIFACT_DIR/$mode/test-result.txt" || true)"
-  } > "$ARTIFACT_DIR/$mode/summary.txt"
+  sleep 1
 done
 
-# Save a combined logcat and raw framework ANR/native-crash material after all
-# isolated cases have run. API 23 may not populate these folders for app watchdog
-# reports, but they remain useful for a framework-level ANR or native crash.
-timeout 25s adb logcat -b all -d -v threadtime > "$ARTIFACT_DIR/logcat-all.txt" 2>&1 || true
-timeout 15s adb root >/dev/null 2>&1 || true
-timeout 30s adb wait-for-device >/dev/null 2>&1 || true
-mkdir -p "$ARTIFACT_DIR/system-tombstones" "$ARTIFACT_DIR/system-anr-traces"
-timeout 30s adb pull /data/tombstones "$ARTIFACT_DIR/system-tombstones" >/dev/null 2>&1 || true
-timeout 30s adb pull /data/anr "$ARTIFACT_DIR/system-anr-traces" >/dev/null 2>&1 || true
-timeout 15s adb shell ls -la /data/tombstones > "$ARTIFACT_DIR/tombstones-listing.txt" 2>&1 || true
-timeout 15s adb shell ls -la /data/anr > "$ARTIFACT_DIR/anr-traces-listing.txt" 2>&1 || true
+if [[ "$OVERLAY_MEASURED" -eq 1 ]]; then
+  # Leave the production overlay active beyond the watchdog's five-second window.
+  sleep 8
+else
+  echo "The expanded-player-to-lyrics flow did not reach the overlay layout marker." >&2
+  RESULT=1
+fi
+
+capture_logs
+
+if grep -Eqi 'ANR in com\.dsann\.music|Input dispatching timed out' "$ARTIFACT_DIR/logcat-all.txt"; then
+  ANR_FOUND=1
+  ANR_STAGE="android-framework"
+fi
+if grep -Eqi 'Type: ANR|APP NOT RESPONDING' "$ARTIFACT_DIR/quantune-diagnostic-report.txt"; then
+  ANR_FOUND=1
+  if grep -q 'Overlay: Full-screen Lyrics' "$ARTIFACT_DIR/quantune-diagnostic-report.txt"; then
+    ANR_STAGE="fullscreen-lyrics-overlay"
+  elif grep -q 'Full Player' "$ARTIFACT_DIR/quantune-diagnostic-report.txt"; then
+    ANR_STAGE="expanded-player-host-before-overlay"
+  else
+    ANR_STAGE="main-activity-or-player-startup"
+  fi
+fi
+
+if [[ "$ANR_FOUND" -eq 1 ]]; then
+  echo "Quantune ANR captured during expanded-player/fullscreen-lyrics integration: $ANR_STAGE" >&2
+  RESULT=1
+fi
+if [[ "$PLAYER_LAYOUT_READY" -ne 1 ]]; then
+  echo "The expanded player never reported a completed layout." >&2
+  RESULT=1
+fi
+if [[ "$LYRICS_REQUESTED" -ne 1 ]]; then
+  echo "Fullscreen lyrics were not requested after expanded-player layout." >&2
+  RESULT=1
+fi
+if [[ "$OVERLAY_MEASURED" -ne 1 ]]; then
+  echo "The fullscreen lyrics overlay did not complete its first layout." >&2
+  RESULT=1
+fi
 
 {
   echo "api_level=23"
-  echo "modes_tested=empty,synced,plain"
-  echo "overlay_modes_reached=$OVERLAY_MODES_REACHED"
-  echo "target_anr_detected=$TARGET_ANR_FOUND"
+  echo "test=expanded_player_then_fullscreen_lyrics"
+  echo "player_layout_ready=$PLAYER_LAYOUT_READY"
+  echo "lyrics_requested=$LYRICS_REQUESTED"
+  echo "overlay_measured=$OVERLAY_MEASURED"
+  echo "anr_detected=$ANR_FOUND"
+  echo "anr_stage=$ANR_STAGE"
   echo "result=$RESULT"
 } > "$ARTIFACT_DIR/test-result.txt"
 
