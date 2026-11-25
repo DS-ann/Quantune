@@ -6,6 +6,7 @@ APK="app/build/outputs/apk/debug/app-x86_64-debug.apk"
 mkdir -p "$ARTIFACT_DIR"
 RESULT=0
 PLAYER_LAYOUT_READY=0
+PLAYER_FIRST_DRAW=0
 LYRICS_REQUESTED=0
 OVERLAY_MEASURED=0
 ANR_FOUND=0
@@ -94,6 +95,9 @@ for _ in $(seq 1 60); do
   if grep -q 'FULL_PLAYER_LAYOUT_READY' "$ARTIFACT_DIR/test-markers-current.txt"; then
     PLAYER_LAYOUT_READY=1
   fi
+  if grep -q 'FULL_PLAYER_FIRST_DRAW_COMPLETED' "$ARTIFACT_DIR/test-markers-current.txt"; then
+    PLAYER_FIRST_DRAW=1
+  fi
   if grep -q 'FULLSCREEN_LYRICS_REQUESTED' "$ARTIFACT_DIR/test-markers-current.txt"; then
     LYRICS_REQUESTED=1
   fi
@@ -128,8 +132,12 @@ if grep -Eqi 'Type: ANR|APP NOT RESPONDING' "$ARTIFACT_DIR/quantune-diagnostic-r
   ANR_FOUND=1
   if grep -q 'Overlay: Full-screen Lyrics' "$ARTIFACT_DIR/quantune-diagnostic-report.txt"; then
     ANR_STAGE="fullscreen-lyrics-overlay"
+  elif [[ "$PLAYER_FIRST_DRAW" -eq 0 ]]; then
+    ANR_STAGE="expanded-player-first-draw"
+  elif [[ "$LYRICS_REQUESTED" -eq 0 ]]; then
+    ANR_STAGE="after-player-first-draw-before-lyrics-request"
   elif grep -q 'Full Player' "$ARTIFACT_DIR/quantune-diagnostic-report.txt"; then
-    ANR_STAGE="expanded-player-host-before-overlay"
+    ANR_STAGE="lyrics-transition-before-overlay"
   else
     ANR_STAGE="main-activity-or-player-startup"
   fi
@@ -143,8 +151,12 @@ if [[ "$PLAYER_LAYOUT_READY" -ne 1 ]]; then
   echo "The expanded player never reported a completed layout." >&2
   RESULT=1
 fi
+if [[ "$PLAYER_FIRST_DRAW" -ne 1 ]]; then
+  echo "The expanded player never completed its first content draw." >&2
+  RESULT=1
+fi
 if [[ "$LYRICS_REQUESTED" -ne 1 ]]; then
-  echo "Fullscreen lyrics were not requested after expanded-player layout." >&2
+  echo "Fullscreen lyrics were not requested after the expanded player's first draw." >&2
   RESULT=1
 fi
 if [[ "$OVERLAY_MEASURED" -ne 1 ]]; then
@@ -156,6 +168,7 @@ fi
   echo "api_level=23"
   echo "test=expanded_player_then_fullscreen_lyrics"
   echo "player_layout_ready=$PLAYER_LAYOUT_READY"
+  echo "player_first_draw_completed=$PLAYER_FIRST_DRAW"
   echo "lyrics_requested=$LYRICS_REQUESTED"
   echo "overlay_measured=$OVERLAY_MEASURED"
   echo "anr_detected=$ANR_FOUND"
