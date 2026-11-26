@@ -1381,6 +1381,26 @@ fun PlayerBottomSheetCompose(
             }
         }
 
+        LaunchedEffect(viewModel) {
+            viewModel.playerExpandRequests.collect {
+                // The sheet owns its local state and animation clock. Do not mutate the
+                // mirrored ViewModel flag/fraction directly: doing so would report an
+                // expanded player without actually revealing this Compose sheet.
+                if (
+                    currentSheetContentState != PlayerSheetState.EXPANDED ||
+                    playerContentExpansionFraction.value < 0.995f
+                ) {
+                    pendingSheetAnimation = SheetAnimationRequest(
+                        targetExpanded = true,
+                        animationSpec = null,
+                        initialVelocity = 0f
+                    )
+                    sheetAnimationRequestId += 1
+                    currentSheetContentState = PlayerSheetState.EXPANDED
+                }
+            }
+        }
+
         // A rotation changes the sheet's coordinate space. Recalculate its Y position using
         // the new height while retaining the previously saved expansion fraction.
         LaunchedEffect(screenHeightPx, containerWidthDp, useNavigationRail, miniPlayerBottomInsetPx) {
