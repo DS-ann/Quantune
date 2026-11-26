@@ -246,6 +246,7 @@ internal fun SyncedLyricsCompose(
         }
     }
     val isLyricsPrepared = preparedSyncedLyrics != null
+    val isKaraokeMode = preparedSyncedLyrics?.isKaraokeMode ?: false
     LaunchedEffect(isLyricsPrepared, isKaraokeMode, lyrics.size) {
         if (BuildConfig.DEBUG && isLyricsPrepared) {
             Log.i(
@@ -254,7 +255,6 @@ internal fun SyncedLyricsCompose(
             )
         }
     }
-    val isKaraokeMode = preparedSyncedLyrics?.isKaraokeMode ?: false
     // The UI's neutral timing value is 0 ms; karaoke playback uses a fixed +20 ms
     // internal baseline so this compensation is invisible in the adjustment controls.
     val timedPositionProvider: () -> Int = remember(currentPositionProvider, isKaraokeMode) {
