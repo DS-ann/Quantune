@@ -281,8 +281,11 @@ internal fun SyncedLyricsCompose(
                 .getOrDefault(true)
         }
     }
+    // Do not let high-refresh displays silently force this GPU-heavy text
+    // sweep to 90/120 updates per second. Keep constrained devices at 30 FPS and
+    // cap all other devices at 60 FPS; a lower user-selected rate still wins.
     val karaokeFrameRateCeiling =
-        if (forceLowCostRendering || isConstrainedLyricsDevice) 30 else null
+        if (forceLowCostRendering || isConstrainedLyricsDevice) 30 else 60
     val karaokeFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
         active = isPlaying && isKaraokeMode,
         maximumFrameRate = karaokeFrameRateCeiling

@@ -15,13 +15,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -136,14 +133,19 @@ private data class SweptRow(
 )
 
 /**
- * Caches the line bands for a TextLayoutResult and reuses one clip path. Only the
- * current frontier moves; line geometry is rebuilt only when Compose produces a new
- * text layout (text, font, width, or configuration change).
+ * Caches line bands for a TextLayoutResult and calculates only the moving word
+ * frontier. The sweep itself uses rectangular clips instead of a Path/clipPath:
+ * the same two regions cover every fully-sung row plus the active row's prefix.
  */
+private data class SweptFrontier(
+    val rowIndex: Int,
+    val boundaryX: Float,
+    val isComplete: Boolean = false
+)
+
 private class SweptRows {
     private var cachedLayout: TextLayoutResult? = null
     private var rows: List<SweptRow> = emptyList()
-    private val clip = Path()
 
     fun rowsFor(layout: TextLayoutResult): List<SweptRow> {
         if (layout === cachedLayout) return rows
@@ -161,20 +163,20 @@ private class SweptRows {
         return rows
     }
 
-    fun clipFor(
+    fun frontierFor(
         layout: TextLayoutResult,
         sungOffset: Float,
         width: Float
-    ): Path {
-        clip.reset()
-        if (rows.isEmpty() || sungOffset <= 0f || width <= 0f) return clip
+    ): SweptFrontier? {
+        if (rows.isEmpty() || sungOffset <= 0f || width <= 0f) return null
 
         val textLength = layout.layoutInput.text.length
         if (sungOffset >= textLength.toFloat()) {
-            rows.forEach { row ->
-                clip.addRect(Rect(0f, row.top, width, row.bottom))
-            }
-            return clip
+            return SweptFrontier(
+                rowIndex = rows.lastIndex,
+                boundaryX = if (rows.last().isRtl) 0f else width,
+                isComplete = true
+            )
         }
 
         val characterIndex = floor(sungOffset)
@@ -183,7 +185,6 @@ private class SweptRows {
         val partialCharacter = (sungOffset - characterIndex).coerceIn(0f, 1f)
         val lineIndex = layout.getLineForOffset(characterIndex)
             .coerceIn(0, rows.lastIndex)
-        val row = rows[lineIndex]
         val characterBounds = layout.getBoundingBox(characterIndex)
         val characterDirection = layout.getBidiRunDirection(characterIndex)
 
@@ -197,19 +198,10 @@ private class SweptRows {
             layout.getCursorRect(characterIndex).left
         }.coerceIn(0f, width)
 
-        for (index in 0..lineIndex) {
-            val current = rows[index]
-            if (index < lineIndex) {
-                clip.addRect(Rect(0f, current.top, width, current.bottom))
-            } else {
-                val left = if (current.isRtl) boundaryX else 0f
-                val right = if (current.isRtl) width else boundaryX
-                if (right > left) {
-                    clip.addRect(Rect(left, current.top, right, current.bottom))
-                }
-            }
-        }
-        return clip
+        return SweptFrontier(
+            rowIndex = lineIndex,
+            boundaryX = boundaryX
+        )
     }
 }
 
@@ -290,16 +282,16 @@ internal fun KaraokeSweepText(
                 )
                 if (sungOffset <= 0f) return@onDrawWithContent
 
-                val sungClip = sweptRows.clipFor(
+                val frontier = sweptRows.frontierFor(
                     layout = layout,
                     sungOffset = sungOffset,
                     width = size.width
-                )
-                if (sungClip.isEmpty) return@onDrawWithContent
+                ) ?: return@onDrawWithContent
 
-                // Both the optional contour and the active fill use the same layout
-                // and prefix clip. They are direct Canvas text draws, not extra layers.
-                clipPath(sungClip) {
+                // Hardware-accelerated clipPath can be expensive on some GPU drivers.
+                // The prefix is exactly two rectangular regions: complete rows above
+                // the frontier and the sung part of the current row.
+                if (frontier.isComplete) {
                     if (outlineWidthPx > 0f) {
                         drawText(
                             textLayoutResult = layout,
@@ -315,6 +307,50 @@ internal fun KaraokeSweepText(
                         alpha = 1f,
                         shadow = highlightShadow
                     )
+                    return@onDrawWithContent
+                }
+
+                val row = cachedRows[frontier.rowIndex]
+                if (row.top > 0f) {
+                    clipRect(left = 0f, top = 0f, right = size.width, bottom = row.top) {
+                        if (outlineWidthPx > 0f) {
+                            drawText(
+                                textLayoutResult = layout,
+                                brush = SolidColor(Color.Black),
+                                topLeft = Offset.Zero,
+                                drawStyle = Stroke(width = outlineWidthPx)
+                            )
+                        }
+                        drawText(
+                            textLayoutResult = layout,
+                            brush = highlightBrush,
+                            topLeft = Offset.Zero,
+                            alpha = 1f,
+                            shadow = highlightShadow
+                        )
+                    }
+                }
+
+                val left = if (row.isRtl) frontier.boundaryX else 0f
+                val right = if (row.isRtl) size.width else frontier.boundaryX
+                if (right > left && row.bottom > row.top) {
+                    clipRect(left = left, top = row.top, right = right, bottom = row.bottom) {
+                        if (outlineWidthPx > 0f) {
+                            drawText(
+                                textLayoutResult = layout,
+                                brush = SolidColor(Color.Black),
+                                topLeft = Offset.Zero,
+                                drawStyle = Stroke(width = outlineWidthPx)
+                            )
+                        }
+                        drawText(
+                            textLayoutResult = layout,
+                            brush = highlightBrush,
+                            topLeft = Offset.Zero,
+                            alpha = 1f,
+                            shadow = highlightShadow
+                        )
+                    }
                 }
             }
         },
