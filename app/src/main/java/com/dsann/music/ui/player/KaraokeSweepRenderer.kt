@@ -1,5 +1,8 @@
 package com.dsann.music.ui.player
 
+import com.dsann.music.BuildConfig
+import android.util.Log
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.Dispatchers
@@ -252,6 +255,7 @@ internal fun KaraokeSweepText(
     }
     val spans = spanState.value
     val sweptRows = remember { SweptRows() }
+    var hasLoggedFirstKaraokeLayout by remember(text) { mutableStateOf(false) }
     val layoutStyle = remember(style) {
         style.copy(brush = null, shadow = null)
     }
@@ -317,6 +321,15 @@ internal fun KaraokeSweepText(
         maxLines = maxLines,
         softWrap = true,
         overflow = TextOverflow.Clip,
-        onTextLayout = { layoutState.value = it }
+        onTextLayout = {
+            layoutState.value = it
+            if (BuildConfig.DEBUG && !hasLoggedFirstKaraokeLayout) {
+                hasLoggedFirstKaraokeLayout = true
+                Log.i(
+                    "QuantuneANRTest",
+                    "KARAOKE_TEXT_LAYOUT_READY chars=${text.length} rows=${it.lineCount}"
+                )
+            }
+        }
     )
 }

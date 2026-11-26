@@ -469,6 +469,12 @@ internal fun FullScreenLyricsOverlay(
     LaunchedEffect(Unit) {
         delay(200L)
         lyricsContentReady = true
+        if (BuildConfig.DEBUG) {
+            Log.i(
+                "QuantuneANRTest",
+                "FULLSCREEN_LYRICS_CONTENT_READY api=${android.os.Build.VERSION.SDK_INT}"
+            )
+        }
     }
 
     val context = LocalContext.current

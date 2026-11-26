@@ -25,6 +25,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.dsann.music.data.lyrics.LyricLine
+import com.dsann.music.data.lyrics.LyricWord
 import com.dsann.music.model.SongItem
 import com.dsann.music.ui.player.FullScreenLyricsOverlay
 import com.dsann.music.ui.theme.DsmusicAppTheme
@@ -49,7 +50,7 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
 
         val mode = intent.getStringExtra(EXTRA_MODE)
             ?.lowercase()
-            ?.takeIf { it in setOf("empty", "synced", "plain") }
+            ?.takeIf { it in setOf("empty", "synced", "plain", "karaoke") }
             ?: "empty"
 
         CrashDiagnostics.updateBaseScreen("Fullscreen lyrics diagnostic mode=$mode")
@@ -96,20 +97,22 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
                             data = null
                         )
                     }
-                    val testSyncedLyrics = remember {
-                        if (mode == "synced") {
-                            listOf(
+                    val testSyncedLyrics = remember(mode) {
+                        when (mode) {
+                            "synced" -> listOf(
                                 LyricLine(0L, "Quantune fullscreen lyrics renderer test"),
                                 LyricLine(4_000L, "Second line for layout and timing"),
                                 LyricLine(8_000L, "Third line to validate scrolling")
                             )
-                        } else {
-                            null
+                            "karaoke" -> createKaraokeDiagnosticLyrics()
+                            else -> null
                         }
                     }
-                    val testPlainLyrics = remember {
+                    val testPlainLyrics = remember(mode) {
                         if (mode == "plain") {
-                            "Quantune fullscreen lyrics renderer test\n\nSecond paragraph for text measurement."
+                            (1..240).joinToString("\n") { index ->
+                                "Quantune fullscreen lyrics renderer stress line $index"
+                            }
                         } else {
                             null
                         }
@@ -173,6 +176,37 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun createKaraokeDiagnosticLyrics(): List<LyricLine> {
+        val phrases = listOf(
+            listOf("Quantune", "fullscreen", "lyrics", "renderer", "test"),
+            listOf("Second", "line", "validates", "word", "timing"),
+            listOf("Cached", "text", "layout", "draws", "smoothly"),
+            listOf("Every", "line", "keeps", "its", "own", "word", "ranges")
+        )
+        return List(64) { lineIndex ->
+            val words = phrases[lineIndex % phrases.size]
+            val lineStartMs = lineIndex * 5_000L
+            val content = words.joinToString(" ")
+            var charOffset = 0
+            val timedWords = words.mapIndexed { wordIndex, word ->
+                val startOffset = charOffset
+                charOffset += word.length + 1
+                LyricWord(
+                    text = word,
+                    absoluteStartTimeMs = lineStartMs + wordIndex * 600L,
+                    durationMs = 520L,
+                    charRange = startOffset until (startOffset + word.length)
+                )
+            }
+            LyricLine(
+                startTimeMs = lineStartMs,
+                content = content,
+                isWordByWord = true,
+                words = timedWords
+            )
         }
     }
 

@@ -1,6 +1,8 @@
 package com.dsann.music.ui.player
 
 import com.dsann.music.CrashDiagnostics
+import com.dsann.music.BuildConfig
+import android.util.Log
 
 
 import androidx.compose.animation.core.CubicBezierEasing
@@ -244,6 +246,14 @@ internal fun SyncedLyricsCompose(
         }
     }
     val isLyricsPrepared = preparedSyncedLyrics != null
+    LaunchedEffect(isLyricsPrepared, isKaraokeMode, lyrics.size) {
+        if (BuildConfig.DEBUG && isLyricsPrepared) {
+            Log.i(
+                "QuantuneANRTest",
+                "SYNCED_LYRICS_PREPARED karaoke=$isKaraokeMode lines=${lyrics.size}"
+            )
+        }
+    }
     val isKaraokeMode = preparedSyncedLyrics?.isKaraokeMode ?: false
     // The UI's neutral timing value is 0 ms; karaoke playback uses a fixed +20 ms
     // internal baseline so this compensation is invisible in the adjustment controls.
