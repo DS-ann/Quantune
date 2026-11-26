@@ -75,7 +75,6 @@ import com.dsann.music.data.lyrics.LyricLine
 import com.dsann.music.data.lyrics.LyricsResult
 import com.dsann.music.model.SongItem
 import com.dsann.music.ui.theme.GoogleSansFlexNonRounded
-import com.dsann.music.ui.theme.observeKey
 
 // ════════════════════════════════════════════════════════════════════════════════
 // ─ Data Classes & Constants
@@ -206,12 +205,13 @@ internal fun SyncedLyricsCompose(
 ) {
     val listState = rememberLazyListState()
     val context = LocalContext.current
-    val appearancePreferences = remember(context) {
-        context.getSharedPreferences("AppSettings", android.content.Context.MODE_PRIVATE)
-    }
-    val lyricsTextSize by appearancePreferences.observeKey("lyrics_text_size", "Standard")
-    val lyricsAlignment by appearancePreferences.observeKey("lyrics_alignment", "Original")
-    val lyricsFontFamily by appearancePreferences.observeKey("lyrics_font_family", "Rounded")
+    // Share the IO-backed preference loader used by the fullscreen plain-lyrics
+    // surface. SharedPreferences getters can wait for the XML load lock; avoid doing
+    // that synchronously while the synced/karaoke renderer enters composition.
+    val lyricsAppearance = rememberLyricsAppearanceSettings(context)
+    val lyricsTextSize = lyricsAppearance.textSize
+    val lyricsAlignment = lyricsAppearance.alignment
+    val lyricsFontFamily = lyricsAppearance.fontFamily
     val configuredLyricsScale = when (lyricsTextSize) {
         "Small" -> 0.85f
         "Large" -> 1.18f
