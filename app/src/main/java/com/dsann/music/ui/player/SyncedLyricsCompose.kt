@@ -286,6 +286,11 @@ internal fun SyncedLyricsCompose(
     // cap all other devices at 60 FPS; a lower user-selected rate still wins.
     val karaokeFrameRateCeiling =
         if (forceLowCostRendering || isConstrainedLyricsDevice) 30 else 60
+    LaunchedEffect(karaokeFrameRateCeiling) {
+        if (BuildConfig.DEBUG) {
+            Log.i("QuantuneANRTest", "LYRICS_FRAME_RATE_CEILING=$karaokeFrameRateCeiling")
+        }
+    }
     val karaokeFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
         active = isPlaying && isKaraokeMode,
         maximumFrameRate = karaokeFrameRateCeiling

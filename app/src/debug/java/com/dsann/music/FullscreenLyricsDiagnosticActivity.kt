@@ -148,7 +148,7 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
                             syncedLyrics = testSyncedLyrics,
                             plainLyrics = testPlainLyrics,
                             isLoading = false,
-                            isPlaying = false,
+                            isPlaying = mode == "karaoke",
                             lyricsError = null,
                             currentPositionProvider = { 1_000 },
                             playbackSpeedProvider = { 1f },

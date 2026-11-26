@@ -80,6 +80,7 @@ jobs:
         env:
           ANDROID_I_WANT_MY_TCG: "yes"
           ANDROID_API_LEVEL: ${{ matrix.api-level }}
+          ANDROID_MEMORY_MB: ${{ matrix.memory_mb }}
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:

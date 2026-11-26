@@ -4,6 +4,8 @@ set -u
 ARTIFACT_DIR="$PWD/anr-artifacts"
 WORKSPACE_VALUE="$(printenv GITHUB_WORKSPACE || true)"
 API_LEVEL="$(printenv ANDROID_API_LEVEL || true)"
+ANDROID_MEMORY_MB="$(printenv ANDROID_MEMORY_MB || true)"
+if [[ -z "$ANDROID_MEMORY_MB" ]]; then ANDROID_MEMORY_MB="3072"; fi
 LYRICS_TEST_MODES="$(printenv LYRICS_TEST_MODES || true)"
 if [[ -n "$WORKSPACE_VALUE" ]]; then ARTIFACT_DIR="$WORKSPACE_VALUE/anr-artifacts"; fi
 if [[ -z "$API_LEVEL" ]]; then API_LEVEL="unknown"; fi
@@ -167,6 +169,7 @@ for MODE in $(printf '%s' "$LYRICS_TEST_MODES" | tr ',' ' '); do
 
   {
     echo "api_level=$API_LEVEL"
+    echo "android_memory_mb=$ANDROID_MEMORY_MB"
     echo "test=isolated_production_fullscreen_lyrics"
     echo "mode=$MODE"
     echo "base_layout_ready=$BASE_LAYOUT_READY"
