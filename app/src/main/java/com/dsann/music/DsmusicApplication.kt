@@ -1,10 +1,16 @@
 package com.dsann.music
 
+import android.app.Activity
 import android.app.Application
 import android.content.ComponentCallbacks2
 import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.emoji2.text.DefaultEmojiCompatConfig
+import androidx.emoji2.text.EmojiCompat
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
@@ -16,6 +22,7 @@ import com.dsann.music.data.innertube.InnerTubeClient
 import com.dsann.music.data.innertube.NewPipeStreamExtractor
 import com.dsann.music.util.CacheManager
 import dagger.hilt.android.HiltAndroidApp
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Keep Android/AppCompat resources in sync with the app's visible theme choice.
@@ -42,6 +49,57 @@ class DsmusicApplication : Application(), ImageLoaderFactory {
 
     @Volatile
     private var activeImageLoader: ImageLoader? = null
+
+    private val emojiCompatInitializationScheduled = AtomicBoolean(false)
+
+    /**
+     * EmojiCompatInitializer normally runs from AndroidX Startup's ContentProvider,
+     * before Application.onCreate(). A cold provider/configuration lookup can hold
+     * process startup on some devices. Wait until the first Activity has resumed,
+     * then configure and load EmojiCompat away from the UI thread.
+     *
+     * If the device has no downloadable emoji font provider, platform emoji remain
+     * available and the app continues without EmojiCompat.
+     */
+    private fun scheduleEmojiCompatInitialization() {
+        if (!emojiCompatInitializationScheduled.compareAndSet(false, true)) return
+
+        val callbacks = object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+
+            override fun onActivityResumed(activity: Activity) {
+                unregisterActivityLifecycleCallbacks(this)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    Thread({
+                        try {
+                            if (EmojiCompat.isConfigured()) return@Thread
+                            val config = DefaultEmojiCompatConfig.create(applicationContext)
+                                ?: return@Thread
+                            config.setMetadataLoadStrategy(EmojiCompat.LOAD_STRATEGY_MANUAL)
+                            EmojiCompat.init(config)
+                            EmojiCompat.get().load()
+                        } catch (error: Exception) {
+                            Log.w(
+                                "DsmusicApplication",
+                                "Deferred EmojiCompat initialization unavailable; using platform emoji",
+                                error
+                            )
+                        }
+                    }, "Quantune-EmojiCompat").apply {
+                        isDaemon = true
+                        start()
+                    }
+                }, 1_500L)
+            }
+        }
+
+        registerActivityLifecycleCallbacks(callbacks)
+    }
 
     override fun newImageLoader(): ImageLoader {
         val builder = ImageLoader.Builder(this)
@@ -93,6 +151,7 @@ class DsmusicApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        scheduleEmojiCompatInitialization()
         // Capture fatal exceptions and main-thread ANRs before normal app startup continues.
         CrashDiagnostics.install(this)
         // Seed the requested profile before any Settings or player ViewModel reads preferences.
