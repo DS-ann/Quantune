@@ -40,6 +40,21 @@
         android:theme="@style/Theme.Dsmusic"
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="31">
+        <!--
+            Avoid initializing EmojiCompat from AndroidX Startup's ContentProvider.
+            Quantune configures it after the first Activity resumes, on a worker thread,
+            so font-provider discovery cannot block process startup.
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+                tools:node="remove" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
