@@ -778,12 +778,19 @@ class PlayerSharedViewModel @Inject constructor(
     val isPlayerExpanded: StateFlow<Boolean> = _isPlayerExpanded.asStateFlow()
 
     // The Activity-level BackHandler has priority over nested Settings NavHosts.
-    // It sends a one-shot request here so the sheet itself can run its normal collapse animation.
+    // These one-shot requests let the sheet own its local animation state while allowing
+    // Activity-level entry points and deterministic UI diagnostics to request transitions.
     private val _playerBackCollapseRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val playerBackCollapseRequests = _playerBackCollapseRequests.asSharedFlow()
+    private val _playerExpandRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val playerExpandRequests = _playerExpandRequests.asSharedFlow()
 
     fun requestPlayerCollapseFromBack() {
         _playerBackCollapseRequests.tryEmit(Unit)
+    }
+
+    fun requestPlayerExpansion() {
+        _playerExpandRequests.tryEmit(Unit)
     }
 
     fun setPlayerExpanded(expanded: Boolean) {
