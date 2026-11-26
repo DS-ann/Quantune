@@ -16,12 +16,18 @@ concurrency:
 
 jobs:
   reproduce:
-    name: API ${{ matrix.api-level }} emulator — open fullscreen lyrics and capture diagnostics
+    name: API ${{ matrix.api-level }} / ${{ matrix.memory_mb }} MiB emulator — open fullscreen lyrics and capture diagnostics
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        api-level: [23, 31, 35]
+        include:
+          - api-level: 23
+            memory_mb: 3072
+          - api-level: 31
+            memory_mb: 3072
+          - api-level: 35
+            memory_mb: 7168
     timeout-minutes: 90
 
     steps:
@@ -66,7 +72,7 @@ jobs:
           cp "$APK" anr-artifacts/Quantune-debug-x86_64.apk
           "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" > anr-artifacts/apk-badging.txt
 
-      - name: Boot Android 6 emulator, open fullscreen lyrics and capture ANR data
+      - name: Boot Android emulator, open isolated fullscreen lyrics and capture ANR data
         id: emulator
         # GitHub-hosted runners may expose no usable /dev/kvm. The emulator's
         # -accel off fallback refuses to start unless TCG software CPU emulation
@@ -81,7 +87,7 @@ jobs:
           target: default
           arch: x86_64
           profile: Nexus 5
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory 3072 -camera-back none
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory ${{ matrix.memory_mb }} -camera-back none
           disable-animations: true
           script: bash .github/scripts/fullscreen-lyrics-anr-emulator.sh
 
