@@ -175,7 +175,7 @@ internal fun LyricsProviderPickerSheet(
 }
 
 
-private data class LyricsAppearanceSettings(
+internal data class LyricsAppearanceSettings(
     val alignment: String = "Original",
     val textSize: String = "Standard",
     val fontFamily: String = "Rounded"
@@ -187,7 +187,7 @@ private data class LyricsAppearanceSettings(
  * be called from the first composition of the fullscreen lyrics dialog.
  */
 @Composable
-private fun rememberLyricsAppearanceSettings(
+internal fun rememberLyricsAppearanceSettings(
     context: android.content.Context
 ): LyricsAppearanceSettings {
     val preferences = remember(context) {
