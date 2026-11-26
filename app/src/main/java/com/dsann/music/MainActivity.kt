@@ -228,7 +228,12 @@ class MainActivity : AppCompatActivity() {
                     duration = 180_000L,
                     dateAdded = System.currentTimeMillis(),
                     data = null
-                )
+                ).apply {
+                    // A null path plus a negative MediaStore ID makes the artwork loader
+                    // probe content://media/.../-23001. Give this no-artwork fixture a
+                    // harmless file URI so the diagnostic cannot block on MediaProvider.
+                    contentUri = Uri.parse("file:///nonexistent/quantune-anr-test-no-artwork.mp3")
+                }
             )
             Log.i(TAG, "FULLSCREEN_LYRICS_PLAYER_HOST_SEEDED api=${Build.VERSION.SDK_INT}")
         }
@@ -283,8 +288,7 @@ class MainActivity : AppCompatActivity() {
                         delay(2_500L)
                         if (!isFinishing && !isDestroyed) {
                             Log.i("QuantuneANRTest", "TEST_PLAYER_EXPANSION_REQUESTED api=${Build.VERSION.SDK_INT}")
-                            playerViewModel.setPlayerExpanded(true)
-                            playerViewModel.setPlayerExpansionFraction(1f)
+                            playerViewModel.requestPlayerExpansion()
                         }
                     }
                 }
