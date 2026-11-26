@@ -248,7 +248,7 @@ internal fun KaraokeSweepText(
     }
     val spans = spanState.value
     val sweptRows = remember { SweptRows() }
-    var hasLoggedFirstKaraokeLayout by remember(text) { mutableStateOf(false) }
+    val hasLoggedFirstKaraokeLayout = remember(text) { mutableStateOf(false) }
     val layoutStyle = remember(style) {
         style.copy(brush = null, shadow = null)
     }
@@ -360,8 +360,8 @@ internal fun KaraokeSweepText(
         overflow = TextOverflow.Clip,
         onTextLayout = {
             layoutState.value = it
-            if (BuildConfig.DEBUG && !hasLoggedFirstKaraokeLayout) {
-                hasLoggedFirstKaraokeLayout = true
+            if (BuildConfig.DEBUG && !hasLoggedFirstKaraokeLayout.value) {
+                hasLoggedFirstKaraokeLayout.value = true
                 Log.i(
                     "QuantuneANRTest",
                     "KARAOKE_TEXT_LAYOUT_READY chars=${text.length} rows=${it.lineCount}"
