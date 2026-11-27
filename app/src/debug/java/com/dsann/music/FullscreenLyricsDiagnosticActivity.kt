@@ -61,10 +61,11 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
         setContent {
             DsmusicAppTheme(darkTheme = true) {
                 var baseLayoutReady by remember { mutableStateOf(false) }
-                var openLyrics by remember { mutableStateOf(false) }
+                val openLyricsState = remember { mutableStateOf(false) }
+                val rootView = LocalView.current
 
-                // Give the app theme and the Activity's first Compose frame time to
-                // settle before presenting the actual overlay under test.
+                // Schedule from Android's main Handler after the first measured frame.
+                // This keeps the request independent of the Compose coroutine frame clock.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -73,17 +74,17 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
                             if (!baseLayoutReady) {
                                 baseLayoutReady = true
                                 Log.i(TAG, "DIAGNOSTIC_BASE_LAYOUT_READY mode=$mode")
+                                rootView.postDelayed({
+                                    if (!isFinishing && !isDestroyed) {
+                                        openLyricsState.value = true
+                                        Log.i(TAG, "FULLSCREEN_LYRICS_REQUESTED mode=$mode")
+                                    }
+                                }, 1_500L)
                             }
                         }
                 ) { }
 
-                LaunchedEffect(baseLayoutReady) {
-                    if (baseLayoutReady) {
-                        delay(1_500L)
-                        openLyrics = true
-                        Log.i(TAG, "FULLSCREEN_LYRICS_REQUESTED mode=$mode")
-                    }
-                }
+                val openLyrics = openLyricsState.value
 
                 if (openLyrics) {
                     val testSong = remember {

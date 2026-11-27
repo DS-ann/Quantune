@@ -405,21 +405,16 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
     val isFullPlayerVisible by remember(playerContentExpansionFraction) {
         derivedStateOf { playerContentExpansionFraction.value >= 0.995f }
     }
-    // Mini-player gesture mappings can open Lyrics or Queue directly. Keep those states
-    // functional even when the sheet has not crossed the normal full-player threshold.
+    // Keep the mini-player transition lightweight. Mount the full player only
+    // after its sheet reaches the expanded anchor. Explicit Lyrics/Queue gestures
+    // still mount the surface that owns those overlays.
     val shouldComposeFullPlayer by remember(
-        playerContentExpansionFraction,
+        isFullPlayerVisible,
         isLyricsModeEnabled,
-        isQueueExpanded,
-        isSheetExpanded
+        isQueueExpanded
     ) {
         derivedStateOf {
-            // Mount the expensive full-player tree before the first animated frame.
-            // This keeps lyrics, artwork and visualizers from being composed mid-transition.
-            isSheetExpanded ||
-                playerContentExpansionFraction.value > 0.015f ||
-                isLyricsModeEnabled ||
-                isQueueExpanded
+            isFullPlayerVisible || isLyricsModeEnabled || isQueueExpanded
         }
     }
 
@@ -507,8 +502,13 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                     }
                 }
                 .graphicsLayer {
-                    // The full player follows the same sheet origin as the mini layer.
-                    alpha = playerContentExpansionFraction.value.coerceIn(0f, 1f)
+                    // The fullscreen Lyrics Dialog owns its own Window. Do not keep
+                    // a transparent full-screen compositing layer behind that Window.
+                    alpha = if (isLyricsModeEnabled) {
+                        0f
+                    } else {
+                        playerContentExpansionFraction.value.coerceIn(0f, 1f)
+                    }
                 }
                 .zIndex(fullPlayerZIndex)
         ) {
