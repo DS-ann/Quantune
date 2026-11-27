@@ -87,8 +87,16 @@ timeout 20s adb shell settings put secure immersive_mode_confirmations confirmed
   done
 } > "$ARTIFACT_DIR/emulator-abi-info.txt"
 
+# Fail before installation if this guest cannot execute 32-bit ARM code.
+GUEST_ABI32="$(timeout 10s adb shell getprop ro.product.cpu.abilist32 2>/dev/null | tr -d '\\r' || true)"
+if [[ ",$GUEST_ABI32," != *",armeabi-v7a,"* ]]; then
+  echo "::error::Emulator lacks ARMv7 translation. Guest 32-bit ABIs: $GUEST_ABI32" >&2
+  exit 20
+fi
+
 INSTALL_LOG="$ARTIFACT_DIR/install-output.txt"
-if ! timeout 600s adb install -r --abi armeabi-v7a "$APK" > "$INSTALL_LOG" 2>&1; then
+# Let PackageManager choose the compatible ABI exposed by the emulator.
+if ! timeout 600s adb install -r "$APK" > "$INSTALL_LOG" 2>&1; then
   echo "Quantune APK installation failed or exceeded the 600-second TCG allowance:" >&2
   cat "$INSTALL_LOG" >&2 || true
   exit 1
