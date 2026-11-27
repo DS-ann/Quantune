@@ -891,7 +891,7 @@ object InnerTubeParser {
                 "gridRenderer"
             )
             shelfTypes.forEach { type ->
-                findObjects(json, type).forEach { renderer ->
+                objectsFor(type).forEach { renderer ->
                     addSection(JsonObject().apply { add(type, renderer) })
                 }
             }
