@@ -410,11 +410,15 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
     // still mount the surface that owns those overlays.
     val shouldComposeFullPlayer by remember(
         isFullPlayerVisible,
+        isSheetExpanded,
         isLyricsModeEnabled,
         isQueueExpanded
     ) {
         derivedStateOf {
-            isFullPlayerVisible || isLyricsModeEnabled || isQueueExpanded
+            // Mount the expanded tree as soon as expansion is requested. The sheet
+            // waits for this tree's first layout before animating, so gating it only
+            // on the final expansion fraction creates a circular wait.
+            isFullPlayerVisible || isSheetExpanded || isLyricsModeEnabled || isQueueExpanded
         }
     }
 
