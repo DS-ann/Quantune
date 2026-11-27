@@ -26,6 +26,35 @@ object YouTubeMusic {
 
     private const val TAG = "YouTubeMusic"
 
+    /**
+     * Large browse JSON responses are parsed off the main thread, but a normal
+     * Dispatchers.IO worker can still compete with the UI/RenderThread on older
+     * or CPU-constrained devices. Temporarily lower only this worker's OS priority
+     * for the CPU-heavy tree walk, then always restore the pool thread's priority.
+     */
+    private inline fun <T> withBackgroundParserPriority(block: () -> T): T {
+        val threadId = android.os.Process.myTid()
+        val previousPriority = runCatching {
+            android.os.Process.getThreadPriority(threadId)
+        }.getOrNull()
+
+        try {
+            runCatching {
+                android.os.Process.setThreadPriority(
+                    threadId,
+                    android.os.Process.THREAD_PRIORITY_BACKGROUND
+                )
+            }
+            return block()
+        } finally {
+            if (previousPriority != null) {
+                runCatching {
+                    android.os.Process.setThreadPriority(threadId, previousPriority)
+                }
+            }
+        }
+    }
+
     // Intelligent Streaming Performance Caches
     private val streamUrlCache = ConcurrentHashMap<String, Pair<String, Long>>()
     private data class ActiveStreamRequest(
@@ -544,7 +573,9 @@ object YouTubeMusic {
         runCatching {
             kotlinx.coroutines.withTimeout(25000L.milliseconds) {
                 val response = InnerTubeClient.browse(browseId = "FEmusic_home")
-                InnerTubeParser.parseHomePage(response)
+                withBackgroundParserPriority {
+                    InnerTubeParser.parseHomePage(response)
+                }
             }
         }
     }
@@ -556,7 +587,9 @@ object YouTubeMusic {
         runCatching {
             kotlinx.coroutines.withTimeout(25000L.milliseconds) {
                 val response = InnerTubeClient.browse(continuation = continuation)
-                InnerTubeParser.parseHomePage(response)
+                withBackgroundParserPriority {
+                    InnerTubeParser.parseHomePage(response)
+                }
             }
         }
     }
@@ -568,7 +601,9 @@ object YouTubeMusic {
         runCatching {
             kotlinx.coroutines.withTimeout(25000L.milliseconds) {
                 val response = InnerTubeClient.browse(browseId = "FEmusic_explore")
-                InnerTubeParser.parseHomePage(response)
+                withBackgroundParserPriority {
+                    InnerTubeParser.parseHomePage(response)
+                }
             }
         }
     }
@@ -581,7 +616,9 @@ object YouTubeMusic {
         runCatching {
             kotlinx.coroutines.withTimeout(25000L.milliseconds) {
                 val response = InnerTubeClient.browse(browseId = "FEmusic_moods_and_genres")
-                val categories = InnerTubeParser.parseMoodsAndGenres(response)
+                val categories = withBackgroundParserPriority {
+                    InnerTubeParser.parseMoodsAndGenres(response)
+                }
                 if (categories.isEmpty()) {
                     throw java.io.IOException("YouTube Music returned no moods or genres.")
                 }
