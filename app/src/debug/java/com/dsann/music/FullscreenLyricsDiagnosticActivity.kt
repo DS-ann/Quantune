@@ -150,7 +150,7 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
                                 positionMs >= 6_000 &&
                                 hasLoggedKaraokePlaybackAdvance.compareAndSet(false, true)
                             ) {
-                                Log.i(TAG, "KARAOKE_PLAYBACK_ADVANCED position_ms=\$positionMs")
+                                Log.i(TAG, "KARAOKE_PLAYBACK_ADVANCED position_ms=${positionMs}")
                             }
                             positionMs
                         }
