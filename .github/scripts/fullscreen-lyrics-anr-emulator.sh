@@ -22,6 +22,9 @@ capture_logs() {
   timeout 15s adb shell dumpsys activity lastanr > "$output_dir/activity-lastanr.txt" 2>&1 || true
   timeout 15s adb shell dumpsys dropbox --print data_app_anr > "$output_dir/dropbox-app-anr.txt" 2>&1 || true
   timeout 15s adb shell dumpsys dropbox --print data_app_native_crash > "$output_dir/dropbox-native-crash.txt" 2>&1 || true
+  # Remove device-side captures first so a failed screencap/pull cannot silently
+  # reuse a screenshot or accessibility tree from an earlier mode or emulator run.
+  timeout 10s adb shell rm -f /sdcard/quantune-lyrics-window.xml /sdcard/quantune-lyrics-screen.png >/dev/null 2>&1 || true
   timeout 15s adb shell uiautomator dump /sdcard/quantune-lyrics-window.xml >/dev/null 2>&1 || true
   timeout 15s adb pull /sdcard/quantune-lyrics-window.xml "$output_dir/window-hierarchy.xml" >/dev/null 2>&1 || true
   timeout 15s adb shell screencap -p /sdcard/quantune-lyrics-screen.png >/dev/null 2>&1 || true

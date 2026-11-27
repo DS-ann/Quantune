@@ -616,12 +616,15 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
 
-                    LaunchedEffect(currentDestination?.route) {
-                        exploreViewModel.setExplorePageActive(currentDestination?.route == "explore")
+                    LaunchedEffect(currentDestination?.route, isPlayerBackActive) {
+                        exploreViewModel.setExplorePageActive(
+                            active = currentDestination?.route == "explore" && !isPlayerBackActive,
+                            cancelInFlightHomeLoad = isPlayerBackActive
+                        )
                         // Search has its own ViewModel and loads only the dedicated moods/genres
                         // catalogue. It must not trigger a second copy of the Explore home feed.
                         searchViewModel.setExplorePageActive(
-                            active = currentDestination?.route == "search",
+                            active = currentDestination?.route == "search" && !isPlayerBackActive,
                             loadHomeOnActivate = false
                         )
                     }
@@ -711,7 +714,7 @@ class MainActivity : AppCompatActivity() {
                             visitedRootTabs.forEach { cachedRoute ->
                                 val isOutgoingTab = cachedRoute == renderedRootTab
                                 val isIncomingTab = cachedRoute == incomingRootTab
-                                val tabIsActive = isOutgoingTab || isIncomingTab
+                                val tabIsActive = (isOutgoingTab || isIncomingTab) && !isPlayerBackActive
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()

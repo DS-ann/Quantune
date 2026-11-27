@@ -266,7 +266,24 @@ class ExploreViewModel(application: Application) : AndroidViewModel(application)
      * Stop page content requests when Explore is hidden but preserve its already-loaded state.
      * Thumbnail prefetches remain cache-only and do not cause hidden pages to be composed.
      */
-    fun setExplorePageActive(active: Boolean, loadHomeOnActivate: Boolean = true) {
+    fun setExplorePageActive(
+        active: Boolean,
+        loadHomeOnActivate: Boolean = true,
+        cancelInFlightHomeLoad: Boolean = false
+    ) {
+        if (!active && cancelInFlightHomeLoad) {
+            // The player completely covers Explore. Do not keep parsing the initial
+            // home response or refreshing a page that cannot be seen; it is reloaded
+            // on the next Explore activation when no cached first load exists.
+            homeFeedJob?.cancel()
+            homeFeedJob = null
+            homeRefreshJob?.cancel()
+            homeRefreshJob = null
+            _uiState.update {
+                it.copy(isLoadingHome = false, isRefreshing = false)
+            }
+        }
+
         if (explorePageActive == active) {
             if (active && loadHomeOnActivate && !homeLoaded) loadHomeFeed()
             return
