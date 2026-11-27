@@ -616,15 +616,21 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
 
-                    LaunchedEffect(currentDestination?.route, isPlayerBackActive) {
+                    LaunchedEffect(
+                        currentDestination?.route,
+                        isPlayerBackActive,
+                        runFullscreenLyricsAnrTest
+                    ) {
                         exploreViewModel.setExplorePageActive(
-                            active = currentDestination?.route == "explore" && !isPlayerBackActive,
-                            cancelInFlightHomeLoad = isPlayerBackActive
+                            active = currentDestination?.route == "explore" &&
+                                !isPlayerBackActive && !runFullscreenLyricsAnrTest,
+                            cancelInFlightHomeLoad = isPlayerBackActive || runFullscreenLyricsAnrTest
                         )
                         // Search has its own ViewModel and loads only the dedicated moods/genres
                         // catalogue. It must not trigger a second copy of the Explore home feed.
                         searchViewModel.setExplorePageActive(
-                            active = currentDestination?.route == "search" && !isPlayerBackActive,
+                            active = currentDestination?.route == "search" &&
+                                !isPlayerBackActive && !runFullscreenLyricsAnrTest,
                             loadHomeOnActivate = false
                         )
                     }

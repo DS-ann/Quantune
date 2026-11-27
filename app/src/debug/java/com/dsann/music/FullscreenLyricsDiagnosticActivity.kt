@@ -61,12 +61,10 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
         setContent {
             DsmusicAppTheme(darkTheme = true) {
                 var baseLayoutReady by remember { mutableStateOf(false) }
-                val openLyricsState = remember { mutableStateOf(false) }
-                val rootView = LocalView.current
+                var openLyrics by remember { mutableStateOf(false) }
 
-                // Give the theme and first Activity frame time to settle, then schedule
-                // the overlay from the Android main Handler. This diagnostic should not
-                // depend on a coroutine frame callback to request the UI it is measuring.
+                // Give the app theme and the Activity's first Compose frame time to
+                // settle before presenting the actual overlay under test.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -75,17 +73,17 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
                             if (!baseLayoutReady) {
                                 baseLayoutReady = true
                                 Log.i(TAG, "DIAGNOSTIC_BASE_LAYOUT_READY mode=$mode")
-                                rootView.postDelayed({
-                                    if (!isFinishing && !isDestroyed) {
-                                        openLyricsState.value = true
-                                        Log.i(TAG, "FULLSCREEN_LYRICS_REQUESTED mode=$mode")
-                                    }
-                                }, 1_500L)
                             }
                         }
                 ) { }
 
-                val openLyrics = openLyricsState.value
+                LaunchedEffect(baseLayoutReady) {
+                    if (baseLayoutReady) {
+                        delay(1_500L)
+                        openLyrics = true
+                        Log.i(TAG, "FULLSCREEN_LYRICS_REQUESTED mode=$mode")
+                    }
+                }
 
                 if (openLyrics) {
                     val testSong = remember {

@@ -405,17 +405,21 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
     val isFullPlayerVisible by remember(playerContentExpansionFraction) {
         derivedStateOf { playerContentExpansionFraction.value >= 0.995f }
     }
-    // Keep the mini-player transition lightweight. The full control tree is mounted
-    // only after the sheet reaches its expanded anchor, so its first Text/vector/layout
-    // pass does not compete with the sheet's animation frames. Direct Lyrics and Queue
-    // gestures still mount the owner needed for those overlays.
+    // Mini-player gesture mappings can open Lyrics or Queue directly. Keep those states
+    // functional even when the sheet has not crossed the normal full-player threshold.
     val shouldComposeFullPlayer by remember(
-        isFullPlayerVisible,
+        playerContentExpansionFraction,
         isLyricsModeEnabled,
-        isQueueExpanded
+        isQueueExpanded,
+        isSheetExpanded
     ) {
         derivedStateOf {
-            isFullPlayerVisible || isLyricsModeEnabled || isQueueExpanded
+            // Mount the expensive full-player tree before the first animated frame.
+            // This keeps lyrics, artwork and visualizers from being composed mid-transition.
+            isSheetExpanded ||
+                playerContentExpansionFraction.value > 0.015f ||
+                isLyricsModeEnabled ||
+                isQueueExpanded
         }
     }
 
@@ -503,13 +507,8 @@ fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                     }
                 }
                 .graphicsLayer {
-                    // The fullscreen Lyrics Dialog owns its own Window. Do not allocate
-                    // a transparent full-screen compositing layer behind that Window.
-                    alpha = if (isLyricsModeEnabled) {
-                        0f
-                    } else {
-                        playerContentExpansionFraction.value.coerceIn(0f, 1f)
-                    }
+                    // The full player follows the same sheet origin as the mini layer.
+                    alpha = playerContentExpansionFraction.value.coerceIn(0f, 1f)
                 }
                 .zIndex(fullPlayerZIndex)
         ) {

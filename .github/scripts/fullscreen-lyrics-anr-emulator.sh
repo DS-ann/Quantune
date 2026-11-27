@@ -71,9 +71,110 @@ if [[ -z "$PACKAGE_PATH" ]]; then
 fi
 printf '%s\n' "$PACKAGE_PATH" > "$ARTIFACT_DIR/installed-package-path.txt"
 
-# Exercise the production fullscreen overlay directly. MainActivity is intentionally
-# excluded here: its Explore/Navigation startup was ANRing before lyrics were requested,
-# so that previous test produced no evidence about the lyrics renderer itself.
+# First exercise the actual user path: MainActivity -> expanded player -> Lyrics action
+# -> production fullscreen dialog. This is separate from the renderer-only modes below.
+INTEGRATION_DIR="$ARTIFACT_DIR/player-integration"
+mkdir -p "$INTEGRATION_DIR"
+timeout 30s adb shell am force-stop com.dsann.music >/dev/null 2>&1 || true
+timeout 15s adb shell run-as com.dsann.music rm -f \
+  files/diagnostics/latest-report.txt files/diagnostics/latest-report.tmp >/dev/null 2>&1 || true
+timeout 20s adb logcat -c || true
+
+INTEGRATION_RESULT=0
+PLAYER_LAYOUT_READY=0
+PLAYER_FIRST_DRAW=0
+LYRICS_REQUESTED=0
+OVERLAY_MEASURED=0
+CONTENT_READY=0
+INTEGRATION_ANR=0
+INTEGRATION_ANR_STAGE="none"
+
+if ! timeout 90s adb shell am start -W -n com.dsann.music/.MainActivity \
+  --ez com.dsann.music.EXTRA_OPEN_FULLSCREEN_LYRICS_ANR_TEST true \
+  --ez com.dsann.music.EXTRA_SKIP_DIAGNOSTIC_RECOVERY true \
+  > "$INTEGRATION_DIR/activity-start.txt" 2>&1; then
+  echo "Could not launch MainActivity player-host lyrics diagnostic." >&2
+  INTEGRATION_RESULT=1
+fi
+
+if ! grep -q 'Status: ok' "$INTEGRATION_DIR/activity-start.txt" 2>/dev/null; then
+  echo "MainActivity diagnostic launch did not report Status: ok." >&2
+  INTEGRATION_RESULT=1
+fi
+
+for _ in $(seq 1 120); do
+  timeout 3s adb logcat -d -s QuantuneANRTest:I > "$INTEGRATION_DIR/test-markers-current.txt" 2>/dev/null || true
+  grep -q 'FULL_PLAYER_LAYOUT_READY' "$INTEGRATION_DIR/test-markers-current.txt" && PLAYER_LAYOUT_READY=1
+  grep -q 'FULL_PLAYER_FIRST_DRAW_COMPLETED' "$INTEGRATION_DIR/test-markers-current.txt" && PLAYER_FIRST_DRAW=1
+  grep -q 'FULLSCREEN_LYRICS_REQUESTED' "$INTEGRATION_DIR/test-markers-current.txt" && LYRICS_REQUESTED=1
+  grep -q 'FULLSCREEN_LYRICS_OVERLAY_MEASURED' "$INTEGRATION_DIR/test-markers-current.txt" && OVERLAY_MEASURED=1
+  grep -q 'FULLSCREEN_LYRICS_CONTENT_READY' "$INTEGRATION_DIR/test-markers-current.txt" && CONTENT_READY=1
+
+  REPORT_PRESENT="$(timeout 5s adb shell run-as com.dsann.music test -s files/diagnostics/latest-report.txt >/dev/null 2>&1; echo $?)"
+  if [[ "$REPORT_PRESENT" -eq 0 ]]; then
+    echo "Quantune watchdog report appeared during the MainActivity player-host flow." >&2
+    break
+  fi
+  if [[ "$OVERLAY_MEASURED" -eq 1 && "$CONTENT_READY" -eq 1 ]]; then
+    # Keep the real production dialog active beyond the five-second app watchdog.
+    sleep 8
+    timeout 3s adb logcat -d -s QuantuneANRTest:I > "$INTEGRATION_DIR/test-markers-current.txt" 2>/dev/null || true
+    grep -q 'FULL_PLAYER_LAYOUT_READY' "$INTEGRATION_DIR/test-markers-current.txt" && PLAYER_LAYOUT_READY=1
+    grep -q 'FULL_PLAYER_FIRST_DRAW_COMPLETED' "$INTEGRATION_DIR/test-markers-current.txt" && PLAYER_FIRST_DRAW=1
+    grep -q 'FULLSCREEN_LYRICS_REQUESTED' "$INTEGRATION_DIR/test-markers-current.txt" && LYRICS_REQUESTED=1
+    grep -q 'FULLSCREEN_LYRICS_CONTENT_READY' "$INTEGRATION_DIR/test-markers-current.txt" && CONTENT_READY=1
+    break
+  fi
+  sleep 1
+done
+
+capture_logs "$INTEGRATION_DIR"
+
+if grep -Eqi 'ANR in com\.dsann\.music|Input dispatching timed out' "$INTEGRATION_DIR/logcat-all.txt"; then
+  INTEGRATION_ANR=1
+  INTEGRATION_ANR_STAGE="android-framework"
+fi
+if grep -Eqi 'Type: ANR|APP NOT RESPONDING' "$INTEGRATION_DIR/quantune-diagnostic-report.txt"; then
+  INTEGRATION_ANR=1
+  if grep -q 'Overlay: Full-screen Lyrics' "$INTEGRATION_DIR/quantune-diagnostic-report.txt"; then
+    INTEGRATION_ANR_STAGE="fullscreen-lyrics-overlay"
+  elif [[ "$PLAYER_FIRST_DRAW" -eq 0 ]]; then
+    INTEGRATION_ANR_STAGE="expanded-player-first-draw"
+  elif [[ "$LYRICS_REQUESTED" -eq 0 ]]; then
+    INTEGRATION_ANR_STAGE="after-player-first-draw-before-lyrics-request"
+  else
+    INTEGRATION_ANR_STAGE="fullscreen-lyrics-content-rendering"
+  fi
+fi
+
+if [[ "$PLAYER_LAYOUT_READY" -ne 1 || "$PLAYER_FIRST_DRAW" -ne 1 || \
+      "$LYRICS_REQUESTED" -ne 1 || "$OVERLAY_MEASURED" -ne 1 || "$CONTENT_READY" -ne 1 ]]; then
+  echo "MainActivity did not complete the full player -> fullscreen Lyrics flow." >&2
+  INTEGRATION_RESULT=1
+fi
+if [[ "$INTEGRATION_ANR" -eq 1 ]]; then
+  echo "ANR captured during MainActivity player-host flow at stage=$INTEGRATION_ANR_STAGE" >&2
+  INTEGRATION_RESULT=1
+fi
+
+{
+  echo "api_level=$API_LEVEL"
+  echo "test=MainActivity_full_player_to_fullscreen_lyrics"
+  echo "player_layout_ready=$PLAYER_LAYOUT_READY"
+  echo "player_first_draw=$PLAYER_FIRST_DRAW"
+  echo "lyrics_requested=$LYRICS_REQUESTED"
+  echo "overlay_measured=$OVERLAY_MEASURED"
+  echo "content_ready=$CONTENT_READY"
+  echo "anr_detected=$INTEGRATION_ANR"
+  echo "anr_stage=$INTEGRATION_ANR_STAGE"
+  echo "result=$INTEGRATION_RESULT"
+} > "$INTEGRATION_DIR/test-result.txt"
+
+if [[ "$INTEGRATION_RESULT" -ne 0 ]]; then OVERALL_RESULT=1; fi
+timeout 30s adb shell am force-stop com.dsann.music >/dev/null 2>&1 || true
+
+# Exercise every isolated production fullscreen renderer as well. These cases
+# separate lyrics parsing/painting from the normal MainActivity/player host.
 for MODE in $(printf '%s' "$LYRICS_TEST_MODES" | tr ',' ' '); do
   MODE_DIR="$ARTIFACT_DIR/$MODE"
   mkdir -p "$MODE_DIR"

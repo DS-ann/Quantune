@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: quantune-lyrics-anr-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   reproduce:

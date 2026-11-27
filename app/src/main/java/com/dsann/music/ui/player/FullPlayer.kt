@@ -23,8 +23,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Info
@@ -45,7 +44,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -1556,6 +1554,38 @@ fun FullPlayer(
             Spacer(modifier = Modifier.height(8.dp))
 
             // Reorderable action chips. The selected order is saved by Customize.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { coordinates ->
+                        val position = coordinates.positionInRoot()
+                        val bounds = Rect(
+                            position.x,
+                            position.y,
+                            position.x + coordinates.size.width.toFloat(),
+                            position.y + coordinates.size.height.toFloat()
+                        )
+                        if (portraitActionRowBounds != bounds) {
+                            portraitActionRowBounds = bounds
+                        }
+                    }
+                    .clip(if (playerButtonsPill) CircleShape else RoundedCornerShape(0.dp))
+                    .background(
+                        if (playerButtonsPill) contentColor.copy(alpha = if (isDark) 0.075f else 0.055f)
+                        else Color.Transparent
+                    )
+                    // Let horizontalScroll own the viewport. The previous custom layout
+                    // expanded and negatively offset the row, which could clip the last chip.
+                    .horizontalScroll(rememberScrollState())
+                    .padding(
+                        horizontal = if (playerButtonsPill) 8.dp else 0.dp,
+                        vertical = if (playerButtonsPill) 5.dp else 0.dp
+                    ),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Spacer(modifier = Modifier.width(12.dp))
+
                 val songForActions = uiState.currentSong
                 val downloadedVideoIds by com.dsann.music.util.SongDownloader.downloadedVideoIds.collectAsStateWithLifecycle()
                 LaunchedEffect(songForActions?.videoId, songForActions?.title, songForActions?.artist) {
@@ -1582,35 +1612,7 @@ fun FullPlayer(
                 } else {
                     playerButtonsWithVideo
                 }
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onGloballyPositioned { coordinates ->
-                        val position = coordinates.positionInRoot()
-                        val bounds = Rect(
-                            position.x,
-                            position.y,
-                            position.x + coordinates.size.width.toFloat(),
-                            position.y + coordinates.size.height.toFloat()
-                        )
-                        if (portraitActionRowBounds != bounds) {
-                            portraitActionRowBounds = bounds
-                        }
-                    }
-                    .clip(if (playerButtonsPill) CircleShape else RoundedCornerShape(0.dp))
-                    .background(
-                        if (playerButtonsPill) contentColor.copy(alpha = if (isDark) 0.075f else 0.055f)
-                        else Color.Transparent
-                    )
-                    .padding(
-                        horizontal = if (playerButtonsPill) 8.dp else 0.dp,
-                        vertical = if (playerButtonsPill) 5.dp else 0.dp
-                    ),
-                contentPadding = PaddingValues(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                items(playerButtonsForDisplay) { action ->
+                playerButtonsForDisplay.forEach { action ->
                     when (action) {
                         "lyrics" -> PillChip(
                             style = playerButtonStyle,
@@ -1789,6 +1791,8 @@ fun FullPlayer(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.width(12.dp))
             }
 
             Spacer(modifier = Modifier.height(if (compactLandscape) 8.dp else 24.dp))
@@ -1944,69 +1948,67 @@ fun FullPlayer(
             Spacer(modifier = Modifier.weight(1f, fill = true))
         }
 
-        if (!isLyricsModeEnabled) {
-            if (useWidePlayer) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .statusBarsPadding()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 20.dp)
-                        .padding(top = if (compactLandscape) 8.dp else 12.dp, bottom = if (compactLandscape) 0.dp else 12.dp)
-                        .padding(start = queueDockInset),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(0.54f)
-                            .fillMaxHeight()
-                            .clipToBounds(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        content = playerControlsContent
-                    )
-                    if (isPlayerVisible) {
-                        LandscapePlayerDetailsPane(
-                            modifier = Modifier.weight(0.46f).fillMaxHeight(),
-                            onOpenFullScreenLyrics = {
-                                viewModel.setQueueExpanded(false)
-                                onLyricsModeChanged(true)
-                            },
-                            syncedLyrics = syncedLyrics,
-                            plainLyrics = plainLyrics,
-                            isLyricsLoading = isLyricsLoading,
-                            lyricsError = lyricsError,
-                            currentSong = uiState.currentSong,
-                            currentPositionProvider = currentPositionProvider,
-                            playbackSpeedProvider = playbackSpeedProvider,
-                            isPlaying = uiState.isPlaying,
-                            contentColor = lyricsTextColor,
-                            secondaryColor = lyricsSecondaryColor,
-                            accentColor = lyricsAccentColor,
-                            sourcePickerBackgroundBrush = backgroundBrush,
-                            lyricsColorStyle = lyricsColorStyle,
-                            selectedProvider = selectedProvider,
-                            providerResults = providerResults,
-                            onProviderSelected = onProviderSelected,
-                            onSeekTo = onSeekTo,
-                            onFetchLyrics = onFetchLyrics,
-                            onRetryLyrics = onRetryLyrics
-                        )
-                    } else {
-                        Spacer(Modifier.weight(0.46f).fillMaxHeight())
-                    }
-                }
-            } else {
+        if (useWidePlayer) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = if (compactLandscape) 8.dp else 12.dp, bottom = if (compactLandscape) 0.dp else 12.dp)
+                    .padding(start = queueDockInset),
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .statusBarsPadding()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 20.dp)
-                        .padding(top = if (compactLandscape) 8.dp else 12.dp, bottom = if (compactLandscape) 0.dp else 12.dp),
+                        .weight(0.54f)
+                        .fillMaxHeight()
+                        .clipToBounds(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     content = playerControlsContent
                 )
+                if (isPlayerVisible) {
+                    LandscapePlayerDetailsPane(
+                        modifier = Modifier.weight(0.46f).fillMaxHeight(),
+                        onOpenFullScreenLyrics = {
+                            viewModel.setQueueExpanded(false)
+                            onLyricsModeChanged(true)
+                        },
+                        syncedLyrics = syncedLyrics,
+                        plainLyrics = plainLyrics,
+                        isLyricsLoading = isLyricsLoading,
+                        lyricsError = lyricsError,
+                        currentSong = uiState.currentSong,
+                        currentPositionProvider = currentPositionProvider,
+                        playbackSpeedProvider = playbackSpeedProvider,
+                        isPlaying = uiState.isPlaying,
+                        contentColor = lyricsTextColor,
+                        secondaryColor = lyricsSecondaryColor,
+                        accentColor = lyricsAccentColor,
+                        sourcePickerBackgroundBrush = backgroundBrush,
+                        lyricsColorStyle = lyricsColorStyle,
+                        selectedProvider = selectedProvider,
+                        providerResults = providerResults,
+                        onProviderSelected = onProviderSelected,
+                        onSeekTo = onSeekTo,
+                        onFetchLyrics = onFetchLyrics,
+                        onRetryLyrics = onRetryLyrics
+                    )
+                } else {
+                    Spacer(Modifier.weight(0.46f).fillMaxHeight())
+                }
             }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = if (compactLandscape) 8.dp else 12.dp, bottom = if (compactLandscape) 0.dp else 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                content = playerControlsContent
+            )
         }
         if (isLyricsModeEnabled) {
             Dialog(
@@ -2064,44 +2066,41 @@ fun FullPlayer(
             }
         }
 
-        if (!isLyricsModeEnabled) {
-            // --- CUSTOM EMBEDDED SLIDING PLAY QUEUE ---
-            SlidingQueueDrawer(
-                // Do not reveal or shift the queue until the player frame has fully settled.
-                isQueueExpanded = queueExpandedForUi && isPlayerVisible,
-                onQueueExpandedChange = { viewModel.setQueueExpanded(it) },
-                songList = songList,
-                currentSongIndex = currentSongIndex,
-                isShuffleEnabled = isShuffleEnabled,
-                repeatMode = repeatMode,
-                sleepTimerMode = sleepTimerMode,
-                onReorderQueue = { from, to ->
-                    viewModel.reorderQueue(from, to, syncPlaybackService = false)
-                },
-                onReorderFinished = { viewModel.syncQueueWithPlaybackService() },
-                onPlaySongAtIndex = { index -> viewModel.playSongAtIndex(index) },
-                onToggleShuffle = { viewModel.toggleShuffle() },
-                onToggleLoopMode = { viewModel.toggleLoopMode() },
-                onShowSleepTimerDialog = { showSleepTimerDialog = true },
-                playerBackgroundColor = uiState.playerBackgroundColor,
-                dynamicAccentColor = dynamicAccentColor,
-                isDark = isDark,
-                onSongLongClick = { song -> selectedQueueSongForMenu = song },
-                onRemoveFromQueue = { song -> viewModel.removeFromQueue(song.id) },
-                playerSharedViewModel = viewModel
+        // --- CUSTOM EMBEDDED SLIDING PLAY QUEUE ---
+        SlidingQueueDrawer(
+            // Do not reveal or shift the queue until the player frame has fully settled.
+            isQueueExpanded = queueExpandedForUi && isPlayerVisible,
+            onQueueExpandedChange = { viewModel.setQueueExpanded(it) },
+            songList = songList,
+            currentSongIndex = currentSongIndex,
+            isShuffleEnabled = isShuffleEnabled,
+            repeatMode = repeatMode,
+            sleepTimerMode = sleepTimerMode,
+            onReorderQueue = { from, to ->
+                viewModel.reorderQueue(from, to, syncPlaybackService = false)
+            },
+            onReorderFinished = { viewModel.syncQueueWithPlaybackService() },
+            onPlaySongAtIndex = { index -> viewModel.playSongAtIndex(index) },
+            onToggleShuffle = { viewModel.toggleShuffle() },
+            onToggleLoopMode = { viewModel.toggleLoopMode() },
+            onShowSleepTimerDialog = { showSleepTimerDialog = true },
+            playerBackgroundColor = uiState.playerBackgroundColor,
+            dynamicAccentColor = dynamicAccentColor,
+            isDark = isDark,
+            onSongLongClick = { song -> selectedQueueSongForMenu = song },
+            onRemoveFromQueue = { song -> viewModel.removeFromQueue(song.id) },
+            playerSharedViewModel = viewModel
+        )
+
+        selectedQueueSongForMenu?.let { queueSong ->
+            QueueSongActionsBottomSheet(
+                song = queueSong,
+                playerSharedViewModel = viewModel,
+                onDismissRequest = { selectedQueueSongForMenu = null }
             )
-
-            selectedQueueSongForMenu?.let { queueSong ->
-                QueueSongActionsBottomSheet(
-                    song = queueSong,
-                    playerSharedViewModel = viewModel,
-                    onDismissRequest = { selectedQueueSongForMenu = null }
-                )
-            }
-
-            // --- Standalone Sleep Timer Bottom Sheet ---
         }
 
+        // --- Standalone Sleep Timer Bottom Sheet ---
         if (showSleepTimerDialog) {
             SleepTimerBottomSheet(
                 onDismissRequest = { showSleepTimerDialog = false },
