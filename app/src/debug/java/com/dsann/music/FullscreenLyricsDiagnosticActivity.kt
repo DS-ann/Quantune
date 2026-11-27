@@ -102,28 +102,68 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
                         )
                     }
 
-                    // Drive the production karaoke renderer with a moving playhead.
-                    // A fixed 1,000 ms position only tested first layout; it did not
-                    // exercise frame-to-frame word highlighting or playback-clock work.
+                    // Use a monotonic playhead rather than adding a fixed 16 ms for
+                    // every coroutine wake-up. TCG emulators can delay dispatch heavily,
+                    // so a tick-count clock under-reports elapsed playback time and makes
+                    // the renderer test fail even while frames are being drawn.
+                    val karaokePlaybackStartedAtMs = remember(mode) {
+                        android.os.SystemClock.elapsedRealtime()
+                    }
                     val karaokePositionMs = remember(mode) {
                         mutableIntStateOf(1_000)
                     }
-                    LaunchedEffect(mode, testSong.duration) {
+                    val readKaraokePosition: () -> Int = remember(
+                        mode,
+                        karaokePlaybackStartedAtMs,
+                        testSong.duration
+                    ) {
+                        {
+                            if (mode == "karaoke") {
+                                (
+                                    1_000L +
+                                        (android.os.SystemClock.elapsedRealtime() - karaokePlaybackStartedAtMs)
+                                            .coerceAtLeast(0L)
+                                    ).coerceAtMost(
+                                        testSong.duration.coerceAtLeast(1L)
+                                            .coerceAtMost(Int.MAX_VALUE.toLong())
+                                    ).toInt()
+                            } else {
+                                1_000
+                            }
+                        }
+                    }
+                    val hasLoggedKaraokePlaybackAdvance = remember(mode) {
+                        java.util.concurrent.atomic.AtomicBoolean(false)
+                    }
+                    val rendererPositionProvider: () -> Int = remember(
+                        mode,
+                        readKaraokePosition,
+                        hasLoggedKaraokePlaybackAdvance
+                    ) {
+                        {
+                            val positionMs = readKaraokePosition()
+                            // This callback is sampled by the production renderer's
+                            // VSYNC collector. Log only when that renderer reads a live
+                            // position beyond the initial test point.
+                            if (
+                                mode == "karaoke" &&
+                                positionMs >= 6_000 &&
+                                hasLoggedKaraokePlaybackAdvance.compareAndSet(false, true)
+                            ) {
+                                Log.i(TAG, "KARAOKE_PLAYBACK_ADVANCED position_ms=\$positionMs")
+                            }
+                            positionMs
+                        }
+                    }
+                    LaunchedEffect(mode, karaokePlaybackStartedAtMs, readKaraokePosition) {
                         if (mode != "karaoke") return@LaunchedEffect
 
-                        var loggedPlaybackAdvance = false
-                        val durationMs = testSong.duration.coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                        val durationMs = testSong.duration.coerceAtLeast(1L)
+                            .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                         while (karaokePositionMs.intValue < durationMs) {
-                            delay(16L)
-                            karaokePositionMs.intValue =
-                                (karaokePositionMs.intValue + 16).coerceAtMost(durationMs)
-                            if (!loggedPlaybackAdvance && karaokePositionMs.intValue >= 6_000) {
-                                loggedPlaybackAdvance = true
-                                Log.i(
-                                    TAG,
-                                    "KARAOKE_PLAYBACK_ADVANCED position_ms=${karaokePositionMs.intValue}"
-                                )
-                            }
+                            karaokePositionMs.intValue = readKaraokePosition()
+                            if (karaokePositionMs.intValue >= durationMs) break
+                            delay(100L)
                         }
                     }
                     val testSyncedLyrics = remember(mode) {
@@ -179,7 +219,7 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
                             isLoading = false,
                             isPlaying = mode == "karaoke",
                             lyricsError = null,
-                            currentPositionProvider = { karaokePositionMs.intValue },
+                            currentPositionProvider = rendererPositionProvider,
                             playbackSpeedProvider = { 1f },
                             contentReady = true,
                             backgroundBrush = Brush.verticalGradient(
