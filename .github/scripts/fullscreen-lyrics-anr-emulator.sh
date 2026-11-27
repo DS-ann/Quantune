@@ -30,7 +30,13 @@ watchdog_report_exists() {
   # exits non-zero. A non-empty response alone is not proof of a watchdog ANR.
   timeout 5s adb shell run-as com.dsann.music cat files/diagnostics/latest-report.txt \
     > "$raw_output" 2>/dev/null || true
-  if grep -q '^QUANTUNE DIAGNOSTIC REPORT
+  if grep -Fq "QUANTUNE DIAGNOSTIC REPORT" "$raw_output" 2>/dev/null; then
+    mv "$raw_output" "$destination"
+    return 0
+  fi
+  rm -f "$raw_output"
+  return 1
+}
 
 capture_logs() {
   local output_dir="$1"
