@@ -10,7 +10,8 @@ LYRICS_TEST_MODES="$(printenv LYRICS_TEST_MODES || true)"
 if [[ -n "$WORKSPACE_VALUE" ]]; then ARTIFACT_DIR="$WORKSPACE_VALUE/anr-artifacts"; fi
 if [[ -z "$API_LEVEL" ]]; then API_LEVEL="unknown"; fi
 if [[ -z "$LYRICS_TEST_MODES" ]]; then LYRICS_TEST_MODES="empty,synced,plain,karaoke"; fi
-APK="app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk"
+APK="${QUANTUNE_TEST_APK:-app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk}"
+EXPECTED_ABI="${QUANTUNE_EXPECTED_ABI:-armeabi-v7a}"
 mkdir -p "$ARTIFACT_DIR"
 OVERALL_RESULT=0
 
@@ -78,25 +79,23 @@ timeout 30s adb shell settings put global transition_animation_scale 0 || true
 timeout 30s adb shell settings put global animator_duration_scale 0 || true
 timeout 20s adb shell settings put secure immersive_mode_confirmations confirmed >/dev/null 2>&1 || true
 
-# Record guest ABI and native-bridge details so an ABI mismatch is diagnosable.
+# Record the guest ABI and verify it matches the APK built for this test.
 {
-  echo "requested_apk_abi=armeabi-v7a"
-  for property in ro.product.cpu.abilist ro.product.cpu.abilist32 ro.product.cpu.abilist64 ro.dalvik.vm.native.bridge; do
+  echo "requested_apk_abi=$EXPECTED_ABI"
+  for property in ro.product.cpu.abi ro.product.cpu.abilist ro.product.cpu.abilist32 ro.product.cpu.abilist64 ro.dalvik.vm.native.bridge; do
     printf '%s=' "$property"
     timeout 10s adb shell getprop "$property" 2>/dev/null | tr -d '\\r' || true
   done
 } > "$ARTIFACT_DIR/emulator-abi-info.txt"
 
-# Fail before installation if this guest cannot execute 32-bit ARM code.
-GUEST_ABI32="$(timeout 10s adb shell getprop ro.product.cpu.abilist32 2>/dev/null | tr -d '\\r' || true)"
-if [[ ",$GUEST_ABI32," != *",armeabi-v7a,"* ]]; then
-  echo "::error::Emulator lacks ARMv7 translation. Guest 32-bit ABIs: $GUEST_ABI32" >&2
+GUEST_ABILIST="$(timeout 10s adb shell getprop ro.product.cpu.abilist 2>/dev/null | tr -d '\\r' || true)"
+if [[ ",$GUEST_ABILIST," != *",$EXPECTED_ABI,"* ]]; then
+  echo "::error::Emulator ABI mismatch. APK requires $EXPECTED_ABI; guest exposes: $GUEST_ABILIST" >&2
   exit 20
 fi
 
 INSTALL_LOG="$ARTIFACT_DIR/install-output.txt"
-# Let PackageManager choose the compatible ABI exposed by the emulator.
-if ! timeout 600s adb install -r "$APK" > "$INSTALL_LOG" 2>&1; then
+if ! timeout 180s adb install -r "$APK" > "$INSTALL_LOG" 2>&1; then
   echo "Quantune APK installation failed or exceeded the 600-second TCG allowance:" >&2
   cat "$INSTALL_LOG" >&2 || true
   exit 1
