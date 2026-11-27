@@ -11,7 +11,9 @@ permissions:
   actions: read
 
 concurrency:
-  group: quantune-lyrics-anr-${{ github.ref }}
+  # Isolate each commit's matrix so a TCG emulator job that stalls cannot hold
+  # the next diagnostic revision in a pending slot indefinitely.
+  group: quantune-lyrics-anr-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -20,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - api-level: 23
