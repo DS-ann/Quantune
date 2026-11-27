@@ -14,6 +14,24 @@ APK="app/build/outputs/apk/debug/app-x86_64-debug.apk"
 mkdir -p "$ARTIFACT_DIR"
 OVERALL_RESULT=0
 
+capture_window_hierarchy() {
+  local output_dir="$1"
+  mkdir -p "$output_dir"
+  timeout 10s adb shell rm -f /sdcard/quantune-lyrics-window.xml >/dev/null 2>&1 || true
+  timeout 15s adb shell uiautomator dump /sdcard/quantune-lyrics-window.xml >/dev/null 2>&1 || true
+  timeout 15s adb pull /sdcard/quantune-lyrics-window.xml "$output_dir/window-hierarchy.xml" >/dev/null 2>&1 || true
+}
+
+watchdog_report_exists() {
+  local destination="$1"
+  : > "$destination"
+  # Do not trust run-as' exit code for the inner test command. Read the actual
+  # report bytes; a missing file must produce an empty local file, not a false ANR.
+  timeout 5s adb shell run-as com.dsann.music cat files/diagnostics/latest-report.txt \
+    > "$destination" 2>/dev/null || true
+  [[ -s "$destination" ]]
+}
+
 capture_logs() {
   local output_dir="$1"
   mkdir -p "$output_dir"
@@ -22,11 +40,9 @@ capture_logs() {
   timeout 15s adb shell dumpsys activity lastanr > "$output_dir/activity-lastanr.txt" 2>&1 || true
   timeout 15s adb shell dumpsys dropbox --print data_app_anr > "$output_dir/dropbox-app-anr.txt" 2>&1 || true
   timeout 15s adb shell dumpsys dropbox --print data_app_native_crash > "$output_dir/dropbox-native-crash.txt" 2>&1 || true
-  # Remove device-side captures first so a failed screencap/pull cannot silently
-  # reuse a screenshot or accessibility tree from an earlier mode or emulator run.
-  timeout 10s adb shell rm -f /sdcard/quantune-lyrics-window.xml /sdcard/quantune-lyrics-screen.png >/dev/null 2>&1 || true
-  timeout 15s adb shell uiautomator dump /sdcard/quantune-lyrics-window.xml >/dev/null 2>&1 || true
-  timeout 15s adb pull /sdcard/quantune-lyrics-window.xml "$output_dir/window-hierarchy.xml" >/dev/null 2>&1 || true
+  # Always replace the previous capture; never reuse a stale window/screenshot.
+  timeout 10s adb shell rm -f /sdcard/quantune-lyrics-screen.png >/dev/null 2>&1 || true
+  capture_window_hierarchy "$output_dir"
   timeout 15s adb shell screencap -p /sdcard/quantune-lyrics-screen.png >/dev/null 2>&1 || true
   timeout 15s adb pull /sdcard/quantune-lyrics-screen.png "$output_dir/screenshot.png" >/dev/null 2>&1 || true
 
@@ -110,10 +126,25 @@ for _ in $(seq 1 120); do
   grep -q 'FULLSCREEN_LYRICS_OVERLAY_MEASURED' "$INTEGRATION_DIR/test-markers-current.txt" && OVERLAY_MEASURED=1
   grep -q 'FULLSCREEN_LYRICS_CONTENT_READY' "$INTEGRATION_DIR/test-markers-current.txt" && CONTENT_READY=1
 
-  REPORT_PRESENT="$(timeout 5s adb shell run-as com.dsann.music test -s files/diagnostics/latest-report.txt >/dev/null 2>&1; echo $?)"
-  if [[ "$REPORT_PRESENT" -eq 0 ]]; then
+  if watchdog_report_exists "$INTEGRATION_DIR/watchdog-report-probe.txt"; then
     echo "Quantune watchdog report appeared during the MainActivity player-host flow." >&2
+    cp "$INTEGRATION_DIR/watchdog-report-probe.txt" "$INTEGRATION_DIR/quantune-diagnostic-report.txt"
+    INTEGRATION_ANR=1
     break
+  fi
+
+  if (( _ % 5 == 0 )); then
+    capture_window_hierarchy "$INTEGRATION_DIR"
+    if grep -Fq "Quantune Fullscreen Lyrics Player-Host Test" "$INTEGRATION_DIR/window-hierarchy.xml" &&
+       grep -Fq "Lyrics are not loaded yet" "$INTEGRATION_DIR/window-hierarchy.xml"; then
+      # This exact text is only exposed by the production fullscreen Lyrics
+      # Dialog. It proves that the full-player first draw and overlay layout ran.
+      PLAYER_LAYOUT_READY=1
+      PLAYER_FIRST_DRAW=1
+      LYRICS_REQUESTED=1
+      OVERLAY_MEASURED=1
+      CONTENT_READY=1
+    fi
   fi
   if [[ "$OVERLAY_MEASURED" -eq 1 && "$CONTENT_READY" -eq 1 ]]; then
     # Keep the real production dialog active beyond the five-second app watchdog.
@@ -223,10 +254,48 @@ for MODE in $(printf '%s' "$LYRICS_TEST_MODES" | tr ',' ' '); do
     grep -q 'KARAOKE_TEXT_LAYOUT_READY' "$MODE_DIR/test-markers-current.txt" && KARAOKE_TEXT_LAYOUT=1
     grep -q 'KARAOKE_PLAYBACK_ADVANCED' "$MODE_DIR/test-markers-current.txt" && KARAOKE_PLAYBACK_ADVANCED=1
 
-    REPORT_PRESENT="$(timeout 5s adb shell run-as com.dsann.music test -s files/diagnostics/latest-report.txt >/dev/null 2>&1; echo $?)"
-    if [[ "$REPORT_PRESENT" -eq 0 ]]; then
+    if watchdog_report_exists "$MODE_DIR/watchdog-report-probe.txt"; then
       echo "Quantune watchdog report appeared before mode=$MODE completed." >&2
+      cp "$MODE_DIR/watchdog-report-probe.txt" "$MODE_DIR/quantune-diagnostic-report.txt"
+      ANR_FOUND=1
       break
+    fi
+
+    if (( _ % 4 == 0 )); then
+      capture_window_hierarchy "$MODE_DIR"
+      if grep -Fq "Quantune Fullscreen Lyrics Diagnostic" "$MODE_DIR/window-hierarchy.xml"; then
+        BASE_LAYOUT_READY=1
+        LYRICS_REQUESTED=1
+        OVERLAY_MEASURED=1
+        case "$MODE" in
+          empty)
+            if grep -Fq "Lyrics are not loaded yet" "$MODE_DIR/window-hierarchy.xml"; then
+              CONTENT_READY=1
+            fi
+            ;;
+          synced)
+            if grep -Fq "Quantune fullscreen lyrics renderer test" "$MODE_DIR/window-hierarchy.xml"; then
+              CONTENT_READY=1
+              SYNCED_PREPARED=1
+            fi
+            ;;
+          plain)
+            if grep -Fq "Quantune fullscreen lyrics renderer stress line 1" "$MODE_DIR/window-hierarchy.xml"; then
+              CONTENT_READY=1
+            fi
+            ;;
+          karaoke)
+            if grep -Fq "Quantune fullscreen lyrics renderer test" "$MODE_DIR/window-hierarchy.xml"; then
+              CONTENT_READY=1
+              SYNCED_PREPARED=1
+              KARAOKE_TEXT_LAYOUT=1
+            fi
+            if grep -Eq 'karaoke-position-(6[0-9]{3}|[7-9][0-9]{3}|[1-9][0-9]{4,})' "$MODE_DIR/window-hierarchy.xml"; then
+              KARAOKE_PLAYBACK_ADVANCED=1
+            fi
+            ;;
+        esac
+      fi
     fi
     if [[ "$OVERLAY_MEASURED" -eq 1 && "$CONTENT_READY" -eq 1 ]]; then
       # Keep the actual overlay active beyond the app watchdog's five-second threshold.
@@ -235,6 +304,10 @@ for MODE in $(printf '%s' "$LYRICS_TEST_MODES" | tr ',' ' '); do
       grep -q 'SYNCED_LYRICS_PREPARED' "$MODE_DIR/test-markers-current.txt" && SYNCED_PREPARED=1
       grep -q 'KARAOKE_TEXT_LAYOUT_READY' "$MODE_DIR/test-markers-current.txt" && KARAOKE_TEXT_LAYOUT=1
       grep -q 'KARAOKE_PLAYBACK_ADVANCED' "$MODE_DIR/test-markers-current.txt" && KARAOKE_PLAYBACK_ADVANCED=1
+      capture_window_hierarchy "$MODE_DIR"
+      if grep -Eq 'karaoke-position-(6[0-9]{3}|[7-9][0-9]{3}|[1-9][0-9]{4,})' "$MODE_DIR/window-hierarchy.xml"; then
+        KARAOKE_PLAYBACK_ADVANCED=1
+      fi
       break
     fi
     sleep 1

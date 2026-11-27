@@ -281,17 +281,6 @@ class MainActivity : AppCompatActivity() {
             val dynamicAlbumColor = if (currentSong != null) playerBackgroundColor else null
 
             DsmusicAppTheme(darkTheme = isDarkTheme, dynamicAlbumColor = dynamicAlbumColor) {
-                LaunchedEffect(runFullscreenLyricsAnrTest) {
-                    if (runFullscreenLyricsAnrTest) {
-                        // Match a real user opening the player after the Explore screen is
-                        // already on screen; do not combine cold app startup with expansion.
-                        delay(2_500L)
-                        if (!isFinishing && !isDestroyed) {
-                            Log.i("QuantuneANRTest", "TEST_PLAYER_EXPANSION_REQUESTED api=${Build.VERSION.SDK_INT}")
-                            playerViewModel.requestPlayerExpansion()
-                        }
-                    }
-                }
                 ListenTogetherPlaybackBridge(viewModel = playerViewModel)
                 // Observe room messages at the app root so notifications work on every screen,
                 // not only while the Listen Together page is open.
@@ -1346,6 +1335,21 @@ onNavigateToLibrary = {
                     SolidSystemNavigationBarBackground()
                 }
             }
+        }
+
+        if (runFullscreenLyricsAnrTest) {
+            // Schedule only after setContent has installed the root view. The
+            // ViewModel command is buffered until PlayerBottomSheetCompose starts
+            // collecting, so slow first composition cannot silently drop the request.
+            window.decorView.postDelayed({
+                if (!isFinishing && !isDestroyed) {
+                    Log.i(
+                        "QuantuneANRTest",
+                        "TEST_PLAYER_EXPANSION_REQUESTED api=${Build.VERSION.SDK_INT}"
+                    )
+                    playerViewModel.requestPlayerExpansion()
+                }
+            }, 2_500L)
         }
 
         handleIntent(intent)

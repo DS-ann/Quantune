@@ -49,9 +49,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -780,17 +780,21 @@ class PlayerSharedViewModel @Inject constructor(
     // The Activity-level BackHandler has priority over nested Settings NavHosts.
     // These one-shot requests let the sheet own its local animation state while allowing
     // Activity-level entry points and deterministic UI diagnostics to request transitions.
-    private val _playerBackCollapseRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val playerBackCollapseRequests = _playerBackCollapseRequests.asSharedFlow()
-    private val _playerExpandRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val playerExpandRequests = _playerExpandRequests.asSharedFlow()
+    // These are commands, not state. SharedFlow(extraBufferCapacity=1) drops
+    // emissions when there are no subscribers, which can lose an Activity-level
+    // expansion request during cold composition. A conflated Channel retains the
+    // latest one-shot request until the sheet collector starts.
+    private val _playerBackCollapseRequests = Channel<Unit>(Channel.CONFLATED)
+    val playerBackCollapseRequests = _playerBackCollapseRequests.receiveAsFlow()
+    private val _playerExpandRequests = Channel<Unit>(Channel.CONFLATED)
+    val playerExpandRequests = _playerExpandRequests.receiveAsFlow()
 
     fun requestPlayerCollapseFromBack() {
-        _playerBackCollapseRequests.tryEmit(Unit)
+        _playerBackCollapseRequests.trySend(Unit)
     }
 
     fun requestPlayerExpansion() {
-        _playerExpandRequests.tryEmit(Unit)
+        _playerExpandRequests.trySend(Unit)
     }
 
     fun setPlayerExpanded(expanded: Boolean) {

@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
@@ -198,7 +199,18 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
                             selectedProvider = null,
                             onProviderSelected = {},
                             onDismissLyrics = { finish() },
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(
+                                    if (mode == "karaoke") {
+                                        Modifier.semantics {
+                                            contentDescription =
+                                                "karaoke-position-${karaokePositionMs.intValue}"
+                                        }
+                                    } else {
+                                        Modifier
+                                    }
+                                )
                         )
                     }
                 }
