@@ -11,7 +11,7 @@ permissions:
   actions: read
 
 concurrency:
-  # Each commit gets its own diagnostic run; one slow emulator cannot block a newer revision.
+  # Each commit gets its own diagnostic run; one slow emulator cannot block a newer revision.\n  # The matrix shares one ARMv7 APK across three ARM-translation-capable API 35 guests.
   group: quantune-lyrics-anr-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: false
 
