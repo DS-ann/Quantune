@@ -113,7 +113,8 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk"
           test -s "$APK"
-          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" | head -n 1 || true
+          unzip -t "$APK" >/dev/null
+          stat -c '%n (%s bytes)' "$APK"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
