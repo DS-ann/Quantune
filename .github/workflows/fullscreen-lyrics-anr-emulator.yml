@@ -11,27 +11,15 @@ permissions:
   actions: read
 
 concurrency:
-  # Isolate each commit's matrix so a TCG emulator job that stalls cannot hold
-  # the next diagnostic revision in a pending slot indefinitely.
+  # Each commit gets its own diagnostic run; one slow emulator cannot block a newer revision.
   group: quantune-lyrics-anr-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
-  reproduce:
-    name: API ${{ matrix.api-level }} / ${{ matrix.memory_mb }} MiB emulator — open fullscreen lyrics and capture diagnostics
+  build-apk:
+    name: Build one armeabi-v7a debug APK
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        include:
-          - api-level: 23
-            memory_mb: 3072
-          - api-level: 31
-            memory_mb: 3072
-          - api-level: 35
-            memory_mb: 7168
-    timeout-minutes: 90
+    timeout-minutes: 60
 
     steps:
       - name: Checkout branch
@@ -45,7 +33,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
+      - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.3.1'
@@ -63,23 +51,82 @@ jobs:
             "cmake;3.22.1" \
             "ndk;27.2.12479018"
 
+      - name: Build only the ARMv7a debug APK
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --build-cache --parallel assembleDebug -PquantuneEmulatorAbi=armeabi-v7a
+
+          APK="app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk"
+          test -s "$APK"
+
+          APK_COUNT="$(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' | wc -l)"
+          if [[ "$APK_COUNT" -ne 1 ]]; then
+            echo "::error::Expected exactly one ABI APK, found $APK_COUNT"
+            find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -printf '%f (%s bytes)\\n' | sort
+            exit 1
+          fi
+
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" > app/build/outputs/apk/debug/apk-badging.txt
+          echo "Built exactly one APK:"
+          ls -lh "$APK"
+
+      - name: Upload the single ARMv7a APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: Quantune-armv7a-debug
+          path: app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk
+          archive: false
+          if-no-files-found: error
+          retention-days: 3
+
+  reproduce:
+    name: API ${{ matrix.api-level }} / ${{ matrix.memory_mb }} MiB emulator — test the same ARMv7a APK
+    needs: build-apk
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - api-level: 23
+            memory_mb: 3072
+          - api-level: 30
+            memory_mb: 3072
+          - api-level: 35
+            memory_mb: 7168
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout test script
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Download the already-built ARMv7a APK
+        uses: actions/download-artifact@v7
+        with:
+          name: Quantune-armv7a-debug
+          path: app/build/outputs/apk/debug
+
+      - name: Verify the downloaded APK
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" | head -n 1 || true
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
       - name: Prepare diagnostics directory
         run: mkdir -p anr-artifacts
 
-      - name: Build debuggable x86_64 APK for emulator
-        run: |
-          set -euo pipefail
-          gradle --no-daemon --build-cache assembleDebug -PquantuneEmulatorAbi=x86_64
-          APK="app/build/outputs/apk/debug/app-x86_64-debug.apk"
-          test -s "$APK"
-          cp "$APK" anr-artifacts/Quantune-debug-x86_64.apk
-          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" > anr-artifacts/apk-badging.txt
-
-      - name: Boot Android emulator, open isolated fullscreen lyrics and capture ANR data
+      - name: Boot emulator, open fullscreen lyrics and capture ANR data
         id: emulator
-        # GitHub-hosted runners may expose no usable /dev/kvm. The emulator's
-        # -accel off fallback refuses to start unless TCG software CPU emulation
-        # is explicitly enabled with this opt-in environment variable.
+        # The hosted x86_64 emulator uses the Google APIs image's ARM translation
+        # where available. The API 30 image explicitly includes ARMv7 support.
         env:
           ANDROID_I_WANT_MY_TCG: "yes"
           ANDROID_API_LEVEL: ${{ matrix.api-level }}
@@ -88,7 +135,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
-          target: default
+          target: google_apis
           arch: x86_64
           profile: Nexus 5
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory ${{ matrix.memory_mb }} -camera-back none
@@ -100,8 +147,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Quantune-fullscreen-lyrics-anr-api${{ matrix.api-level }}-${{ github.run_number }}
-          path: |
-            anr-artifacts/**
+          path: anr-artifacts/**
           if-no-files-found: warn
           retention-days: 30
 

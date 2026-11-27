@@ -1,4 +1,4 @@
- 
+
 
 plugins {
     alias(libs.plugins.android.application)
@@ -49,20 +49,20 @@ android {
         }
     }
 
-    // Produce one universal ARM APK plus dedicated 32-bit and 64-bit ARM variants.
-    // The universal APK contains native libraries for both supported ARM ABIs.
+    // Production builds keep both ARM ABIs and the universal APK. The diagnostic
+    // workflow can request exactly one ABI so its APK is built once and reused.
     splits {
         abi {
             enable true
             reset()
-            // Production artifacts remain ARM-only. The dedicated emulator workflow
-            // opts into x86_64 so an API 23 hosted emulator can execute the debug APK.
-            def quantuneAbis = ['armeabi-v7a', 'arm64-v8a']
-            if (project.findProperty('quantuneEmulatorAbi') == 'x86_64') {
-                quantuneAbis.add('x86_64')
+            def quantuneEmulatorAbi = project.findProperty('quantuneEmulatorAbi')?.toString()
+            def quantuneSupportedAbis = ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64']
+            if (quantuneEmulatorAbi && !quantuneSupportedAbis.contains(quantuneEmulatorAbi)) {
+                throw new GradleException("Unsupported quantuneEmulatorAbi: " + quantuneEmulatorAbi)
             }
+            def quantuneAbis = quantuneEmulatorAbi ? [quantuneEmulatorAbi] : ['armeabi-v7a', 'arm64-v8a']
             include(*quantuneAbis)
-            universalApk true
+            universalApk !quantuneEmulatorAbi
         }
     }
 

@@ -10,7 +10,7 @@ LYRICS_TEST_MODES="$(printenv LYRICS_TEST_MODES || true)"
 if [[ -n "$WORKSPACE_VALUE" ]]; then ARTIFACT_DIR="$WORKSPACE_VALUE/anr-artifacts"; fi
 if [[ -z "$API_LEVEL" ]]; then API_LEVEL="unknown"; fi
 if [[ -z "$LYRICS_TEST_MODES" ]]; then LYRICS_TEST_MODES="empty,synced,plain,karaoke"; fi
-APK="app/build/outputs/apk/debug/app-x86_64-debug.apk"
+APK="app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk"
 mkdir -p "$ARTIFACT_DIR"
 OVERALL_RESULT=0
 
@@ -78,8 +78,17 @@ timeout 30s adb shell settings put global transition_animation_scale 0 || true
 timeout 30s adb shell settings put global animator_duration_scale 0 || true
 timeout 20s adb shell settings put secure immersive_mode_confirmations confirmed >/dev/null 2>&1 || true
 
+# Record guest ABI and native-bridge details so an ABI mismatch is diagnosable.
+{
+  echo "requested_apk_abi=armeabi-v7a"
+  for property in ro.product.cpu.abilist ro.product.cpu.abilist32 ro.product.cpu.abilist64 ro.dalvik.vm.native.bridge; do
+    printf '%s=' "$property"
+    timeout 10s adb shell getprop "$property" 2>/dev/null | tr -d '\\r' || true
+  done
+} > "$ARTIFACT_DIR/emulator-abi-info.txt"
+
 INSTALL_LOG="$ARTIFACT_DIR/install-output.txt"
-if ! timeout 600s adb install -r "$APK" > "$INSTALL_LOG" 2>&1; then
+if ! timeout 600s adb install -r --abi armeabi-v7a "$APK" > "$INSTALL_LOG" 2>&1; then
   echo "Quantune APK installation failed or exceeded the 600-second TCG allowance:" >&2
   cat "$INSTALL_LOG" >&2 || true
   exit 1
