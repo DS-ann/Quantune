@@ -96,7 +96,7 @@ fi
 
 INSTALL_LOG="$ARTIFACT_DIR/install-output.txt"
 if ! timeout 180s adb install -r "$APK" > "$INSTALL_LOG" 2>&1; then
-  echo "Quantune APK installation failed or exceeded the 600-second TCG allowance:" >&2
+  echo "Quantune APK installation failed or exceeded the 180-second install timeout:" >&2
   cat "$INSTALL_LOG" >&2 || true
   exit 1
 fi
