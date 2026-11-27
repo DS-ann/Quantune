@@ -89,7 +89,7 @@ jobs:
         include:
           - api-level: 35
             memory_mb: 3072
-            profile: ${{ matrix.profile }}
+            profile: Nexus 5
           - api-level: 35
             memory_mb: 4096
             profile: Pixel 2
@@ -139,7 +139,7 @@ jobs:
           api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
-          profile: Nexus 5
+          profile: ${{ matrix.profile }}
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory ${{ matrix.memory_mb }} -camera-back none
           disable-animations: true
           script: bash .github/scripts/fullscreen-lyrics-anr-emulator.sh
