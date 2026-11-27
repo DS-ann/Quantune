@@ -11,158 +11,176 @@ permissions:
   actions: read
 
 concurrency:
-  # Each commit gets its own diagnostic run; one slow emulator cannot block a newer revision.\n  # The matrix shares one ARMv7 APK across three ARM-translation-capable API 35 guests.
   group: quantune-lyrics-anr-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
-  build-apk:
-    name: Build one armeabi-v7a debug APK
+  build-armv7a:
+    name: Build downloadable ARMv7a APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
-
     steps:
       - name: Checkout branch
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
-
       - name: Set up JDK 17
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Set up Gradle cache
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.3.1'
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: ''
-
-      - name: Install Android SDK, NDK and CMake
+      - name: Install Android build tools
         run: |
-          sdkmanager --channel=3 \
-            "platforms;android-37.0" \
-            "build-tools;37.0.0" \
-            "cmake;3.22.1" \
-            "ndk;27.2.12479018"
-
-      - name: Build only the ARMv7a debug APK
+          sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Build ARMv7a only
         run: |
           set -euo pipefail
           gradle --no-daemon --build-cache --parallel assembleDebug -PquantuneEmulatorAbi=armeabi-v7a
-
           APK="app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk"
           test -s "$APK"
-
-          APK_COUNT="$(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' | wc -l)"
-          if [[ "$APK_COUNT" -ne 1 ]]; then
-            echo "::error::Expected exactly one ABI APK, found $APK_COUNT"
-            find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -printf '%f (%s bytes)\\n' | sort
-            exit 1
-          fi
-
+          COUNT="$(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' | wc -l)"
+          test "$COUNT" -eq 1 || { echo "::error::Expected one ARMv7a APK, found $COUNT"; exit 1; }
           "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" > app/build/outputs/apk/debug/apk-badging.txt
-          echo "Built exactly one APK:"
-          ls -lh "$APK"
-
-      - name: Upload the single ARMv7a APK
+          sha256sum "$APK"
+      - name: Upload the ARMv7a APK (only published APK artifact)
         uses: actions/upload-artifact@v7
         with:
           name: Quantune-armv7a-debug
           path: app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 30
+
+  build-x86:
+    name: Build x86_64 emulator-test APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.3.1'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+      - name: Install Android build tools
+        run: |
+          sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Build x86_64 only
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --build-cache --parallel assembleDebug -PquantuneEmulatorAbi=x86_64
+          APK="app/build/outputs/apk/debug/app-x86_64-debug.apk"
+          test -s "$APK"
+          COUNT="$(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' | wc -l)"
+          test "$COUNT" -eq 1 || { echo "::error::Expected one x86_64 APK, found $COUNT"; exit 1; }
+          sha256sum "$APK"
+      # This short-lived artifact is an internal job-to-job handoff, not a published build.
+      - name: Hand x86_64 APK to the three emulator jobs
+        uses: actions/upload-artifact@v7
+        with:
+          name: Quantune-x86_64-emulator-input
+          path: app/build/outputs/apk/debug/app-x86_64-debug.apk
+          if-no-files-found: error
+          retention-days: 1
 
   reproduce:
-    name: API ${{ matrix.api-level }} / ${{ matrix.memory_mb }} MiB / ${{ matrix.profile }} emulator — test the same ARMv7a APK
-    needs: build-apk
+    name: API ${{ matrix.api-level }} x86_64 — fullscreen lyrics diagnostics
+    needs: build-x86
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       max-parallel: 3
       matrix:
         include:
-          - api-level: 35
+          - api-level: 23
+            target: default
+            profile: Nexus 5 API 23
             memory_mb: 3072
-            profile: Nexus 5
-          - api-level: 35
+          - api-level: 30
+            target: google_apis
+            profile: Pixel 2 API 30
             memory_mb: 4096
-            profile: Pixel 2
           - api-level: 35
+            target: google_apis
+            profile: Pixel 3 API 35
             memory_mb: 7168
-            profile: Pixel 3
     timeout-minutes: 90
-
     steps:
       - name: Checkout test script
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
-
-      - name: Download the already-built ARMv7a APK
+      - name: Download internal x86_64 test APK
         uses: actions/download-artifact@v7
         with:
-          name: Quantune-armv7a-debug
+          name: Quantune-x86_64-emulator-input
           path: app/build/outputs/apk/debug
-
-      - name: Verify the downloaded APK
+      - name: Verify x86_64 APK
         run: |
           set -euo pipefail
-          APK="app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk"
+          APK="app/build/outputs/apk/debug/app-x86_64-debug.apk"
           test -s "$APK"
           unzip -t "$APK" >/dev/null
-          stat -c '%n (%s bytes)' "$APK"
-
+          sha256sum "$APK"
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: ''
-
       - name: Prepare diagnostics directory
         run: mkdir -p anr-artifacts
-
-      - name: Boot ARM-translation-capable API 35 emulator, open fullscreen lyrics and capture ANR data
+      - name: Boot API ${{ matrix.api-level }} x86_64 emulator and run lyrics tests
         id: emulator
-        # API 35 Google APIs x86_64 images provide ARM translation for ARMv7 APKs.
         env:
-          ANDROID_I_WANT_MY_TCG: "yes"
           ANDROID_API_LEVEL: ${{ matrix.api-level }}
           ANDROID_MEMORY_MB: ${{ matrix.memory_mb }}
+          QUANTUNE_TEST_APK: app/build/outputs/apk/debug/app-x86_64-debug.apk
+          QUANTUNE_EXPECTED_ABI: x86_64
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
-          target: google_apis
+          target: ${{ matrix.target }}
           arch: x86_64
           profile: ${{ matrix.profile }}
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory ${{ matrix.memory_mb }} -camera-back none
           disable-animations: true
           script: bash .github/scripts/fullscreen-lyrics-anr-emulator.sh
-
-      - name: Upload emulator logs, app report, tombstones and ANR traces
+      - name: Upload screenshots, logcat, ANR reports, traces and tombstones
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: Quantune-fullscreen-lyrics-anr-api${{ matrix.api-level }}-${{ matrix.profile }}-${{ github.run_number }}
+          name: Quantune-lyrics-diagnostics-api${{ matrix.api-level }}-${{ github.run_number }}
           path: anr-artifacts/**
           if-no-files-found: warn
           retention-days: 30
-
-      - name: Fail when reproduction or diagnostics indicate an ANR
+      - name: Mark this API test failed if setup, flow, or ANR checks failed
         if: always()
         run: |
           set -euo pipefail
           if [[ "${{ steps.emulator.outcome }}" != "success" ]]; then
-            echo "::error::The fullscreen lyrics emulator test failed. Download the diagnostics artifact."
+            echo "::error::API ${{ matrix.api-level }} emulator/test failed. Its diagnostics artifact was uploaded."
             exit 1
           fi
           if grep -Eqi 'ANR in com|APP NOT RESPONDING|Type: ANR' anr-artifacts/logcat-all.txt anr-artifacts/quantune-diagnostic-report.txt 2>/dev/null; then
-            echo "::error::Fullscreen lyrics ANR detected. Diagnostics were uploaded."
+            echo "::error::ANR detected on API ${{ matrix.api-level }}. Diagnostics were uploaded."
             exit 1
           fi
-          echo "Fullscreen lyrics opened on API ${{ matrix.api-level }} with no captured ANR."
+          echo "API ${{ matrix.api-level }} x86_64 fullscreen lyrics test passed."
