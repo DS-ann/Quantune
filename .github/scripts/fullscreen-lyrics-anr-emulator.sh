@@ -87,6 +87,7 @@ for MODE in $(printf '%s' "$LYRICS_TEST_MODES" | tr ',' ' '); do
   CONTENT_READY=0
   SYNCED_PREPARED=0
   KARAOKE_TEXT_LAYOUT=0
+  KARAOKE_PLAYBACK_ADVANCED=0
   ANR_FOUND=0
   ANR_STAGE="none"
   MODE_RESULT=0
@@ -112,6 +113,7 @@ for MODE in $(printf '%s' "$LYRICS_TEST_MODES" | tr ',' ' '); do
     grep -q 'FULLSCREEN_LYRICS_CONTENT_READY' "$MODE_DIR/test-markers-current.txt" && CONTENT_READY=1
     grep -q 'SYNCED_LYRICS_PREPARED' "$MODE_DIR/test-markers-current.txt" && SYNCED_PREPARED=1
     grep -q 'KARAOKE_TEXT_LAYOUT_READY' "$MODE_DIR/test-markers-current.txt" && KARAOKE_TEXT_LAYOUT=1
+    grep -q 'KARAOKE_PLAYBACK_ADVANCED' "$MODE_DIR/test-markers-current.txt" && KARAOKE_PLAYBACK_ADVANCED=1
 
     REPORT_PRESENT="$(timeout 5s adb shell run-as com.dsann.music test -s files/diagnostics/latest-report.txt >/dev/null 2>&1; echo $?)"
     if [[ "$REPORT_PRESENT" -eq 0 ]]; then
@@ -124,6 +126,7 @@ for MODE in $(printf '%s' "$LYRICS_TEST_MODES" | tr ',' ' '); do
       timeout 3s adb logcat -d -s QuantuneANRTest:I > "$MODE_DIR/test-markers-current.txt" 2>/dev/null || true
       grep -q 'SYNCED_LYRICS_PREPARED' "$MODE_DIR/test-markers-current.txt" && SYNCED_PREPARED=1
       grep -q 'KARAOKE_TEXT_LAYOUT_READY' "$MODE_DIR/test-markers-current.txt" && KARAOKE_TEXT_LAYOUT=1
+      grep -q 'KARAOKE_PLAYBACK_ADVANCED' "$MODE_DIR/test-markers-current.txt" && KARAOKE_PLAYBACK_ADVANCED=1
       break
     fi
     sleep 1
@@ -162,6 +165,10 @@ for MODE in $(printf '%s' "$LYRICS_TEST_MODES" | tr ',' ' '); do
     echo "Karaoke text never completed its first TextLayoutResult." >&2
     MODE_RESULT=1
   fi
+  if [[ "$MODE" == "karaoke" && "$KARAOKE_PLAYBACK_ADVANCED" -ne 1 ]]; then
+    echo "Karaoke playback position did not advance through live renderer frames." >&2
+    MODE_RESULT=1
+  fi
   if [[ "$ANR_FOUND" -eq 1 ]]; then
     echo "Quantune ANR captured during isolated fullscreen lyrics mode=$MODE stage=$ANR_STAGE" >&2
     MODE_RESULT=1
@@ -178,6 +185,7 @@ for MODE in $(printf '%s' "$LYRICS_TEST_MODES" | tr ',' ' '); do
     echo "content_ready=$CONTENT_READY"
     echo "synced_lyrics_prepared=$SYNCED_PREPARED"
     echo "karaoke_text_layout=$KARAOKE_TEXT_LAYOUT"
+    echo "karaoke_playback_advanced=$KARAOKE_PLAYBACK_ADVANCED"
     echo "anr_detected=$ANR_FOUND"
     echo "anr_stage=$ANR_STAGE"
     echo "result=$MODE_RESULT"

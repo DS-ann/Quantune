@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -97,6 +98,31 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
                             data = null
                         )
                     }
+
+                    // Drive the production karaoke renderer with a moving playhead.
+                    // A fixed 1,000 ms position only tested first layout; it did not
+                    // exercise frame-to-frame word highlighting or playback-clock work.
+                    val karaokePositionMs = remember(mode) {
+                        mutableIntStateOf(1_000)
+                    }
+                    LaunchedEffect(mode, testSong.duration) {
+                        if (mode != "karaoke") return@LaunchedEffect
+
+                        var loggedPlaybackAdvance = false
+                        val durationMs = testSong.duration.coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                        while (karaokePositionMs.intValue < durationMs) {
+                            delay(16L)
+                            karaokePositionMs.intValue =
+                                (karaokePositionMs.intValue + 16).coerceAtMost(durationMs)
+                            if (!loggedPlaybackAdvance && karaokePositionMs.intValue >= 6_000) {
+                                loggedPlaybackAdvance = true
+                                Log.i(
+                                    TAG,
+                                    "KARAOKE_PLAYBACK_ADVANCED position_ms=${karaokePositionMs.intValue}"
+                                )
+                            }
+                        }
+                    }
                     val testSyncedLyrics = remember(mode) {
                         when (mode) {
                             "synced" -> listOf(
@@ -150,7 +176,7 @@ class FullscreenLyricsDiagnosticActivity : ComponentActivity() {
                             isLoading = false,
                             isPlaying = mode == "karaoke",
                             lyricsError = null,
-                            currentPositionProvider = { 1_000 },
+                            currentPositionProvider = { karaokePositionMs.intValue },
                             playbackSpeedProvider = { 1f },
                             contentReady = true,
                             backgroundBrush = Brush.verticalGradient(
