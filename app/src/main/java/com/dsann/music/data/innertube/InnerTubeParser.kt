@@ -216,24 +216,74 @@ object InnerTubeParser {
     fun findFirstObject(root: JsonElement?, key: String): JsonObject? =
         findObjects(root, key).firstOrNull()
 
-    private fun findObjects(root: JsonElement?, key: String): List<JsonObject> {
-        val found = ArrayList<JsonObject>()
-        fun visit(node: JsonElement?) {
-            when {
-                node == null || node.isJsonNull -> Unit
-                node.isJsonObject -> {
-                    val obj = node.asJsonObject
-                    val target = obj.get(key)
-                    if (target != null && target.isJsonObject) found.add(target.asJsonObject)
-                    obj.entrySet().forEach { visit(it.value) }
-                }
-                node.isJsonArray -> node.asJsonArray.forEach { visit(it) }
+    private fun findObjects(root: JsonElement?, key: String): List<JsonObject> =
+        indexObjectsByProperty(root, setOf(key))[key].orEmpty()
+
+    /**
+     * Index renderer objects in one iterative depth-first pass.
+     *
+     * Home responses can contain tens of thousands of nested JSON nodes. The old
+     * implementation recursively traversed the entire tree once per requested
+     * renderer type; parseHomePage asks for many types, multiplying that CPU cost
+     * while Explore is opening. The iterator stack keeps depth off the JVM call
+     * stack, and the keyed index lets callers reuse the same traversal.
+     */
+    private fun indexObjectsByProperty(
+        root: JsonElement?,
+        propertyNames: Set<String>
+    ): Map<String, List<JsonObject>> {
+        val found = LinkedHashMap<String, MutableList<JsonObject>>(propertyNames.size)
+        propertyNames.forEach { found[it] = ArrayList() }
+        if (root == null || root.isJsonNull || propertyNames.isEmpty()) return found
+
+        fun objectValues(obj: JsonObject): Iterator<JsonElement> {
+            val entries = obj.entrySet().iterator()
+            return object : Iterator<JsonElement> {
+                override fun hasNext(): Boolean = entries.hasNext()
+                override fun next(): JsonElement = entries.next().value
             }
         }
-        visit(root)
+
+        val pending = java.util.ArrayDeque<Iterator<JsonElement>>()
+        var current: JsonElement? = root
+
+        while (current != null) {
+            when {
+                current.isJsonObject -> {
+                    val obj = current.asJsonObject
+                    for (entry in obj.entrySet()) {
+                        val matches = found[entry.key] ?: continue
+                        val value = entry.value
+                        if (value != null && value.isJsonObject) {
+                            matches.add(value.asJsonObject)
+                        }
+                    }
+                    // Preserve the original recursive visitor's property order.
+                    pending.addLast(objectValues(obj))
+                }
+                current.isJsonArray -> {
+                    pending.addLast(current.asJsonArray.iterator())
+                }
+            }
+
+            current = null
+            while (pending.isNotEmpty()) {
+                val iterator = pending.peekLast()
+                if (!iterator.hasNext()) {
+                    pending.removeLast()
+                    continue
+                }
+
+                val next = iterator.next()
+                if (next.isJsonObject || next.isJsonArray) {
+                    current = next
+                    break
+                }
+            }
+        }
+
         return found
     }
-
     fun parseSearchResponse(json: JsonObject): SearchResult {
         val items = mutableListOf<SearchItem>()
         var continuation: String? = null
@@ -791,6 +841,21 @@ object InnerTubeParser {
     fun parseHomePage(json: JsonObject): HomePage {
         val sections = mutableListOf<HomeSection>()
         val seenSectionTitles = linkedSetOf<String>()
+        val rendererIndex = indexObjectsByProperty(
+            json,
+            setOf(
+                "sectionListRenderer",
+                "sectionListContinuation",
+                "musicCarouselShelfRenderer",
+                "musicShelfRenderer",
+                "musicPlaylistShelfRenderer",
+                "musicCardShelfRenderer",
+                "gridRenderer",
+                "continuationItemRenderer",
+                "chipCloudRenderer"
+            )
+        )
+        fun objectsFor(key: String): List<JsonObject> = rendererIndex[key].orEmpty()
 
         fun addSection(section: JsonObject) {
             val parsed = parseHomeSection(section) ?: return
@@ -809,10 +874,10 @@ object InnerTubeParser {
         try {
             // YouTube Music serves multiple browse layouts. Walk every section-list renderer
             // instead of assuming all clients return singleColumnBrowseResultsRenderer.
-            findObjects(json, "sectionListRenderer").forEach { renderer ->
+            objectsFor("sectionListRenderer").forEach { renderer ->
                 addSectionContents(renderer.getAsJsonArray("contents"))
             }
-            findObjects(json, "sectionListContinuation").forEach { renderer ->
+            objectsFor("sectionListContinuation").forEach { renderer ->
                 addSectionContents(renderer.getAsJsonArray("contents"))
             }
 
@@ -832,25 +897,25 @@ object InnerTubeParser {
             }
 
             val continuationCandidates =
-                findObjects(json, "sectionListRenderer").mapNotNull { renderer ->
+                objectsFor("sectionListRenderer").mapNotNull { renderer ->
                     renderer.path("continuations.0.nextContinuationData.continuation")?.asString
                 } +
-                findObjects(json, "sectionListContinuation").mapNotNull { renderer ->
+                objectsFor("sectionListContinuation").mapNotNull { renderer ->
                     renderer.path("continuations.0.nextContinuationData.continuation")?.asString
                 } +
-                findObjects(json, "musicCarouselShelfRenderer").mapNotNull { renderer ->
+                objectsFor("musicCarouselShelfRenderer").mapNotNull { renderer ->
                     renderer.path("continuations.0.nextContinuationData.continuation")?.asString
                 } +
-                findObjects(json, "musicShelfRenderer").mapNotNull { renderer ->
+                objectsFor("musicShelfRenderer").mapNotNull { renderer ->
                     renderer.path("continuations.0.nextContinuationData.continuation")?.asString
                 } +
-                findObjects(json, "musicPlaylistShelfRenderer").mapNotNull { renderer ->
+                objectsFor("musicPlaylistShelfRenderer").mapNotNull { renderer ->
                     renderer.path("continuations.0.nextContinuationData.continuation")?.asString
                 } +
-                findObjects(json, "gridRenderer").mapNotNull { renderer ->
+                objectsFor("gridRenderer").mapNotNull { renderer ->
                     renderer.path("continuations.0.nextContinuationData.continuation")?.asString
                 } +
-                findObjects(json, "continuationItemRenderer").mapNotNull { renderer ->
+                objectsFor("continuationItemRenderer").mapNotNull { renderer ->
                     renderer.path("continuationEndpoint.continuationCommand.token")?.asString
                 }
             val continuation = continuationCandidates.firstOrNull { it.isNotBlank() }
@@ -858,7 +923,7 @@ object InnerTubeParser {
             // Keep actual browseEndpoint values with the category labels.
             val moods = mutableListOf<String>()
             val categories = mutableListOf<HomeCategory>()
-            findFirstObject(json, "chipCloudRenderer")?.getAsJsonArray("chips")?.forEach { chip ->
+            objectsFor("chipCloudRenderer").firstOrNull()?.getAsJsonArray("chips")?.forEach { chip ->
                 val wrapper = chip.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
                 val renderer = wrapper.getAsJsonObject("chipCloudChipRenderer") ?: wrapper
                 val title = renderer.path("text.runs.0.text")?.asString
