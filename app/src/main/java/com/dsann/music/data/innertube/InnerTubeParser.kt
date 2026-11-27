@@ -251,14 +251,15 @@ object InnerTubeParser {
             when {
                 current.isJsonObject -> {
                     val obj = current.asJsonObject
-                    for (entry in obj.entrySet()) {
-                        val matches = found[entry.key] ?: continue
-                        val value = entry.value
+                    // The original visitor checked the requested child on the current
+                    // object before descending into any of its values. Do the same for
+                    // each index key so every per-key result keeps its exact DFS order.
+                    propertyNames.forEach { key ->
+                        val value = obj.get(key)
                         if (value != null && value.isJsonObject) {
-                            matches.add(value.asJsonObject)
+                            found.getValue(key).add(value.asJsonObject)
                         }
                     }
-                    // Preserve the original recursive visitor's property order.
                     pending.addLast(objectValues(obj))
                 }
                 current.isJsonArray -> {
