@@ -84,11 +84,11 @@ timeout 20s adb shell settings put secure immersive_mode_confirmations confirmed
   echo "requested_apk_abi=$EXPECTED_ABI"
   for property in ro.product.cpu.abi ro.product.cpu.abilist ro.product.cpu.abilist32 ro.product.cpu.abilist64 ro.dalvik.vm.native.bridge; do
     printf '%s=' "$property"
-    timeout 10s adb shell getprop "$property" 2>/dev/null | tr -d '\\r' || true
+    timeout 10s adb shell getprop "$property" 2>/dev/null | tr -d '\r' || true
   done
 } > "$ARTIFACT_DIR/emulator-abi-info.txt"
 
-GUEST_ABILIST="$(timeout 10s adb shell getprop ro.product.cpu.abilist 2>/dev/null | tr -d '\\r' || true)"
+GUEST_ABILIST="$(timeout 10s adb shell getprop ro.product.cpu.abilist 2>/dev/null | tr -d '\r' || true)"
 if [[ ",$GUEST_ABILIST," != *",$EXPECTED_ABI,"* ]]; then
   echo "::error::Emulator ABI mismatch. APK requires $EXPECTED_ABI; guest exposes: $GUEST_ABILIST" >&2
   exit 20
