@@ -79,7 +79,7 @@ jobs:
           retention-days: 3
 
   reproduce:
-    name: API ${{ matrix.api-level }} / ${{ matrix.memory_mb }} MiB emulator — test the same ARMv7a APK
+    name: API ${{ matrix.api-level }} / ${{ matrix.memory_mb }} MiB / ${{ matrix.profile }} emulator — test the same ARMv7a APK
     needs: build-apk
     runs-on: ubuntu-latest
     strategy:
@@ -87,12 +87,15 @@ jobs:
       max-parallel: 3
       matrix:
         include:
-          - api-level: 23
+          - api-level: 35
             memory_mb: 3072
-          - api-level: 30
-            memory_mb: 3072
+            profile: ${{ matrix.profile }}
+          - api-level: 35
+            memory_mb: 4096
+            profile: Pixel 2
           - api-level: 35
             memory_mb: 7168
+            profile: Pixel 3
     timeout-minutes: 90
 
     steps:
@@ -123,10 +126,9 @@ jobs:
       - name: Prepare diagnostics directory
         run: mkdir -p anr-artifacts
 
-      - name: Boot emulator, open fullscreen lyrics and capture ANR data
+      - name: Boot ARM-translation-capable API 35 emulator, open fullscreen lyrics and capture ANR data
         id: emulator
-        # The hosted x86_64 emulator uses the Google APIs image's ARM translation
-        # where available. The API 30 image explicitly includes ARMv7 support.
+        # API 35 Google APIs x86_64 images provide ARM translation for ARMv7 APKs.
         env:
           ANDROID_I_WANT_MY_TCG: "yes"
           ANDROID_API_LEVEL: ${{ matrix.api-level }}
@@ -146,7 +148,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: Quantune-fullscreen-lyrics-anr-api${{ matrix.api-level }}-${{ github.run_number }}
+          name: Quantune-fullscreen-lyrics-anr-api${{ matrix.api-level }}-${{ matrix.profile }}-${{ github.run_number }}
           path: anr-artifacts/**
           if-no-files-found: warn
           retention-days: 30
