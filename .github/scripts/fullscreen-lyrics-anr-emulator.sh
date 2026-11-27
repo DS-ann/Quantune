@@ -171,7 +171,12 @@ fi
 } > "$INTEGRATION_DIR/test-result.txt"
 
 if [[ "$INTEGRATION_RESULT" -ne 0 ]]; then OVERALL_RESULT=1; fi
-timeout 30s adb shell am force-stop com.dsann.music >/dev/null 2>&1 || true
+# Close the fullscreen Lyrics dialog/diagnostic Activity but keep the app process
+# alive. Compose's first-use class initialization is expensive on TCG emulators;
+# force-stopping between modes reran it for every mode and generated misleading
+# startup ANRs unrelated to the renderer under test.
+timeout 15s adb shell input keyevent 4 >/dev/null 2>&1 || true
+sleep 1
 
 # Exercise every isolated production fullscreen renderer as well. These cases
 # separate lyrics parsing/painting from the normal MainActivity/player host.
@@ -180,8 +185,7 @@ for MODE in $(printf '%s' "$LYRICS_TEST_MODES" | tr ',' ' '); do
   mkdir -p "$MODE_DIR"
   echo "Testing production fullscreen lyrics overlay mode=$MODE api=$API_LEVEL"
 
-  timeout 30s adb shell am force-stop com.dsann.music >/dev/null 2>&1 || true
-  timeout 15s adb shell run-as com.dsann.music rm -f \
+    timeout 15s adb shell run-as com.dsann.music rm -f \
     files/diagnostics/latest-report.txt files/diagnostics/latest-report.tmp >/dev/null 2>&1 || true
   timeout 20s adb logcat -c || true
 
@@ -296,16 +300,24 @@ for MODE in $(printf '%s' "$LYRICS_TEST_MODES" | tr ',' ' '); do
   } > "$MODE_DIR/test-result.txt"
 
   if [[ "$MODE_RESULT" -ne 0 ]]; then OVERALL_RESULT=1; fi
-  timeout 30s adb shell am force-stop com.dsann.music >/dev/null 2>&1 || true
+  # Close the fullscreen Lyrics dialog/diagnostic Activity but keep the app process
+# alive. Compose's first-use class initialization is expensive on TCG emulators;
+# force-stopping between modes reran it for every mode and generated misleading
+# startup ANRs unrelated to the renderer under test.
+timeout 15s adb shell input keyevent 4 >/dev/null 2>&1 || true
+sleep 1
 done
 
 {
   echo "api_level=$API_LEVEL"
-  echo "test=isolated_production_fullscreen_lyrics_all_modes"
+  echo "test=MainActivity_player_integration_plus_isolated_fullscreen_lyrics_all_modes"
+  echo "player_integration=$INTEGRATION_RESULT"
   echo "result=$OVERALL_RESULT"
   for MODE in $(printf '%s' "$LYRICS_TEST_MODES" | tr ',' ' '); do
     echo "mode_$MODE=$(grep '^result=' "$ARTIFACT_DIR/$MODE/test-result.txt" 2>/dev/null | cut -d= -f2 || echo missing)"
   done
 } > "$ARTIFACT_DIR/test-result.txt"
 
+# Clean up the emulator after every mode has been tested in one warmed process.
+timeout 30s adb shell am force-stop com.dsann.music >/dev/null 2>&1 || true
 exit "$OVERALL_RESULT"
