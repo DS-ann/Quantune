@@ -1009,7 +1009,7 @@ fun FullPlayer(
 
         val prepared = withContext(Dispatchers.Default) {
             val source = when {
-                !syncedLyrics.isNullOrEmpty() -> syncedLyrics.joinToString("\\n") { line ->
+                !syncedLyrics.isNullOrEmpty() -> syncedLyrics.joinToString("\n") { line ->
                     line.content.ifBlank { line.words.joinToString("") { word -> word.text } }
                 }
                 !plainLyrics.isNullOrBlank() -> plainLyrics.orEmpty()
