@@ -60,6 +60,7 @@ import com.dsann.music.ui.theme.DsmusicTheme
 import com.dsann.music.ui.theme.dsmusicHomeStudioGradientBrush
 import com.dsann.music.ui.theme.Icon
 import com.dsann.music.ui.theme.IconButton
+import com.dsann.music.ui.theme.GoogleSansFlexNonRounded
 import com.dsann.music.ui.theme.LoadingIndicator
 import com.dsann.music.ui.theme.Text
 import com.dsann.music.ui.theme.TextButton
@@ -306,7 +307,7 @@ private fun SyncedLyricsPageContent(
                 fontFamily = when (lyricsFontFamily) {
                     "Serif" -> FontFamily.Serif
                     "Mono" -> FontFamily.Monospace
-                    else -> FontFamily.SansSerif
+                    else -> GoogleSansFlexNonRounded
                 },
                 fontWeight = FontWeight.ExtraBold
             )
@@ -652,7 +653,7 @@ internal fun PlainLyricsPage(
                                         fontFamily = when (lyricsFontFamily) {
                                             "Serif" -> FontFamily.Serif
                                             "Mono" -> FontFamily.Monospace
-                                            else -> FontFamily.SansSerif
+                                            else -> GoogleSansFlexNonRounded
                                         },
                                         fontWeight = FontWeight.ExtraBold,
                                         brush = if (lyricsColorStyle == "Home Studio Gradient") {
@@ -913,7 +914,7 @@ internal fun PlainLyricsSideView(
                                 fontFamily = when (lyricsFontFamily) {
                                     "Serif" -> FontFamily.Serif
                                     "Mono" -> FontFamily.Monospace
-                                    else -> FontFamily.SansSerif
+                                    else -> GoogleSansFlexNonRounded
                                 },
                                 fontWeight = FontWeight.ExtraBold,
                                 brush = if (lyricsColorStyle == "Home Studio Gradient") {
