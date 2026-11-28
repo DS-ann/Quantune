@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -56,7 +57,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -68,6 +68,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.dsann.music.R
@@ -92,7 +93,12 @@ private data class PreparedSyncedLyrics(
     val isKaraokeMode: Boolean,
     val displayItems: List<LyricDisplayItem>,
     val scrollBoundaries: LyricsScrollBoundaries,
-    val lastWordEndMs: Long?
+    val lastWordEndMs: Long?,
+    val totalWordCount: Int,
+    val maxWordsPerLine: Int,
+    val totalTextCharacters: Long,
+    val longestLineCharacters: Int,
+    val linesWithBackground: Int
 )
 
 private fun prepareSyncedLyrics(lyrics: List<LyricLine>): PreparedSyncedLyrics {
@@ -111,11 +117,30 @@ private fun prepareSyncedLyrics(lyrics: List<LyricLine>): PreparedSyncedLyrics {
         ?.maxOfOrNull { it.absoluteStartTimeMs + it.durationMs }
         ?.takeIf { it > 0L }
 
+    val totalWordCount = displayItems.sumOf { it.line.words.size + it.line.backgroundWords.size }
+    val maxWordsPerLine = displayItems.maxOfOrNull {
+        maxOf(it.line.words.size, it.line.backgroundWords.size)
+    } ?: 0
+    val totalTextCharacters = displayItems.sumOf {
+        it.line.content.length.toLong() + (it.line.backgroundContent?.length ?: 0).toLong()
+    }
+    val longestLineCharacters = displayItems.maxOfOrNull {
+        maxOf(it.line.content.length, it.line.backgroundContent?.length ?: 0)
+    } ?: 0
+    val linesWithBackground = displayItems.count {
+        !it.line.backgroundContent.isNullOrBlank()
+    }
+
     return PreparedSyncedLyrics(
         isKaraokeMode = isKaraokeMode,
         displayItems = displayItems,
         scrollBoundaries = scrollBoundaries,
-        lastWordEndMs = lastWordEndMs
+        lastWordEndMs = lastWordEndMs,
+        totalWordCount = totalWordCount,
+        maxWordsPerLine = maxWordsPerLine,
+        totalTextCharacters = totalTextCharacters,
+        longestLineCharacters = longestLineCharacters,
+        linesWithBackground = linesWithBackground
     )
 }
 
@@ -267,10 +292,21 @@ internal fun SyncedLyricsCompose(
     )
 
     SideEffect {
+        val prepared = preparedSyncedLyrics
+        val visibleRows = listState.layoutInfo.visibleItemsInfo.size
+        val frameRate = AppAnimationFrameRateController.frameRate.value
         CrashDiagnostics.updateLyricsRendering(
-            "Synced lyrics; renderer=${if (useLowCostLyricsRendering) "cached timed sweep, low-cost paint (explicit caller mode)" else "cached TextLayoutResult + direct drawText + premium paint"}; " +
-                "prepared=$isLyricsPrepared; lines=${lyrics.size}; karaoke=$isKaraokeMode; " +
-                "playing=$isPlaying; frameRate=app/device setting"
+            "Synced/Karaoke; renderer=${if (isKaraokeMode) "cached TextLayoutResult + direct Canvas word sweep" else "single TextLayoutResult + Canvas contour"}; " +
+                "prepared=$isLyricsPrepared; lines=${prepared?.displayItems?.size ?: lyrics.size}; " +
+                "visibleRows=$visibleRows; totalWords=${prepared?.totalWordCount ?: -1}; " +
+                "maxWordsPerLine=${prepared?.maxWordsPerLine ?: -1}; " +
+                "totalTextChars=${prepared?.totalTextCharacters ?: -1}; " +
+                "longestLineChars=${prepared?.longestLineCharacters ?: -1}; " +
+                "backgroundLines=${prepared?.linesWithBackground ?: -1}; " +
+                "activeIndex=$activeIndex; scrollTarget=$scrollTargetIndex; " +
+                "karaoke=$isKaraokeMode; playing=$isPlaying; frameRatePref=$frameRate; " +
+                "rowAlpha=colour modulation; offscreenRowLayers=disabled; karaokeBlur=disabled; " +
+                "outlineWidthDp=$gradientFontBorderWidth"
         )
     }
 
@@ -698,11 +734,8 @@ private fun LyricLineItem(
     }
     // Keep the same 1 dp gradient font contour in the fullscreen renderer.
     val lineSyncedGradientBorderWidth = gradientFontBorderWidth
-    val scale = 1.0f
-
-    // The active synced line must be fully legible on the exact frame its timestamp
-    // becomes active. Animating its alpha from the previous line's dim value made
-    // ordinary line-synced lyrics look like a delayed/loading word highlight.
+    // Preserve the previous row emphasis without applying alpha to a composited
+    // graphics layer. Text alpha is cheaper and avoids an off-screen surface per row.
     val alpha = when {
         isActive -> 1f
         isPast -> 0.60f
@@ -754,8 +787,8 @@ private fun LyricLineItem(
         "UI Matching" -> accentColor
         else -> contentColor
     }
-    // Keep the original dim treatment for non-highlighted lyric lines.
-    val dimColor = renderedColor.copy(alpha = 0.35f)
+    // Match the previous layer opacity directly in the text paint.
+    val dimColor = renderedColor.copy(alpha = 0.35f * alpha)
     val litColor = renderedColor
 
     val commonModifier = Modifier
@@ -787,24 +820,17 @@ private fun LyricLineItem(
             top = 12.dp,
             bottom = 12.dp
         )
-        .graphicsLayer {
-            this.alpha = alpha
-            scaleX = scale
-            scaleY = scale
-            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
-
-            val driftProgress = if (isActive && isKaraoke) {
-                val pos = currentPositionState.value
-                val duration = (lineEndMs - lineStartMs).coerceAtLeast(1)
-                ((pos - lineStartMs).toFloat() / duration).coerceIn(0f, 1f)
-            } else 0f
-
-            val driftDp = if (isActive && isKaraoke) {
-                val eased = easeOutCubic(driftProgress)
-                (-2f * eased)
-            } else 0f
-
-            translationY = driftDp * density
+        .offset {
+            if (!isActive || !isKaraoke) {
+                IntOffset.Zero
+            } else {
+                val duration = (lineEndMs - lineStartMs).coerceAtLeast(1L)
+                val progress = (
+                    (currentPositionState.value.toLong() - lineStartMs).toFloat() /
+                        duration.toFloat()
+                    ).coerceIn(0f, 1f)
+                IntOffset(0, (-2f * easeOutCubic(progress)).dp.roundToPx())
+            }
         }
 
     // In the immersive fullscreen player, all lyric lines use a fixed horizontal
@@ -827,13 +853,7 @@ private fun LyricLineItem(
         fontWeight = if (isActive && !isKaraoke) FontWeight.ExtraBold else FontWeight.Bold,
         lineHeight = 50.sp * textScale,
         textAlign = lineAlignment,
-        shadow = if (isActive && !isKaraoke && lyricsColorStyle == "White") {
-            androidx.compose.ui.graphics.Shadow(
-                color = Color.White.copy(alpha = 0.9f),
-                offset = androidx.compose.ui.geometry.Offset(0f, 0f),
-                blurRadius = 8f
-            )
-        } else null,
+        shadow = null,
         platformStyle = PlatformTextStyle(includeFontPadding = true)
     )
 
@@ -865,15 +885,6 @@ private fun LyricLineItem(
                     style = mainTextStyle,
                     baseColor = dimColor,
                     highlightBrush = lyricsBrush ?: SolidColor(litColor),
-                    highlightShadow = androidx.compose.ui.graphics.Shadow(
-                        color = if (lyricsColorStyle == "White") {
-                            Color.White.copy(alpha = 0.9f)
-                        } else {
-                            accentColor.copy(alpha = 0.5f)
-                        },
-                        offset = androidx.compose.ui.geometry.Offset.Zero,
-                        blurRadius = if (lyricsColorStyle == "White") 8f else 7f
-                    ),
                     outlineWidthPx = if (lyricsBrush != null) gradientOutlineWidthPx else 0f
                 )
             } else {
@@ -881,7 +892,7 @@ private fun LyricLineItem(
                     text = mainContent,
                     style = if (isKaraoke || !isActive) mainTextStyle.copy(brush = null) else mainTextStyle,
                     color = if (isKaraoke) dimColor else if (isActive && lyricsBrush != null) Color.Unspecified
-                        else if (isActive) renderedColor else dimColor,
+                        else if (isActive) renderedColor.copy(alpha = alpha) else dimColor,
                     maxLines = Int.MAX_VALUE,
                     outlineWidth = lineSyncedGradientBorderWidth,
                     textAlign = lineAlignment,
@@ -904,15 +915,6 @@ private fun LyricLineItem(
                         baseColor = dimColor,
                         highlightBrush = lyricsBrush ?: SolidColor(litColor),
                         maxLines = 1,
-                        highlightShadow = androidx.compose.ui.graphics.Shadow(
-                            color = if (lyricsColorStyle == "White") {
-                                Color.White.copy(alpha = 0.9f)
-                            } else {
-                                accentColor.copy(alpha = 0.4f)
-                            },
-                            offset = androidx.compose.ui.geometry.Offset.Zero,
-                            blurRadius = if (lyricsColorStyle == "White") 8f else 7f
-                        ),
                         outlineWidthPx = if (lyricsBrush != null) gradientOutlineWidthPx else 0f
                     )
                 } else {
@@ -954,18 +956,13 @@ private fun LyricLineItem(
                         highlightBrush = SolidColor(litColor),
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 2,
-                        highlightShadow = androidx.compose.ui.graphics.Shadow(
-                            color = accentColor.copy(alpha = 0.35f),
-                            offset = androidx.compose.ui.geometry.Offset.Zero,
-                            blurRadius = 5f
-                        ),
                         outlineWidthPx = if (lyricsBrush != null) gradientOutlineWidthPx else 0f
                     )
                 } else {
                     LyricsText(
                         text = backgroundText,
                         style = if (isKaraoke || !isActive) backgroundStyle.copy(brush = null) else backgroundStyle,
-                        color = if (isActive) contentColor.copy(alpha = 0.82f) else dimColor,
+                        color = if (isActive) contentColor.copy(alpha = 0.82f * alpha) else dimColor,
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 2,
                         outlineWidth = lineSyncedGradientBorderWidth,
