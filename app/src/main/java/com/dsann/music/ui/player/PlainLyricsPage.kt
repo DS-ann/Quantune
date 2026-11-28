@@ -314,7 +314,7 @@ private fun SyncedLyricsPageContent(
         } else {
             ((remainingPlaybackMs - finishLeadMs).coerceAtLeast(16L) / speed)
                 .roundToInt()
-                .coerceIn(16, 1_200)
+.coerceAtLeast(16)
         }
         scrollLyricLineToCenter(
             listState = listState,
