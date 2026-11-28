@@ -36,7 +36,7 @@ internal object FreshInstallAppSettings {
         "scrubber_color" to "Cover",
         "mini_player_control_icons" to "Classic",
         "player_title_weight" to "Light",
-        "player_buttons" to "share,download,queue,lyrics,video,repeat",
+        "player_buttons" to "share,download,queue,lyrics,plain_lyrics,video,repeat",
         "player_artwork_scale" to 1.0f,
         "audio_quality" to "160 kbps",
         "mini_player_control_shape" to "Rounded",
