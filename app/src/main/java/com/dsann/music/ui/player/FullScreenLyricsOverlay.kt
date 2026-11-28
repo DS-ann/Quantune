@@ -371,10 +371,19 @@ internal fun PlayerLyricsContent(
                         "UI Matching" -> dynamicAccentColor
                         else -> contentColor.copy(alpha = 0.9f)
                     }
-                    // A single Text node containing an entire song makes Compose measure
-                    // and rasterize every off-screen line when the lyrics page first opens.
-                    // Virtualize one source line per item so only the visible lyric lines
-                    // enter the initial layout/draw pass.
+                    // Plain (untimed) lyrics do not need a second stroked text layer.
+                    // On older mobile GPUs that doubled every visible glyph draw and
+                    // forced a second paragraph layout per row. Keep the selected font,
+                    // size, alignment and gradient fill, but use one BasicText pass.
+                    SideEffect {
+                        CrashDiagnostics.updateLyricsRendering(
+                            "Plain lyrics; renderer=single-pass text; outline=off; " +
+                                "lines=${plainLyricsLines.size}; font=$lyricsFontFamilyChoice; " +
+                                "fontScale=${plainLyricsScale}; colorStyle=$lyricsColorStyle"
+                        )
+                    }
+                    // Virtualize one source line per item so off-screen lyrics do not
+                    // participate in the initial measure/layout/draw pass.
                     if (plainLyricsLines.isEmpty()) {
                         LoadingIndicator(
                             modifier = Modifier.align(Alignment.Center).size(32.dp),
@@ -390,14 +399,11 @@ internal fun PlayerLyricsContent(
                             items = plainLyricsLines,
                             key = { index, _ -> "plain-lyrics-$index" }
                         ) { _, lyricLine ->
-                            LyricsText(
+                            Text(
                                 text = lyricLine.ifEmpty { " " },
                                 style = plainLyricsStyle,
                                 color = plainLyricsColor,
-                                modifier = Modifier.fillMaxWidth(),
-                                outlineWidth = 1.dp,
-                                fillTextWidth = true,
-                                drawOutlineForSolidText = true
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                         item(key = "plain-lyrics-metadata-footer") {
