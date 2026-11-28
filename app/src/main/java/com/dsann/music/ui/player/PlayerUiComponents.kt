@@ -289,7 +289,7 @@ internal fun PillChip(
                         painter = icon,
                         contentDescription = label,
                         tint = tintColor,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(if (compactPill) 14.dp else 18.dp)
                     )
                 }
             }
@@ -297,7 +297,7 @@ internal fun PillChip(
                 text = label,
                 style = DsmusicTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 12.sp,
+                fontSize = if (compactPill) 10.sp else 12.sp,
                 color = tintColor
             )
         }
