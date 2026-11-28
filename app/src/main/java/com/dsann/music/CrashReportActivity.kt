@@ -132,7 +132,7 @@ class CrashReportActivity : AppCompatActivity() {
             }
 
             val reportFile = File(shareDirectory, "quantune-diagnostic-$now.txt")
-            reportFile.writeText(report.toCompactShareText(), Charsets.UTF_8)
+            reportFile.writeText(report.fullText, Charsets.UTF_8)
 
             val reportUri = FileProvider.getUriForFile(
                 this,
@@ -480,7 +480,14 @@ private fun CrashReportScreen(
                     .verticalScroll(reportScroll)
             ) {
                 Text(
-                    text = report.fullText,
+                    text = buildString {
+                        append(report.fullText.take(24_000))
+                        if (report.fullText.length > 24_000) {
+                            appendLine()
+                            appendLine()
+                            append("[Preview limited to 24,000 characters. Copy or Share exports the complete report.]")
+                        }
+                    },
                     style = DsmusicTheme.typography.bodySmall.copy(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
