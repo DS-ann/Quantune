@@ -1,17 +1,19 @@
 package com.dsann.music.ui.player
 
-import androidx.compose.foundation.layout.Box
+import com.dsann.music.CrashDiagnostics
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -19,8 +21,8 @@ import androidx.compose.ui.unit.dp
 import com.dsann.music.ui.theme.Text
 
 /**
- * Render a true glyph contour beneath gradient lyrics.
- * The border is TextStyle.drawStyle=Stroke, not a border around a text range or box.
+ * Render a true glyph contour beneath gradient lyrics from the same measured layout.
+ * The outline is a Canvas draw, not a second Text node or a second paragraph layout.
  */
 @Composable
 internal fun LyricsText(
@@ -38,49 +40,49 @@ internal fun LyricsText(
     onTextLayout: (TextLayoutResult) -> Unit = {}
 ) {
     val textWidthModifier = if (fillTextWidth) Modifier.fillMaxWidth() else Modifier
-    if ((!drawOutlineForSolidText && style.brush == null) || outlineWidth <= 0.dp) {
-        Text(
-            text = text,
-            style = style,
-            color = color,
-            modifier = modifier.then(textWidthModifier),
-            maxLines = maxLines,
-            softWrap = softWrap,
-            overflow = overflow,
-            textAlign = textAlign,
-            onTextLayout = onTextLayout
-        )
-        return
+    val drawOutline = (drawOutlineForSolidText || style.brush != null) && outlineWidth > 0.dp
+    val strokeWidthPx = if (drawOutline) {
+        with(androidx.compose.ui.platform.LocalDensity.current) { outlineWidth.toPx() }
+    } else {
+        0f
+    }
+    val layoutState = remember(text, style, maxLines, softWrap, overflow, textAlign) {
+        mutableStateOf<TextLayoutResult?>(null)
     }
 
-    val strokeWidthPx = with(LocalDensity.current) { outlineWidth.toPx() }
-    val strokeStyle = remember(style, strokeWidthPx) {
-        style.copy(
-            brush = SolidColor(Color.Black),
-            drawStyle = Stroke(width = strokeWidthPx)
-        )
+    val measuredModifier = modifier.then(textWidthModifier).drawWithCache {
+        val layout = layoutState.value
+        onDrawWithContent {
+            val drawStartedAt = System.nanoTime()
+            try {
+                if (drawOutline && layout != null) {
+                    drawText(
+                        textLayoutResult = layout,
+                        brush = SolidColor(Color.Black),
+                        topLeft = Offset.Zero,
+                        drawStyle = Stroke(width = strokeWidthPx)
+                    )
+                }
+                drawContent()
+            } finally {
+                CrashDiagnostics.recordLyricsDraw(System.nanoTime() - drawStartedAt)
+            }
+        }
     }
 
-    Box(modifier = modifier.then(textWidthModifier)) {
-        Text(
-            text = text,
-            style = strokeStyle,
-            modifier = textWidthModifier.clearAndSetSemantics { },
-            maxLines = maxLines,
-            softWrap = softWrap,
-            overflow = overflow,
-            textAlign = textAlign
-        )
-        Text(
-            text = text,
-            style = style,
-            color = color,
-            modifier = textWidthModifier,
-            maxLines = maxLines,
-            softWrap = softWrap,
-            overflow = overflow,
-            textAlign = textAlign,
-            onTextLayout = onTextLayout
-        )
-    }
+    Text(
+        text = text,
+        style = style,
+        color = color,
+        modifier = measuredModifier,
+        maxLines = maxLines,
+        softWrap = softWrap,
+        overflow = overflow,
+        textAlign = textAlign,
+        onTextLayout = { layout ->
+            layoutState.value = layout
+            CrashDiagnostics.recordLyricsTextLayout(text.length, layout.lineCount)
+            onTextLayout(layout)
+        }
+    )
 }
