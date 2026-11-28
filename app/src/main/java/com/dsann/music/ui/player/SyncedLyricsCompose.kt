@@ -710,7 +710,7 @@ private fun LyricLineItem(
                     wordOffset = 0,
                     positionState = currentPositionState,
                     style = lowCostStyle,
-                    baseColor = lowCostColor.copy(alpha = 0.34f),
+                    baseColor = lowCostColor.copy(alpha = 0.22f),
                     highlightBrush = lowCostHighlightBrush,
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = Int.MAX_VALUE
@@ -731,7 +731,7 @@ private fun LyricLineItem(
                         wordOffset = 0,
                         positionState = currentPositionState,
                         style = lowCostBackgroundStyle,
-                        baseColor = lowCostColor.copy(alpha = 0.50f),
+                        baseColor = lowCostColor.copy(alpha = 0.18f),
                         highlightBrush = lowCostHighlightBrush,
                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                         maxLines = 2
