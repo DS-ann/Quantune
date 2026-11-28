@@ -477,13 +477,16 @@ internal fun SyncedLyricsCompose(
     ) {
         if (!isLyricsPrepared) return@LaunchedEffect
         if (scrollTargetIndex == 0) {
-            listState.scrollToItem(0)
+            performSmoothedScroll(
+                listState,
+                0,
+                displayItems,
+                with(density) { 36.dp.roundToPx() },
+                immediateInitialPosition = true
+            )
             hasPositionedInitialLyrics.value = true
         } else if (scrollTargetIndex > 0) {
             val isInitialPosition = !hasPositionedInitialLyrics.value
-            val previousLineIndex = (scrollTargetIndex - 1 downTo 0)
-                .firstOrNull { !displayItems[it].line.isInterlude }
-            val previousLine = previousLineIndex?.let { displayItems[it].line }
             val nextLine = displayItems[scrollTargetIndex].line
             val nextFirstWordStartMs = if (nextLine.isWordByWord && nextLine.words.isNotEmpty()) {
                 nextLine.words.minOfOrNull { it.absoluteStartTimeMs } ?: nextLine.startTimeMs
@@ -500,7 +503,7 @@ internal fun SyncedLyricsCompose(
             val finishLeadMs = if (remainingUntilNextLineMs > 80L) 50L else 0L
             val scrollDurationMs = if (remainingUntilNextLineMs > 0L) {
                 ((remainingUntilNextLineMs - finishLeadMs).coerceAtLeast(16L) /
-                    playbackSpeed).roundToInt().coerceIn(16, 1_200)
+                    playbackSpeed).roundToInt().coerceAtLeast(16)
             } else {
                 16
             }
