@@ -46,6 +46,7 @@ import com.dsann.music.data.lyrics.LyricLine
 import com.dsann.music.data.lyrics.LyricsResult
 import com.dsann.music.model.SongItem
 import com.dsann.music.ui.theme.DsmusicTheme
+import com.dsann.music.ui.theme.dsmusicHomeStudioGradientBrush
 import com.dsann.music.ui.theme.Icon
 import com.dsann.music.ui.theme.IconButton
 import com.dsann.music.ui.theme.LoadingIndicator
@@ -92,6 +93,7 @@ internal fun PlainLyricsPage(
     contentColor: Color,
     secondaryColor: Color,
     accentColor: Color,
+    lyricsColorStyle: String,
     providerResults: Map<String, LyricsResult>,
     selectedProvider: String?,
     onProviderSelected: (String) -> Unit,
@@ -288,11 +290,18 @@ internal fun PlainLyricsPage(
                             } else {
                                 Text(
                                     text = line,
-                                    color = contentColor.copy(alpha = 0.94f),
-                                    style = DsmusicTheme.typography.bodyLarge,
-                                    fontSize = 18.sp,
-                                    lineHeight = 30.sp,
-                                    fontWeight = FontWeight.Medium,
+                                    color = if (lyricsColorStyle == "Home Studio Gradient") Color.Unspecified else contentColor,
+                                    style = DsmusicTheme.typography.bodyLarge.copy(
+                                        fontSize = 44.sp,
+                                        lineHeight = 58.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        brush = if (lyricsColorStyle == "Home Studio Gradient") {
+                                            dsmusicHomeStudioGradientBrush()
+                                        } else null,
+                                        platformStyle = androidx.compose.ui.text.PlatformTextStyle(
+                                            includeFontPadding = false
+                                        )
+                                    ),
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -444,9 +453,18 @@ internal fun PlainLyricsSideView(
                     if (line.isNotBlank()) {
                         Text(
                             text = line,
-                            color = contentColor.copy(alpha = 0.94f),
-                            style = DsmusicTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
+                            color = if (lyricsColorStyle == "Home Studio Gradient") Color.Unspecified else contentColor,
+                            style = DsmusicTheme.typography.bodyLarge.copy(
+                                fontSize = 44.sp,
+                                lineHeight = 58.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                brush = if (lyricsColorStyle == "Home Studio Gradient") {
+                                    dsmusicHomeStudioGradientBrush()
+                                } else null,
+                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(
+                                    includeFontPadding = false
+                                )
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         )
                     } else {
