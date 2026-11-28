@@ -68,29 +68,40 @@ internal fun buildKaraokeWordSpans(
         val explicitEnd = word.charRange.last - wordOffset + 1
         val explicitLength = explicitEnd - explicitStart
         val expectedLength = word.text.length
+
+        // A provider range is only trusted when it points at the exact visible token.
+        // Older payloads frequently leave every range at 0..0; accepting that default
+        // for a one-character word silently highlights the wrong glyph.
         val hasUsableExplicitRange =
-            explicitStart >= 0 &&
+            explicitStart >= fallbackCursor &&
+                explicitStart >= 0 &&
                 explicitEnd <= text.length &&
-                explicitLength > 0 &&
-                explicitLength >= expectedLength
+                explicitLength == expectedLength &&
+                text.regionMatches(
+                    thisOffset = explicitStart,
+                    other = word.text,
+                    otherOffset = 0,
+                    length = expectedLength,
+                    ignoreCase = false
+                )
 
-        val start = if (hasUsableExplicitRange) {
-            explicitStart
-        } else {
-            val found = text.indexOf(word.text, fallbackCursor)
-            if (found >= 0) found else fallbackCursor.coerceAtMost(text.length)
+        // Fall back to locating the actual token in display order. If the provider's
+        // token cannot be found, omit its sweep span rather than highlighting unrelated
+        // characters at the current cursor.
+        val fallbackStart = if (hasUsableExplicitRange) -1 else {
+            text.indexOf(word.text, fallbackCursor)
+                .takeIf { it >= 0 }
+                ?: text.indexOf(word.text, fallbackCursor, ignoreCase = true)
         }
-        val end = if (hasUsableExplicitRange) {
-            explicitEnd
-        } else {
-            (start + expectedLength).coerceAtMost(text.length)
-        }
+        val start = if (hasUsableExplicitRange) explicitStart else fallbackStart
+        if (start < 0) continue
+        val end = start + expectedLength
 
-        if (end > start) {
+        if (end > start && end <= text.length) {
             spans += KaraokeWordSpan(
                 startOffset = start,
                 endOffsetExclusive = end,
-                startTimeMs = word.absoluteStartTimeMs,
+                startTimeMs = word.absoluteStartTimeMs.coerceAtLeast(0L),
                 durationMs = word.durationMs.coerceAtLeast(1L)
             )
             fallbackCursor = max(fallbackCursor, end)
