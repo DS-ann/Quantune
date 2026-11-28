@@ -860,11 +860,30 @@ fun FullPlayer(
     val contentSecondary = contentColor.copy(alpha = 0.6f)
     var showFullScreenVisualizer by remember { mutableStateOf(false) }
     var showPlainLyricsPage by remember { mutableStateOf(false) }
+
+    // Orientation changes on low-memory Android devices can stall the first hardware
+    // redraw. Stop the player's continuous vsync-driven updates until the new window
+    // geometry has settled, then resume the normal playback clock.
+    val windowOrientation = androidx.compose.ui.platform.LocalConfiguration.current.orientation
+    var settledWindowOrientation by remember { mutableStateOf(windowOrientation) }
+    var suppressQueueForRotation by remember { mutableStateOf(false) }
+    val orientationChangeDetected = settledWindowOrientation != windowOrientation
+    val orientationTransitionActive = orientationChangeDetected || suppressQueueForRotation
+    LaunchedEffect(windowOrientation) {
+        if (settledWindowOrientation != windowOrientation) {
+            suppressQueueForRotation = true
+            viewModel.setQueueExpanded(false)
+            delay(450L)
+            settledWindowOrientation = windowOrientation
+            suppressQueueForRotation = false
+        }
+    }
+
     val playerFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
-        // The fullscreen lyrics dialog covers this player surface. Stop the hidden
-        // player's frame-driven slider/waveform recompositions while the overlay is open.
+        // Stop hidden overlays and pause frame-driven recompositions during rotation.
         active = isPlayerVisible && uiState.isPlaying &&
-            !showFullScreenVisualizer && !isLyricsModeEnabled && !showPlainLyricsPage
+            !showFullScreenVisualizer && !isLyricsModeEnabled && !showPlainLyricsPage &&
+            !orientationTransitionActive
     )
     val artistOptions = remember(
         uiState.currentSong?.artistRefs,
@@ -1156,19 +1175,6 @@ fun FullPlayer(
     
     // Sliding Queue Drawer State
     val isQueueExpanded by viewModel.isQueueExpanded.collectAsStateWithLifecycle()
-    val windowOrientation = androidx.compose.ui.platform.LocalConfiguration.current.orientation
-    var settledWindowOrientation by remember { mutableStateOf(windowOrientation) }
-    var suppressQueueForRotation by remember { mutableStateOf(false) }
-    val orientationChangeDetected = settledWindowOrientation != windowOrientation
-    LaunchedEffect(windowOrientation) {
-        if (settledWindowOrientation != windowOrientation) {
-            suppressQueueForRotation = true
-            viewModel.setQueueExpanded(false)
-            delay(450L)
-            settledWindowOrientation = windowOrientation
-            suppressQueueForRotation = false
-        }
-    }
     val queueExpandedForUi = isQueueExpanded &&
         !orientationChangeDetected &&
         !suppressQueueForRotation
@@ -1360,17 +1366,15 @@ fun FullPlayer(
         // A spring can undershoot its zero target. Compose padding rejects negative values,
         // so clamp the animated inset before passing it to Modifier.padding.
         val queueDockInset = animatedQueueDockInset.coerceAtLeast(0.dp)
-        // Fetch lyrics when any visible lyrics surface needs them. Portrait's inline
-        // synced-line preview must prefetch too; otherwise it stays empty until the user
-        // manually opens the full-screen Lyrics overlay.
-        val landscapeLyricsVisible = isPlayerVisible && useWidePlayer && isLandscapeWindow
+        // Fetch only for a surface that is actually showing lyrics. The landscape
+        // right pane is an opener, not a lyrics renderer, so do not start provider fan-out
+        // simply because the device rotates while the player is open.
         val portraitLyricsPreviewVisible = isPlayerVisible &&
             !isLandscapeWindow &&
             showSyncedLyricsInPlayer &&
             !isLyricsModeEnabled
         LaunchedEffect(
             isLyricsModeEnabled,
-            landscapeLyricsVisible,
             portraitLyricsPreviewVisible,
             showPlainLyricsPage,
             currentSongId,
@@ -1379,7 +1383,6 @@ fun FullPlayer(
         ) {
             if (
                 !isLyricsModeEnabled &&
-                !landscapeLyricsVisible &&
                 !portraitLyricsPreviewVisible &&
                 !showPlainLyricsPage
             ) return@LaunchedEffect
