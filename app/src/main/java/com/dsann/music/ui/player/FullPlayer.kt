@@ -1300,9 +1300,10 @@ fun FullPlayer(
             "Vinyl", "Cassette" -> 0.82f
             else -> 0.9f
         }
-        val isLandscapeWindow = screenWidth > screenHeight
-        val useWidePlayer = screenWidth >= 840.dp ||
-            (screenWidth >= 600.dp && isLandscapeWindow)
+        // Landscape deliberately uses the portrait composition in a half-width pane.
+        val isLandscapeWindow = !isPhysicalLandscapeWindow && screenWidth > screenHeight
+        val useWidePlayer = !isPhysicalLandscapeWindow && (screenWidth >= 840.dp ||
+            (screenWidth >= 600.dp && isLandscapeWindow))
         // A portrait tablet window can be much shorter or narrower than the full display.
         // Keep the standard phone/full-screen layout untouched; compact only resized windows.
         val isCompactPortraitMultiWindow = isMultiWindowMode &&
