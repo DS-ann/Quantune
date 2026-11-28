@@ -1069,6 +1069,7 @@ fun FullPlayer(
     }
 
     val requestLyricsTranslation: () -> Unit = {
+        val translationSong = uiState.currentSong
         when {
             !lyricsTranslationEnabled ->
                 translationMessage = "Enable translation in Settings → Playback."
@@ -1077,7 +1078,7 @@ fun FullPlayer(
                 translationMessage = "Preparing lyrics for translation…"
             cachedTranslation != null ->
                 showTranslatedLyrics = !showTranslatedLyrics
-            uiState.currentSong == null || translationSource.isBlank() ->
+            translationSong == null || translationSource.isBlank() ->
                 translationMessage = "Load lyrics before translating."
             else -> {
                 translationBusy = true
@@ -1086,7 +1087,7 @@ fun FullPlayer(
                     try {
                         val result = AiLyricsTranslationSession.translate(
                             context = context,
-                            songId = uiState.currentSong.id,
+                            songId = translationSong.id,
                             source = translationSource
                         )
                         showTranslatedLyrics = true
