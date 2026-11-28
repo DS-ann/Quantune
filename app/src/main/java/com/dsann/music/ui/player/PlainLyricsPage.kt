@@ -164,7 +164,9 @@ private fun SyncedLyricsPageContent(
     val preparedLines = preparedPageLyrics?.lines.orEmpty()
     val timeline = remember(preparedLines) { preparedLines.map { it.entry } }
     val hasKaraoke = remember(preparedLines) {
-        preparedLines.any { it.mainWordSpans.isNotEmpty() }
+        preparedLines.any {
+            it.mainWordSpans.isNotEmpty() || it.backgroundWordSpans.isNotEmpty()
+        }
     }
     val trackKey = currentSong?.videoId?.takeIf { it.isNotBlank() }
         ?: currentSong?.path?.takeIf { it.isNotBlank() }
@@ -267,7 +269,7 @@ private fun SyncedLyricsPageContent(
     val listState = rememberLazyListState()
     LaunchedEffect(activeIndex, timeline.size) {
         if (activeIndex >= 0) {
-            runCatching { listState.animateScrollToItem(activeIndex) }
+            listState.animateScrollToItem(activeIndex)
         }
     }
 
