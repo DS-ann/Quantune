@@ -382,6 +382,7 @@ internal fun PlainLyricsSideView(
     contentColor: Color,
     secondaryColor: Color,
     accentColor: Color,
+    lyricsColorStyle: String,
     providerResults: Map<String, LyricsResult>,
     selectedProvider: String?,
     onProviderSelected: (String) -> Unit,
