@@ -700,6 +700,7 @@ fun FullPlayerScreen(
     val scrubberThickness by customizeViewModel.scrubberThickness.collectAsStateWithLifecycle()
     val scrubberThumbStyle by customizeViewModel.scrubberThumbStyle.collectAsStateWithLifecycle()
     val lyricsColorStyle by customizeViewModel.lyricsColorStyle.collectAsStateWithLifecycle()
+    val lyricsFontFamily by customizeViewModel.lyricsFontFamily.collectAsStateWithLifecycle()
     val showSyncedLyricsInPlayer by customizeViewModel.showSyncedLyricsInPlayer.collectAsStateWithLifecycle()
 
     // Legacy layout values are normalized to Standard; lyrics are entered only through
@@ -740,6 +741,7 @@ fun FullPlayerScreen(
         playerBackgroundStyle = playerBackgroundStyle,
         playerButtonStyle = playerButtonStyle,
         lyricsColorStyle = lyricsColorStyle,
+        lyricsFontFamily = lyricsFontFamily,
         scrubberThickness = scrubberThickness,
         scrubberThumbStyle = scrubberThumbStyle,
         showSyncedLyricsInPlayer = showSyncedLyricsInPlayer,
@@ -842,6 +844,7 @@ fun FullPlayer(
     playerBackgroundStyle: String = "Artwork",
     playerButtonStyle: String = "Pill",
     lyricsColorStyle: String = "Home Studio Gradient",
+    lyricsFontFamily: String = "Sans",
     scrubberThickness: Float = 1.5f,
     scrubberThumbStyle: String = "Auto",
     showSyncedLyricsInPlayer: Boolean = true,
@@ -2154,8 +2157,36 @@ fun FullPlayer(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     content = playerControlsContent
                 )
-                // Deliberately empty: no lyrics, queue, controls, or secondary pane.
-                Box(modifier = Modifier.weight(1f).fillMaxHeight())
+                PlainLyricsSideView(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(start = 8.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
+                    currentSong = uiState.currentSong,
+                    syncedLyrics = visibleSyncedLyrics,
+                    plainLyrics = visiblePlainLyrics,
+                    isLoading = isLyricsLoading,
+                    lyricsError = lyricsError,
+                    backgroundBrush = lyricsBackgroundBrush,
+                    contentColor = lyricsTextColor,
+                    secondaryColor = lyricsSecondaryColor,
+                    accentColor = lyricsAccentColor,
+                    lyricsColorStyle = lyricsColorStyle,
+                    lyricsFontFamily = lyricsFontFamily,
+                    currentPositionProvider = currentPositionProvider,
+                    playbackSpeedProvider = playbackSpeedProvider,
+                    isPlaying = uiState.isPlaying,
+                    onSeekTo = onSeekTo,
+                    onZoom = {
+                        viewModel.setQueueExpanded(false)
+                        showPlainLyricsPage = true
+                    },
+                    providerResults = providerResults,
+                    selectedProvider = selectedProvider,
+                    onProviderSelected = onProviderSelected,
+                    onRetryLyrics = onRetryLyrics,
+                    onFetchLyrics = onFetchLyrics
+                )
             }
         } else if (useWidePlayer && !isLandscapeWindow) {
             Row(
@@ -2215,6 +2246,7 @@ fun FullPlayer(
                 secondaryColor = lyricsSecondaryColor,
                 accentColor = lyricsAccentColor,
                 lyricsColorStyle = lyricsColorStyle,
+                lyricsFontFamily = lyricsFontFamily,
                 showTranslatedLyrics = showTranslatedLyrics,
                 isTranslating = translationBusy,
                 translationMessage = translationMessage,
