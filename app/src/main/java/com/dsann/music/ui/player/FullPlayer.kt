@@ -866,11 +866,12 @@ fun FullPlayer(
     val playerButtonContentColor = if (isDark) Color.White else Color.Black
     val contentSecondary = contentColor.copy(alpha = 0.6f)
     var showFullScreenVisualizer by remember { mutableStateOf(false) }
+    var showPlainLyricsPage by remember { mutableStateOf(false) }
     val playerFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
         // The fullscreen lyrics dialog covers this player surface. Stop the hidden
         // player's frame-driven slider/waveform recompositions while the overlay is open.
         active = isPlayerVisible && uiState.isPlaying &&
-            !showFullScreenVisualizer && !isLyricsModeEnabled
+            !showFullScreenVisualizer && !isLyricsModeEnabled && !showPlainLyricsPage
     )
     val artistOptions = remember(
         uiState.currentSong?.artistRefs,
@@ -1036,11 +1037,11 @@ fun FullPlayer(
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
     val currentSongIndex by viewModel.currentSongIndex.collectAsStateWithLifecycle()
     // Back dismisses the one shared queue first, then the fullscreen lyrics overlay.
-    BackHandler(enabled = isLyricsModeEnabled || queueExpandedForUi) {
-        if (queueExpandedForUi) {
-            viewModel.setQueueExpanded(false)
-        } else {
-            onLyricsModeChanged(false)
+    BackHandler(enabled = showPlainLyricsPage || isLyricsModeEnabled || queueExpandedForUi) {
+        when {
+            showPlainLyricsPage -> showPlainLyricsPage = false
+            queueExpandedForUi -> viewModel.setQueueExpanded(false)
+            else -> onLyricsModeChanged(false)
         }
     }
 
@@ -1232,6 +1233,7 @@ fun FullPlayer(
             isLyricsModeEnabled,
             landscapeLyricsVisible,
             portraitLyricsPreviewVisible,
+            showPlainLyricsPage,
             currentSongId,
             hasLyrics,
             isLyricsLoading
@@ -1239,7 +1241,8 @@ fun FullPlayer(
             if (
                 !isLyricsModeEnabled &&
                 !landscapeLyricsVisible &&
-                !portraitLyricsPreviewVisible
+                !portraitLyricsPreviewVisible &&
+                !showPlainLyricsPage
             ) return@LaunchedEffect
             if (currentSongId == null) {
                 lastLyricsFetchSongId = null
@@ -1614,10 +1617,23 @@ fun FullPlayer(
                 }
                 playerButtonsForDisplay.forEach { action ->
                     when (action) {
-                        "lyrics" -> PillChip(
+                        "plain_lyrics" -> PillChip(
                             style = playerButtonStyle,
                             icon = painterResource(id = R.drawable.ic_lyrics),
                             label = "Lyrics",
+                            isSelected = showPlainLyricsPage,
+                            onClick = {
+                                viewModel.setQueueExpanded(false)
+                                showPlainLyricsPage = true
+                            },
+                            contentColor = contentColor,
+                            accentColor = dynamicAccentColor,
+                            isDark = isDark
+                        )
+                        "lyrics" -> PillChip(
+                            style = playerButtonStyle,
+                            icon = painterResource(id = R.drawable.ic_lyrics),
+                            label = "Live lyrics",
                             isSelected = isLyricsModeEnabled ||
                                 (useWidePlayer && isLandscapeWindow && !queueExpandedForUi),
                             onClick = {
@@ -2064,6 +2080,25 @@ fun FullPlayer(
                     modifier = Modifier.fillMaxSize()
                 )
             }
+        }
+        if (showPlainLyricsPage) {
+            PlainLyricsPage(
+                currentSong = uiState.currentSong,
+                syncedLyrics = syncedLyrics,
+                plainLyrics = plainLyrics,
+                isLoading = isLyricsLoading,
+                lyricsError = lyricsError,
+                backgroundBrush = lyricsBackgroundBrush,
+                contentColor = lyricsTextColor,
+                secondaryColor = lyricsSecondaryColor,
+                accentColor = lyricsAccentColor,
+                providerResults = providerResults,
+                selectedProvider = selectedProvider,
+                onProviderSelected = onProviderSelected,
+                onRetryLyrics = onRetryLyrics,
+                onFetchLyrics = onFetchLyrics,
+                onDismiss = { showPlainLyricsPage = false }
+            )
         }
 
         // --- CUSTOM EMBEDDED SLIDING PLAY QUEUE ---
