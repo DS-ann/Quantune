@@ -370,7 +370,8 @@ internal fun PlayerLyricsContent(
                     )
                     val plainLyricsColor = when (lyricsColorStyle) {
                         "Home Studio Gradient" -> Color.White.copy(alpha = 0.22f)
-                        "White", "UI Matching" -> Color.White
+                        "UI Matching" -> dynamicAccentColor
+                        "White" -> Color.White
                         else -> contentColor.copy(alpha = 0.9f)
                     }
                     // Plain (untimed) lyrics do not need a second stroked text layer.
