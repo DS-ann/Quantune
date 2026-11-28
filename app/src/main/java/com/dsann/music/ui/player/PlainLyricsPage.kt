@@ -108,12 +108,14 @@ internal fun PlainLyricsPage(
     onDismiss: () -> Unit
 ) {
     var showProviderPicker by remember { mutableStateOf(false) }
-    var displayLines by remember { mutableStateOf<List<String>>(emptyList()) }
-    var hasPreparedContent by remember { mutableStateOf(false) }
+    // Keep the current track's text mounted while same-track provider updates arrive.
+    // The first frame still shows a loader, but subsequent payload changes do not
+    // tear down the visible list or flash the loading state again.
+    var displayLines by remember(currentSong?.id) { mutableStateOf<List<String>>(emptyList()) }
+    var hasPreparedContent by remember(currentSong?.id) { mutableStateOf(false) }
 
-    LaunchedEffect(currentSong?.id, plainLyrics, syncedLyrics) {
-        hasPreparedContent = false
-        displayLines = withContext(Dispatchers.Default) {
+    LaunchedEffect(plainLyrics, syncedLyrics) {
+        val preparedLines = withContext(Dispatchers.Default) {
             val source = plainLyrics?.takeIf { it.isNotBlank() }
                 ?: convertSyncedLyricsToPlainText(syncedLyrics.orEmpty())
             if (source.isBlank()) {
@@ -125,6 +127,7 @@ internal fun PlainLyricsPage(
                     .map { it.trimEnd() }
             }
         }
+        if (preparedLines != displayLines) displayLines = preparedLines
         hasPreparedContent = true
     }
 
