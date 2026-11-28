@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
@@ -28,6 +29,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -35,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,6 +52,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.dsann.music.data.lyrics.LyricLine
+import com.dsann.music.data.lyrics.LineSyncedLyricTimeline
 import com.dsann.music.data.lyrics.LyricsResult
 import com.dsann.music.model.SongItem
 import com.dsann.music.ui.theme.DsmusicTheme
@@ -57,6 +63,8 @@ import com.dsann.music.ui.theme.LoadingIndicator
 import com.dsann.music.ui.theme.Text
 import com.dsann.music.ui.theme.TextButton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.withContext
 
 /**
@@ -82,6 +90,254 @@ internal fun convertSyncedLyricsToPlainText(lyrics: List<LyricLine>): String {
     return output.joinToString(separator = "\n")
 }
 
+
+/**
+ * Lightweight playback-synced lyrics surface for the standalone page.
+ *
+ * Timeline construction happens off-main. Only the active karaoke line owns a
+ * word-sweep renderer; the rest of the list remains ordinary Compose text. The
+ * playback clock is shared with the player's vsync publisher and re-anchors to
+ * Media3 after seeks, pauses, stalls and track changes.
+ */
+@Composable
+private fun SyncedLyricsPageContent(
+    lyrics: List<LyricLine>,
+    currentSong: SongItem?,
+    currentPositionProvider: () -> Int,
+    playbackSpeedProvider: () -> Float,
+    isPlaying: Boolean,
+    contentColor: Color,
+    accentColor: Color,
+    lyricsColorStyle: String,
+    onSeekTo: (Int) -> Unit
+) {
+    var preparedTimeline by remember(lyrics) {
+        mutableStateOf<List<LineSyncedLyricTimeline.Entry>?>(null)
+    }
+    LaunchedEffect(lyrics) {
+        preparedTimeline = null
+        preparedTimeline = withContext(Dispatchers.Default) {
+            LineSyncedLyricTimeline.build(lyrics)
+        }
+    }
+
+    val timeline = preparedTimeline.orEmpty()
+    val hasKaraoke = remember(timeline) {
+        timeline.any { it.line.isWordByWord && it.line.words.isNotEmpty() }
+    }
+    val trackKey = currentSong?.videoId?.takeIf { it.isNotBlank() }
+        ?: currentSong?.path?.takeIf { it.isNotBlank() }
+        ?: currentSong?.id?.toString()
+    val positionState = remember(trackKey) {
+        mutableIntStateOf(currentPositionProvider().coerceAtLeast(0))
+    }
+    val playbackClock = remember(trackKey) { KaraokePlaybackClock() }
+    val frameTimeNanos = rememberAppAnimationFrameTimeNanos(
+        active = isPlaying && hasKaraoke
+    )
+
+    LaunchedEffect(
+        trackKey,
+        timeline,
+        isPlaying,
+        hasKaraoke,
+        currentPositionProvider,
+        playbackSpeedProvider
+    ) {
+        if (preparedTimeline == null) return@LaunchedEffect
+        val initialPosition = currentPositionProvider().coerceAtLeast(0)
+        playbackClock.reset(initialPosition)
+        positionState.intValue = initialPosition
+
+        if (isPlaying && hasKaraoke) {
+            snapshotFlow { frameTimeNanos.value }
+                .filter { it > 0L }
+                .collect { frameNanos ->
+                    val actualPosition = currentPositionProvider().coerceAtLeast(0)
+                    val correctedPosition = playbackClock.update(
+                        frameTimeNanos = frameNanos,
+                        actualPositionMs = actualPosition,
+                        playbackSpeed = playbackSpeedProvider(),
+                        isPlaying = true
+                    )
+                    if (positionState.intValue != correctedPosition) {
+                        positionState.intValue = correctedPosition
+                    }
+                }
+        } else {
+            while (true) {
+                val actualPosition = currentPositionProvider().coerceAtLeast(0)
+                playbackClock.reset(actualPosition)
+                if (positionState.intValue != actualPosition) {
+                    positionState.intValue = actualPosition
+                }
+                delay(
+                    if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.M) {
+                        84L
+                    } else {
+                        40L
+                    }
+                )
+            }
+        }
+    }
+
+    // Prefix maxima make the active-line search safe even when a provider returns
+    // overlapping or slightly out-of-order word completion timestamps.
+    val completionBoundaries = remember(timeline) {
+        LongArray(timeline.size).also { boundaries ->
+            var greatest = Long.MIN_VALUE
+            timeline.forEachIndexed { index, entry ->
+                greatest = maxOf(greatest, entry.completionTimeMs)
+                boundaries[index] = greatest
+            }
+        }
+    }
+    val songDurationMs = currentSong?.duration?.takeIf { it > 0L }
+    val finalWordEndMs = timeline.lastOrNull()?.lastWordEndMs
+    val activeIndex by remember(timeline, completionBoundaries, positionState, songDurationMs, finalWordEndMs) {
+        derivedStateOf {
+            val position = positionState.intValue.toLong()
+            if (
+                timeline.isEmpty() ||
+                position < timeline.first().startTimeMs ||
+                (songDurationMs != null && position >= songDurationMs) ||
+                (finalWordEndMs != null && position > finalWordEndMs + 1_000L)
+            ) {
+                -1
+            } else {
+                var low = 0
+                var high = completionBoundaries.lastIndex
+                var lastCompleted = -1
+                while (low <= high) {
+                    val middle = (low + high) ushr 1
+                    if (position >= completionBoundaries[middle]) {
+                        lastCompleted = middle
+                        low = middle + 1
+                    } else {
+                        high = middle - 1
+                    }
+                }
+                (lastCompleted + 1).coerceIn(0, timeline.lastIndex)
+            }
+        }
+    }
+
+    val listState = rememberLazyListState()
+    LaunchedEffect(activeIndex, timeline.size) {
+        if (activeIndex >= 0) {
+            runCatching { listState.animateScrollToItem(activeIndex) }
+        }
+    }
+
+    val gradientEnabled = lyricsColorStyle == "Home Studio Gradient"
+    val highlightBrush = if (gradientEnabled) {
+        dsmusicHomeStudioGradientBrush()
+    } else {
+        SolidColor(contentColor)
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 24.dp,
+            end = 24.dp,
+            top = 12.dp,
+            bottom = 36.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        itemsIndexed(
+            items = timeline,
+            key = { index, entry -> "synced-page-${entry.line.startTimeMs}-$index" }
+        ) { index, entry ->
+            val line = entry.line
+            val active = index == activeIndex
+            val lineTextStyle = DsmusicTheme.typography.bodyLarge.copy(
+                fontSize = 44.sp,
+                lineHeight = 58.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (active) Modifier
+                            .background(contentColor.copy(alpha = 0.055f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                        else Modifier
+                    )
+                    .clickable {
+                        onSeekTo(
+                            entry.startTimeMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+                        )
+                    },
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (active && line.isWordByWord && line.words.isNotEmpty()) {
+                    KaraokeSweepText(
+                        text = line.content,
+                        words = line.words,
+                        wordOffset = 0,
+                        positionState = positionState,
+                        style = lineTextStyle,
+                        baseColor = contentColor.copy(alpha = 0.36f),
+                        highlightBrush = highlightBrush,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Text(
+                        text = line.content,
+                        color = when {
+                            active && !gradientEnabled -> contentColor
+                            gradientEnabled -> Color.Unspecified
+                            else -> contentColor.copy(alpha = 0.48f)
+                        },
+                        style = if (gradientEnabled) {
+                            lineTextStyle.copy(brush = dsmusicHomeStudioGradientBrush())
+                        } else {
+                            lineTextStyle
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                if (!line.backgroundContent.isNullOrBlank()) {
+                    val backgroundStyle = lineTextStyle.copy(
+                        fontSize = 32.sp,
+                        lineHeight = 42.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (active && line.backgroundWords.isNotEmpty()) {
+                        KaraokeSweepText(
+                            text = line.backgroundContent,
+                            words = line.backgroundWords,
+                            wordOffset = 0,
+                            positionState = positionState,
+                            style = backgroundStyle,
+                            baseColor = contentColor.copy(alpha = 0.28f),
+                            highlightBrush = highlightBrush,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Text(
+                            text = line.backgroundContent,
+                            color = if (gradientEnabled) Color.Unspecified else contentColor.copy(alpha = 0.42f),
+                            style = if (gradientEnabled) {
+                                backgroundStyle.copy(brush = dsmusicHomeStudioGradientBrush())
+                            } else {
+                                backgroundStyle
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 /**
  * A deliberately separate, static lyrics surface. It never instantiates the
  * synchronized/karaoke renderer, so reading lyrics cannot start its frame clock.
@@ -90,6 +346,10 @@ internal fun convertSyncedLyricsToPlainText(lyrics: List<LyricLine>): String {
 internal fun PlainLyricsPage(
     currentSong: SongItem?,
     syncedLyrics: List<LyricLine>?,
+    currentPositionProvider: () -> Int,
+    playbackSpeedProvider: () -> Float,
+    isPlaying: Boolean,
+    onSeekTo: (Int) -> Unit,
     plainLyrics: String?,
     isLoading: Boolean,
     lyricsError: Throwable?,
@@ -306,7 +566,19 @@ internal fun PlainLyricsPage(
                     }
                 }
 
-                if (displayLines.isNotEmpty()) {
+                if (!syncedLyrics.isNullOrEmpty()) {
+                    SyncedLyricsPageContent(
+                        lyrics = syncedLyrics,
+                        currentSong = currentSong,
+                        currentPositionProvider = currentPositionProvider,
+                        playbackSpeedProvider = playbackSpeedProvider,
+                        isPlaying = isPlaying,
+                        contentColor = contentColor,
+                        accentColor = accentColor,
+                        lyricsColorStyle = lyricsColorStyle,
+                        onSeekTo = onSeekTo
+                    )
+                } else if (displayLines.isNotEmpty()) {
                     Text(
                         text = "${displayLines.size} lines",
                         color = secondaryColor.copy(alpha = 0.8f),
