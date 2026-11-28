@@ -113,8 +113,18 @@ internal fun PlainLyricsPage(
     // tear down the visible list or flash the loading state again.
     var displayLines by remember(currentSong?.id) { mutableStateOf<List<String>>(emptyList()) }
     var hasPreparedContent by remember(currentSong?.id) { mutableStateOf(false) }
+    var linesLocked by remember(currentSong?.id) { mutableStateOf(false) }
+    var lastTranslationMode by remember(currentSong?.id) { mutableStateOf(showTranslatedLyrics) }
 
-    LaunchedEffect(plainLyrics, syncedLyrics) {
+    LaunchedEffect(plainLyrics, syncedLyrics, showTranslatedLyrics) {
+        if (lastTranslationMode != showTranslatedLyrics) {
+            lastTranslationMode = showTranslatedLyrics
+            linesLocked = false
+        }
+        // Provider searches can return several results for the same song. Keep the first
+        // usable payload mounted; a manual provider selection explicitly unlocks it.
+        if (linesLocked) return@LaunchedEffect
+
         val preparedLines = withContext(Dispatchers.Default) {
             val source = plainLyrics?.takeIf { it.isNotBlank() }
                 ?: convertSyncedLyricsToPlainText(syncedLyrics.orEmpty())
@@ -128,6 +138,7 @@ internal fun PlainLyricsPage(
             }
         }
         if (preparedLines != displayLines) displayLines = preparedLines
+        if (preparedLines.isNotEmpty()) linesLocked = true
         hasPreparedContent = true
     }
 
@@ -384,6 +395,7 @@ internal fun PlainLyricsPage(
                 providerResults = providerResults,
                 selectedProvider = selectedProvider,
                 onProviderSelected = { provider ->
+                    linesLocked = false
                     onProviderSelected(provider)
                     showProviderPicker = false
                 },
