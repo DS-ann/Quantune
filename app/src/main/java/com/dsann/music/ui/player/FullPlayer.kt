@@ -1969,28 +1969,8 @@ fun FullPlayer(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     content = playerControlsContent
                 )
-                if (isPlayerVisible) {
-                    PlainLyricsSideView(
-                        modifier = Modifier.weight(0.46f).fillMaxHeight(),
-                        currentSong = uiState.currentSong,
-                        syncedLyrics = syncedLyrics,
-                        plainLyrics = plainLyrics,
-                        isLoading = isLyricsLoading,
-                        lyricsError = lyricsError,
-                        backgroundBrush = lyricsBackgroundBrush,
-                        contentColor = lyricsTextColor,
-                        secondaryColor = lyricsSecondaryColor,
-                        accentColor = lyricsAccentColor,
-                        lyricsColorStyle = lyricsColorStyle,
-                        providerResults = providerResults,
-                        selectedProvider = selectedProvider,
-                        onProviderSelected = onProviderSelected,
-                        onRetryLyrics = onRetryLyrics,
-                        onFetchLyrics = onFetchLyrics
-                    )
-                } else {
-                    Spacer(Modifier.weight(0.46f).fillMaxHeight())
-                }
+                // Keep the landscape right pane intentionally empty.
+                Spacer(Modifier.weight(0.46f).fillMaxHeight())
             }
         } else {
             Column(
