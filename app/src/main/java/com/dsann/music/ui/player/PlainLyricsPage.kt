@@ -65,6 +65,7 @@ import com.dsann.music.ui.theme.TextButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 
 /**
@@ -107,7 +108,6 @@ private fun SyncedLyricsPageContent(
     playbackSpeedProvider: () -> Float,
     isPlaying: Boolean,
     contentColor: Color,
-    accentColor: Color,
     lyricsColorStyle: String,
     onSeekTo: (Int) -> Unit
 ) {
@@ -339,8 +339,8 @@ private fun SyncedLyricsPageContent(
 }
 
 /**
- * A deliberately separate, static lyrics surface. It never instantiates the
- * synchronized/karaoke renderer, so reading lyrics cannot start its frame clock.
+ * A separate lyrics surface. Unsynced text remains static; timed sources use a
+ * lightweight active-line and active-word renderer scoped to the visible page.
  */
 @Composable
 internal fun PlainLyricsPage(
@@ -574,7 +574,6 @@ internal fun PlainLyricsPage(
                         playbackSpeedProvider = playbackSpeedProvider,
                         isPlaying = isPlaying,
                         contentColor = contentColor,
-                        accentColor = accentColor,
                         lyricsColorStyle = lyricsColorStyle,
                         onSeekTo = onSeekTo
                     )
