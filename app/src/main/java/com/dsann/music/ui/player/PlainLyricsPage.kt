@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -266,7 +267,7 @@ internal fun PlainLyricsPage(
                         modifier = Modifier.padding(horizontal = 22.dp, vertical = 4.dp)
                     )
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                         contentPadding = PaddingValues(
                             start = 24.dp,
                             end = 24.dp,
@@ -296,14 +297,14 @@ internal fun PlainLyricsPage(
                     }
                 } else if (isLoading || !hasPreparedContent) {
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                         contentAlignment = Alignment.Center
                     ) {
                         LoadingIndicator(color = accentColor)
                     }
                 } else {
                     Box(
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
+                        modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 28.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(
