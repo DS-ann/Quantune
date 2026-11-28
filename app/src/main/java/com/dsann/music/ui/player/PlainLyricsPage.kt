@@ -1,7 +1,11 @@
 package com.dsann.music.ui.player
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,11 +39,13 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
@@ -68,9 +74,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Flatten line-synced and word-synced lyric payloads into readable, untimed text.
@@ -228,20 +237,39 @@ private fun SyncedLyricsPageContent(
         }
     }
 
-    // Prefix maxima make the active-line search safe even when a provider returns
-    // overlapping or slightly out-of-order word completion timestamps.
-    val completionBoundaries = remember(timeline) {
+    // Karaoke rows become eligible to advance as soon as their final timed word
+    // ends. Standard line-synced sources have no explicit end timestamp, so reserve
+    // the final quarter of the line interval (capped at 500 ms) for the scroll.
+    // Prefix maxima keep the target stable for overlapping/out-of-order timestamps.
+    val scrollBoundaries = remember(timeline) {
         LongArray(timeline.size).also { boundaries ->
             var greatest = Long.MIN_VALUE
             timeline.forEachIndexed { index, entry ->
-                greatest = maxOf(greatest, entry.completionTimeMs)
+                val next = timeline.getOrNull(index + 1)
+                val nextStart = next?.startTimeMs ?: Long.MAX_VALUE
+                val lineEnd = entry.lastWordEndMs
+                val boundary = when {
+                    next == null -> Long.MAX_VALUE
+                    lineEnd != null && lineEnd < nextStart -> lineEnd
+                    else -> {
+                        val interval = (nextStart - entry.startTimeMs).coerceAtLeast(0L)
+                        val leadWindow = minOf(
+                            interval,
+                            500L.coerceAtLeast(120L).coerceAtMost(
+                                (interval / 3L).coerceAtLeast(1L)
+                            )
+                        )
+                        (nextStart - leadWindow).coerceAtLeast(entry.startTimeMs)
+                    }
+                }
+                greatest = maxOf(greatest, boundary)
                 boundaries[index] = greatest
             }
         }
     }
     val songDurationMs = currentSong?.duration?.takeIf { it > 0L }
     val finalWordEndMs = timeline.lastOrNull()?.lastWordEndMs
-    val activeIndex by remember(timeline, completionBoundaries, positionState, songDurationMs, finalWordEndMs) {
+    val activeIndex by remember(timeline, scrollBoundaries, positionState, songDurationMs, finalWordEndMs) {
         derivedStateOf {
             val position = positionState.intValue.toLong()
             if (
@@ -253,11 +281,11 @@ private fun SyncedLyricsPageContent(
                 -1
             } else {
                 var low = 0
-                var high = completionBoundaries.lastIndex
+                var high = scrollBoundaries.lastIndex
                 var lastCompleted = -1
                 while (low <= high) {
                     val middle = (low + high) ushr 1
-                    if (position >= completionBoundaries[middle]) {
+                    if (position >= scrollBoundaries[middle]) {
                         lastCompleted = middle
                         low = middle + 1
                     } else {
@@ -270,17 +298,45 @@ private fun SyncedLyricsPageContent(
     }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(activeIndex, timeline.size) {
-        if (activeIndex >= 0) {
-            listState.animateScrollToItem(activeIndex)
+    val density = LocalDensity.current
+    val lastCenteredIndex = remember(trackKey) { mutableIntStateOf(-1) }
+    LaunchedEffect(activeIndex, timeline, density) {
+        if (activeIndex !in timeline.indices) return@LaunchedEffect
+        val previousIndex = lastCenteredIndex.intValue
+        val isInitialOrSeek = previousIndex < 0 || abs(activeIndex - previousIndex) > 1
+        val nextStartMs = timeline.getOrNull(activeIndex)?.startTimeMs ?: Long.MAX_VALUE
+        val remainingPlaybackMs = (nextStartMs - positionState.intValue.toLong()).coerceAtLeast(0L)
+        val speed = playbackSpeedProvider().takeIf { it.isFinite() && it > 0f } ?: 1f
+        // Leave a small 50 ms safety margin so the target line is already centred
+        // immediately before its first word/line timestamp.
+        val finishLeadMs = if (remainingPlaybackMs > 80L) 50L else 0L
+        val scrollDurationMs = if (isInitialOrSeek || nextStartMs == Long.MAX_VALUE) {
+            0
+        } else {
+            ((remainingPlaybackMs - finishLeadMs).coerceAtLeast(16L) / speed)
+                .roundToInt()
+                .coerceIn(16, 1_200)
         }
+        scrollLyricLineToCenter(
+            listState = listState,
+            index = activeIndex,
+            estimatedItemHalfHeightPx = with(density) { 36.dp.roundToPx() },
+            durationMs = scrollDurationMs,
+            immediate = isInitialOrSeek
+        )
+        lastCenteredIndex.intValue = activeIndex
     }
 
     val gradientEnabled = lyricsColorStyle == "Home Studio Gradient"
+    // A gradient is reserved for the highlighted line/word sweep. Inactive lines
+    // use a neutral, low-opacity white just like the White colour mode.
+    val lyricBaseColor = if (
+        gradientEnabled || lyricsColorStyle == "White" || lyricsColorStyle == "UI Matching"
+    ) Color.White else contentColor
     val highlightBrush = if (gradientEnabled) {
         dsmusicHomeStudioGradientBrush()
     } else {
-        SolidColor(contentColor)
+        SolidColor(lyricBaseColor)
     }
 
     LazyColumn(
@@ -335,7 +391,7 @@ private fun SyncedLyricsPageContent(
                         positionState = positionState,
                         preparedSpans = prepared.mainWordSpans,
                         style = lineTextStyle,
-                        baseColor = contentColor.copy(alpha = 0.22f),
+                        baseColor = lyricBaseColor.copy(alpha = 0.22f),
                         highlightBrush = highlightBrush,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -343,14 +399,14 @@ private fun SyncedLyricsPageContent(
                     Text(
                         text = line.content,
                         color = when {
-                            active && !gradientEnabled -> contentColor
-                            gradientEnabled -> Color.Unspecified
-                            else -> contentColor.copy(alpha = 0.48f)
+                            active && gradientEnabled -> Color.Unspecified
+                            active -> lyricBaseColor
+                            else -> lyricBaseColor.copy(alpha = 0.22f)
                         },
-                        style = if (gradientEnabled) {
+                        style = if (active && gradientEnabled) {
                             lineTextStyle.copy(brush = dsmusicHomeStudioGradientBrush())
                         } else {
-                            lineTextStyle
+                            lineTextStyle.copy(brush = null)
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -370,18 +426,24 @@ private fun SyncedLyricsPageContent(
                             positionState = positionState,
                             preparedSpans = prepared.backgroundWordSpans,
                             style = backgroundStyle,
-                            baseColor = contentColor.copy(alpha = 0.18f),
+                            baseColor = lyricBaseColor.copy(alpha = 0.18f),
                             highlightBrush = highlightBrush,
                             modifier = Modifier.fillMaxWidth()
                         )
                     } else {
                         Text(
                             text = line.backgroundContent,
-                            color = if (gradientEnabled) Color.Unspecified else contentColor.copy(alpha = 0.42f),
-                            style = if (gradientEnabled) {
+                            color = if (active && gradientEnabled) {
+                                Color.Unspecified
+                            } else if (active) {
+                                lyricBaseColor.copy(alpha = 0.82f)
+                            } else {
+                                lyricBaseColor.copy(alpha = 0.18f)
+                            },
+                            style = if (active && gradientEnabled) {
                                 backgroundStyle.copy(brush = dsmusicHomeStudioGradientBrush())
                             } else {
-                                backgroundStyle
+                                backgroundStyle.copy(brush = null)
                             },
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -963,5 +1025,52 @@ internal fun PlainLyricsSideView(
             backgroundBrush = backgroundBrush,
             onDismissRequest = { showProviderPicker = false }
         )
+    }
+}
+
+
+/**
+ * Keeps the highlighted line on the vertical centre anchor. Normal line changes
+ * animate only the measured correction distance; initial placement and large
+ * seeks re-anchor immediately to avoid long off-screen animations.
+ */
+private suspend fun scrollLyricLineToCenter(
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    index: Int,
+    estimatedItemHalfHeightPx: Int,
+    durationMs: Int,
+    immediate: Boolean
+) {
+    if (index < 0) return
+
+    snapshotFlow {
+        listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset
+    }.first { it > 0 }
+
+    var layout = listState.layoutInfo
+    var item = layout.visibleItemsInfo.firstOrNull { it.index == index }
+    if (item == null) {
+        // This is normally only reached for the initial mid-song placement or a seek.
+        listState.scrollToItem(index)
+        withFrameNanos { }
+        layout = listState.layoutInfo
+        item = layout.visibleItemsInfo.firstOrNull { it.index == index } ?: return
+    }
+
+    val viewportCenter = (layout.viewportStartOffset + layout.viewportEndOffset) / 2f
+    val itemCenter = item.offset + item.size / 2f
+    val correctionPx = itemCenter - viewportCenter
+    if (abs(correctionPx) > 1.5f) {
+        if (immediate || durationMs <= 0) {
+            listState.scrollBy(correctionPx)
+        } else {
+            listState.animateScrollBy(
+                value = correctionPx,
+                animationSpec = tween(
+                    durationMillis = durationMs.coerceAtLeast(1),
+                    easing = FastOutSlowInEasing
+                )
+            )
+        }
     }
 }
