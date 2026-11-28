@@ -585,12 +585,6 @@ private fun LandscapePlayerDetailsPane(
             DsmusicIconButton(onClick = { showProviderPicker = true }) {
                 Icon(Icons.Rounded.MoreVert, contentDescription = "Choose lyrics source")
             }
-            DsmusicIconButton(onClick = onOpenFullScreenLyrics) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_fullscreen),
-                    contentDescription = "Open fullscreen lyrics"
-                )
-            }
             Text(
                 text = currentSong?.artist.orEmpty(),
                 color = secondaryColor,
@@ -1633,12 +1627,11 @@ fun FullPlayer(
                         "lyrics" -> PillChip(
                             style = playerButtonStyle,
                             icon = painterResource(id = R.drawable.ic_lyrics),
-                            label = "Live lyrics",
-                            isSelected = isLyricsModeEnabled ||
-                                (useWidePlayer && isLandscapeWindow && !queueExpandedForUi),
+                            label = "Lyrics",
+                            isSelected = showPlainLyricsPage,
                             onClick = {
                                 viewModel.setQueueExpanded(false)
-                                onLyricsModeChanged(true)
+                                showPlainLyricsPage = true
                             },
                             contentColor = contentColor,
                             accentColor = dynamicAccentColor,
@@ -1984,31 +1977,22 @@ fun FullPlayer(
                     content = playerControlsContent
                 )
                 if (isPlayerVisible) {
-                    LandscapePlayerDetailsPane(
+                    PlainLyricsSideView(
                         modifier = Modifier.weight(0.46f).fillMaxHeight(),
-                        onOpenFullScreenLyrics = {
-                            viewModel.setQueueExpanded(false)
-                            onLyricsModeChanged(true)
-                        },
+                        currentSong = uiState.currentSong,
                         syncedLyrics = syncedLyrics,
                         plainLyrics = plainLyrics,
-                        isLyricsLoading = isLyricsLoading,
+                        isLoading = isLyricsLoading,
                         lyricsError = lyricsError,
-                        currentSong = uiState.currentSong,
-                        currentPositionProvider = currentPositionProvider,
-                        playbackSpeedProvider = playbackSpeedProvider,
-                        isPlaying = uiState.isPlaying,
+                        backgroundBrush = lyricsBackgroundBrush,
                         contentColor = lyricsTextColor,
                         secondaryColor = lyricsSecondaryColor,
                         accentColor = lyricsAccentColor,
-                        sourcePickerBackgroundBrush = backgroundBrush,
-                        lyricsColorStyle = lyricsColorStyle,
-                        selectedProvider = selectedProvider,
                         providerResults = providerResults,
+                        selectedProvider = selectedProvider,
                         onProviderSelected = onProviderSelected,
-                        onSeekTo = onSeekTo,
-                        onFetchLyrics = onFetchLyrics,
-                        onRetryLyrics = onRetryLyrics
+                        onRetryLyrics = onRetryLyrics,
+                        onFetchLyrics = onFetchLyrics
                     )
                 } else {
                     Spacer(Modifier.weight(0.46f).fillMaxHeight())
@@ -2025,61 +2009,6 @@ fun FullPlayer(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 content = playerControlsContent
             )
-        }
-        if (isLyricsModeEnabled) {
-            Dialog(
-                onDismissRequest = { onLyricsModeChanged(false) },
-                properties = DialogProperties(usePlatformDefaultWidth = false)
-            ) {
-                val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
-                // Match the visualizer's full-window presentation and immersive system bars.
-                DisposableEffect(dialogWindow) {
-                    val controller = dialogWindow?.let { window ->
-                        // Compose Dialog can otherwise retain a content-sized height in
-                        // landscape, leaving fullscreen lyrics confined to roughly half
-                        // of the available player window. Pin both dimensions to the
-                        // activity window so the lyrics overlay spans the complete display.
-                        window.setLayout(
-                            android.view.WindowManager.LayoutParams.MATCH_PARENT,
-                            android.view.WindowManager.LayoutParams.MATCH_PARENT
-                        )
-                        WindowCompat.setDecorFitsSystemWindows(window, false)
-                        WindowCompat.getInsetsController(window, window.decorView).also {
-                            it.systemBarsBehavior =
-                                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                            it.hide(WindowInsetsCompat.Type.systemBars())
-                        }
-                    }
-                    onDispose {
-                        controller?.show(WindowInsetsCompat.Type.systemBars())
-                    }
-                }
-
-                FullScreenLyricsOverlay(
-                    currentSong = uiState.currentSong,
-                    syncedLyrics = syncedLyrics,
-                    plainLyrics = plainLyrics,
-                    isLoading = isLyricsLoading,
-                    isPlaying = uiState.isPlaying,
-                    lyricsError = lyricsError,
-                    currentPositionProvider = currentPositionProvider,
-                    playbackSpeedProvider = playbackSpeedProvider,
-                    contentReady = true,
-                    backgroundBrush = lyricsBackgroundBrush,
-                    contentColor = lyricsTextColor,
-                    contentSecondary = lyricsSecondaryColor,
-                    dynamicAccentColor = lyricsAccentColor,
-                    lyricsColorStyle = lyricsColorStyle,
-                    onRetryLyrics = onRetryLyrics,
-                    onFetchLyrics = onFetchLyrics,
-                    onSeekTo = onSeekTo,
-                    providerResults = providerResults,
-                    selectedProvider = selectedProvider,
-                    onProviderSelected = onProviderSelected,
-                    onDismissLyrics = { onLyricsModeChanged(false) },
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
         }
         if (showPlainLyricsPage) {
             PlainLyricsPage(
