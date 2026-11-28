@@ -1782,9 +1782,7 @@ fun FullPlayer(
                                 (useWidePlayer && isLandscapeWindow && isPlayerVisible),
                             onClick = {
                                 viewModel.setQueueExpanded(false)
-                                if (!useWidePlayer || !isLandscapeWindow) {
-                                    showPlainLyricsPage = true
-                                }
+                                showPlainLyricsPage = true
                             },
                             contentColor = contentColor,
                             accentColor = dynamicAccentColor,
