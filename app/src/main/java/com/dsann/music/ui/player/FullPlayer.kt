@@ -963,6 +963,151 @@ fun FullPlayer(
     var selectedQueueSongForMenu by remember { mutableStateOf<SongItem?>(null) }
     var lastLyricsFetchSongId by remember { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
+
+    // One translation controller is shared by the inline preview and full-screen page.
+    val lyricsTranslationSettingsStore = remember(context) {
+        AiLyricsTranslationSettingsStore(context)
+    }
+    var lyricsTranslationSettings by remember(lyricsTranslationSettingsStore) {
+        mutableStateOf(AiLyricsTranslationSettings(enabled = false))
+    }
+    var lyricsTranslationEnabled by remember { mutableStateOf(false) }
+    LaunchedEffect(lyricsTranslationSettingsStore) {
+        val loaded = withContext(Dispatchers.IO) {
+            lyricsTranslationSettingsStore.load()
+        }
+        lyricsTranslationSettings = loaded
+        lyricsTranslationEnabled = loaded.enabled
+    }
+
+    var translationSource by remember(currentSongId) { mutableStateOf("") }
+    var translationKey by remember(currentSongId) { mutableStateOf<String?>(null) }
+    var translationSourceReady by remember(currentSongId) { mutableStateOf(false) }
+    val translationCache by AiLyricsTranslationSession.entries.collectAsStateWithLifecycle()
+    val cachedTranslation = translationKey?.let { translationCache[it] }
+    val lyricsTranslationPreferences = remember(context) {
+        context.applicationContext.getSharedPreferences(
+            "lyrics_translation_settings",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    LaunchedEffect(
+        currentSongId,
+        syncedLyrics,
+        plainLyrics,
+        lyricsTranslationSettings,
+        lyricsTranslationEnabled
+    ) {
+        translationSourceReady = false
+        translationSource = ""
+        translationKey = null
+        if (!lyricsTranslationEnabled) {
+            translationSourceReady = true
+            return@LaunchedEffect
+        }
+
+        val prepared = withContext(Dispatchers.Default) {
+            val source = when {
+                !syncedLyrics.isNullOrEmpty() -> syncedLyrics.joinToString("\\n") { line ->
+                    line.content.ifBlank { line.words.joinToString("") { word -> word.text } }
+                }
+                !plainLyrics.isNullOrBlank() -> plainLyrics.orEmpty()
+                else -> ""
+            }
+            val key = currentSongId?.takeIf { source.isNotBlank() }?.let { songId ->
+                AiLyricsTranslationSession.cacheKey(songId, source, lyricsTranslationSettings)
+            }
+            source to key
+        }
+        translationSource = prepared.first
+        translationKey = prepared.second
+        translationSourceReady = true
+    }
+
+    var translatedSyncedLyrics by remember(currentSongId) {
+        mutableStateOf<List<LyricLine>?>(null)
+    }
+    LaunchedEffect(currentSongId, syncedLyrics, cachedTranslation) {
+        translatedSyncedLyrics = if (cachedTranslation != null) {
+            withContext(Dispatchers.Default) {
+                AiLyricsTranslationSession.mapToSyncedLines(
+                    syncedLyrics,
+                    cachedTranslation.translatedText
+                )
+            }
+        } else {
+            null
+        }
+    }
+
+    var showTranslatedLyrics by remember(currentSongId, translationKey) {
+        mutableStateOf(cachedTranslation != null)
+    }
+    var translationBusy by remember(currentSongId) { mutableStateOf(false) }
+    var translationMessage by remember(currentSongId) { mutableStateOf("") }
+    val translationScope = rememberCoroutineScope()
+
+    DisposableEffect(lyricsTranslationPreferences) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
+            if (key == "enabled") {
+                lyricsTranslationEnabled = preferences.getBoolean("enabled", true)
+                if (!lyricsTranslationEnabled) {
+                    showTranslatedLyrics = false
+                    translationMessage = ""
+                }
+            }
+        }
+        lyricsTranslationPreferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            lyricsTranslationPreferences.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
+    LaunchedEffect(cachedTranslation) {
+        if (cachedTranslation != null) showTranslatedLyrics = true
+    }
+
+    val requestLyricsTranslation: () -> Unit = {
+        when {
+            !lyricsTranslationEnabled ->
+                translationMessage = "Enable translation in Settings → Playback."
+            translationBusy -> Unit
+            !translationSourceReady ->
+                translationMessage = "Preparing lyrics for translation…"
+            cachedTranslation != null ->
+                showTranslatedLyrics = !showTranslatedLyrics
+            uiState.currentSong == null || translationSource.isBlank() ->
+                translationMessage = "Load lyrics before translating."
+            else -> {
+                translationBusy = true
+                translationMessage = "Translating…"
+                translationScope.launch {
+                    try {
+                        val result = AiLyricsTranslationSession.translate(
+                            context = context,
+                            songId = uiState.currentSong.id,
+                            source = translationSource
+                        )
+                        showTranslatedLyrics = true
+                        translationMessage = "Translated with ${result.provider}."
+                    } catch (error: Exception) {
+                        translationMessage = error.message ?: "Lyrics translation failed."
+                    } finally {
+                        translationBusy = false
+                    }
+                }
+            }
+        }
+    }
+
+    val visibleSyncedLyrics = if (showTranslatedLyrics) translatedSyncedLyrics else syncedLyrics
+    val visiblePlainLyrics = if (showTranslatedLyrics) {
+        cachedTranslation?.translatedText ?: plainLyrics
+    } else {
+        plainLyrics
+    }
+
     var visualizerCaptureRequested by remember(audioService) { mutableStateOf(false) }
     val visualizerPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -1506,7 +1651,7 @@ fun FullPlayer(
                 showSyncedLyricsInPlayer &&
                 !isLandscapeWindow &&
                 !isLyricsModeEnabled &&
-                !syncedLyrics.isNullOrEmpty()
+                !visibleSyncedLyrics.isNullOrEmpty()
             ) {
                 Box(
                     modifier = Modifier
@@ -1519,7 +1664,7 @@ fun FullPlayer(
                     contentAlignment = Alignment.Center
                 ) {
                     PortraitSyncedLyricPreview(
-                        lyrics = syncedLyrics,
+                        lyrics = visibleSyncedLyrics.orEmpty(),
                         currentSong = uiState.currentSong,
                         currentPositionProvider = currentPositionProvider,
                         isPlaying = uiState.isPlaying,
@@ -1537,6 +1682,21 @@ fun FullPlayer(
                             }
                         }
                     )
+                    IconButton(
+                        onClick = { if (!translationBusy) requestLyricsTranslation() },
+                        modifier = Modifier.align(Alignment.TopEnd).size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Translate,
+                            contentDescription = if (showTranslatedLyrics) {
+                                "Show original lyrics"
+                            } else {
+                                "Translate lyrics"
+                            },
+                            tint = if (showTranslatedLyrics) lyricsAccentColor else contentSecondary,
+                            modifier = Modifier.size(21.dp)
+                        )
+                    }
                 }
             } else {
                 Spacer(
@@ -1969,8 +2129,16 @@ fun FullPlayer(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     content = playerControlsContent
                 )
-                // Keep the landscape right pane intentionally empty.
-                Spacer(Modifier.weight(0.46f).fillMaxHeight())
+                LandscapeLyricsOpener(
+                    modifier = Modifier.weight(0.46f).fillMaxHeight(),
+                    contentColor = contentColor,
+                    secondaryColor = contentSecondary,
+                    accentColor = lyricsAccentColor,
+                    onClick = {
+                        viewModel.setQueueExpanded(false)
+                        showPlainLyricsPage = true
+                    }
+                )
             }
         } else {
             Column(
@@ -1987,8 +2155,8 @@ fun FullPlayer(
         if (showPlainLyricsPage) {
             PlainLyricsPage(
                 currentSong = uiState.currentSong,
-                syncedLyrics = syncedLyrics,
-                plainLyrics = plainLyrics,
+                syncedLyrics = visibleSyncedLyrics,
+                plainLyrics = visiblePlainLyrics,
                 isLoading = isLyricsLoading,
                 lyricsError = lyricsError,
                 backgroundBrush = lyricsBackgroundBrush,
@@ -1996,6 +2164,10 @@ fun FullPlayer(
                 secondaryColor = lyricsSecondaryColor,
                 accentColor = lyricsAccentColor,
                         lyricsColorStyle = lyricsColorStyle,
+                showTranslatedLyrics = showTranslatedLyrics,
+                isTranslating = translationBusy,
+                translationMessage = translationMessage,
+                onTranslateLyrics = requestLyricsTranslation,
                 providerResults = providerResults,
                 selectedProvider = selectedProvider,
                 onProviderSelected = onProviderSelected,
