@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -121,6 +122,7 @@ private fun SyncedLyricsPageContent(
     isPlaying: Boolean,
     contentColor: Color,
     lyricsColorStyle: String,
+    lyricsFontFamily: String,
     onSeekTo: (Int) -> Unit
 ) {
     var preparedPageLyrics by remember(lyrics) {
@@ -301,6 +303,11 @@ private fun SyncedLyricsPageContent(
             val lineTextStyle = DsmusicTheme.typography.bodyLarge.copy(
                 fontSize = 44.sp,
                 lineHeight = 58.sp,
+                fontFamily = when (lyricsFontFamily) {
+                    "Serif" -> FontFamily.Serif
+                    "Mono" -> FontFamily.Monospace
+                    else -> FontFamily.SansSerif
+                },
                 fontWeight = FontWeight.ExtraBold
             )
             Column(
@@ -404,6 +411,7 @@ internal fun PlainLyricsPage(
     secondaryColor: Color,
     accentColor: Color,
     lyricsColorStyle: String,
+    lyricsFontFamily: String = "Sans",
     showTranslatedLyrics: Boolean,
     isTranslating: Boolean,
     translationMessage: String,
@@ -463,24 +471,11 @@ internal fun PlainLyricsPage(
     ) {
         val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
         DisposableEffect(dialogWindow) {
-            if (dialogWindow != null) {
-                dialogWindow.setLayout(
-                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
-                    android.view.WindowManager.LayoutParams.MATCH_PARENT
-                )
-                WindowCompat.setDecorFitsSystemWindows(dialogWindow, false)
-                WindowInsetsControllerCompat(dialogWindow, dialogWindow.decorView).apply {
-                    systemBarsBehavior =
-                        WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    hide(WindowInsetsCompat.Type.systemBars())
-                }
-            }
-            onDispose {
-                if (dialogWindow != null) {
-                    WindowInsetsControllerCompat(dialogWindow, dialogWindow.decorView)
-                        .show(WindowInsetsCompat.Type.systemBars())
-                }
-            }
+            dialogWindow?.setLayout(
+                android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                android.view.WindowManager.LayoutParams.MATCH_PARENT
+            )
+            onDispose { }
         }
 
         Box(
@@ -518,7 +513,7 @@ internal fun PlainLyricsPage(
                             color = contentColor,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.4.sp,
-                            style = DsmusicTheme.typography.titleMedium
+                            style = DsmusicTheme.typography.titleMedium.copy(fontSize = 10.sp)
                         )
                         Text(
                             text = "PLAIN TEXT",
@@ -565,7 +560,7 @@ internal fun PlainLyricsPage(
                     Text(
                         text = currentSong?.title?.takeIf { it.isNotBlank() } ?: "Unknown track",
                         color = contentColor,
-                        style = DsmusicTheme.typography.titleLarge,
+                        style = DsmusicTheme.typography.titleLarge.copy(fontSize = 11.sp, lineHeight = 14.sp),
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -573,7 +568,7 @@ internal fun PlainLyricsPage(
                     Text(
                         text = currentSong?.artist?.takeIf { it.isNotBlank() } ?: "Unknown artist",
                         color = secondaryColor,
-                        style = DsmusicTheme.typography.bodyMedium,
+                        style = DsmusicTheme.typography.bodyMedium.copy(fontSize = 10.sp, lineHeight = 12.sp),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -621,6 +616,7 @@ internal fun PlainLyricsPage(
                         isPlaying = isPlaying,
                         contentColor = contentColor,
                         lyricsColorStyle = lyricsColorStyle,
+                        lyricsFontFamily = lyricsFontFamily,
                         onSeekTo = onSeekTo
                     )
                 } else if (displayLines.isNotEmpty()) {
@@ -653,6 +649,11 @@ internal fun PlainLyricsPage(
                                     style = DsmusicTheme.typography.bodyLarge.copy(
                                         fontSize = 44.sp,
                                         lineHeight = 58.sp,
+                                        fontFamily = when (lyricsFontFamily) {
+                                            "Serif" -> FontFamily.Serif
+                                            "Mono" -> FontFamily.Monospace
+                                            else -> FontFamily.SansSerif
+                                        },
                                         fontWeight = FontWeight.ExtraBold,
                                         brush = if (lyricsColorStyle == "Home Studio Gradient") {
                                             dsmusicHomeStudioGradientBrush()
@@ -792,6 +793,12 @@ internal fun PlainLyricsSideView(
     secondaryColor: Color,
     accentColor: Color,
     lyricsColorStyle: String,
+    lyricsFontFamily: String,
+    currentPositionProvider: () -> Int,
+    playbackSpeedProvider: () -> Float,
+    isPlaying: Boolean,
+    onSeekTo: (Int) -> Unit,
+    onZoom: () -> Unit,
     providerResults: Map<String, LyricsResult>,
     selectedProvider: String?,
     onProviderSelected: (String) -> Unit,
@@ -801,6 +808,11 @@ internal fun PlainLyricsSideView(
     var showProviderPicker by remember { mutableStateOf(false) }
     var displayLines by remember(currentSong?.id) { mutableStateOf<List<String>>(emptyList()) }
     var prepared by remember(currentSong?.id) { mutableStateOf(false) }
+    val activeResult = selectedProvider?.let { providerResults[it] }
+        ?: providerResults.values.firstOrNull { it.hasLyrics() }
+    val sourceLabel = activeResult?.providerName?.takeIf { it.isNotBlank() }
+        ?: selectedProvider?.takeIf { it.isNotBlank() }
+        ?: "Choose lyrics source"
 
     LaunchedEffect(plainLyrics, syncedLyrics) {
         val nextLines = withContext(Dispatchers.Default) {
@@ -827,32 +839,64 @@ internal fun PlainLyricsSideView(
                     color = contentColor,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.2.sp,
-                    style = DsmusicTheme.typography.titleSmall
+                    style = DsmusicTheme.typography.titleSmall.copy(fontSize = 10.sp)
                 )
                 Text(
                     text = currentSong?.title ?: "Plain text",
                     color = secondaryColor,
-                    style = DsmusicTheme.typography.labelSmall,
+                    style = DsmusicTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            IconButton(onClick = { showProviderPicker = true }, modifier = Modifier.size(42.dp)) {
+            IconButton(onClick = onZoom, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = Icons.Rounded.Fullscreen,
+                    contentDescription = "Expand lyrics",
+                    tint = accentColor,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            IconButton(onClick = { showProviderPicker = true }, modifier = Modifier.size(36.dp)) {
                 Icon(
                     imageVector = Icons.Rounded.MoreVert,
                     contentDescription = "Choose lyrics provider",
                     tint = contentColor,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
-        Text(
-            text = selectedProvider ?: "Choose lyrics source",
-            color = accentColor,
-            style = DsmusicTheme.typography.labelSmall,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = sourceLabel,
+                color = accentColor,
+                style = DsmusicTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                onClick = { showProviderPicker = true },
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text("Change source", color = accentColor, style = DsmusicTheme.typography.labelSmall.copy(fontSize = 10.sp))
+            }
+        }
         when {
+            !syncedLyrics.isNullOrEmpty() -> SyncedLyricsPageContent(
+                lyrics = syncedLyrics,
+                currentSong = currentSong,
+                currentPositionProvider = currentPositionProvider,
+                playbackSpeedProvider = playbackSpeedProvider,
+                isPlaying = isPlaying,
+                contentColor = contentColor,
+                lyricsColorStyle = lyricsColorStyle,
+                lyricsFontFamily = lyricsFontFamily,
+                onSeekTo = onSeekTo
+            )
             displayLines.isNotEmpty() -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 20.dp),
@@ -864,8 +908,13 @@ internal fun PlainLyricsSideView(
                             text = line,
                             color = if (lyricsColorStyle == "Home Studio Gradient") Color.Unspecified else contentColor,
                             style = DsmusicTheme.typography.bodyLarge.copy(
-                                fontSize = 44.sp,
-                                lineHeight = 58.sp,
+                                fontSize = 22.sp,
+                                lineHeight = 29.sp,
+                                fontFamily = when (lyricsFontFamily) {
+                                    "Serif" -> FontFamily.Serif
+                                    "Mono" -> FontFamily.Monospace
+                                    else -> FontFamily.SansSerif
+                                },
                                 fontWeight = FontWeight.ExtraBold,
                                 brush = if (lyricsColorStyle == "Home Studio Gradient") {
                                     dsmusicHomeStudioGradientBrush()
