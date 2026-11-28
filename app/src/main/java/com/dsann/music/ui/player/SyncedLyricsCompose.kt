@@ -219,9 +219,9 @@ internal fun SyncedLyricsCompose(
     }
     val isLandscape = LocalConfiguration.current.orientation ==
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
-    // Cached direct drawing is the normal renderer on every device. Compact landscape
-    // callers may explicitly request the simpler static text presentation.
-    val useLowCostLyricsRendering = forceLowCostRendering
+    // Compact landscape callers and devices with constrained graphics/memory
+    // use the same timed renderer with simpler paint: no glyph outline or glow layer.
+    // This deliberately keeps karaoke word timing and the visible sweep intact.
 
     val currentView = LocalView.current
     DisposableEffect(currentView) {
@@ -271,8 +271,13 @@ internal fun SyncedLyricsCompose(
                 .getOrDefault(true)
         }
     }
-    val karaokeFrameRateCeiling =
-        if (forceLowCostRendering || isConstrainedLyricsDevice) 30 else null
+    // The capability probe defaults conservatively to the low-cost path until it
+    // completes. Do not just cap frame updates: route constrained devices away from
+    // the more expensive outlined/glowing glyph renderer as well.
+    val useLowCostLyricsRendering = forceLowCostRendering || isConstrainedLyricsDevice
+    // Keep every device at or below 60 FPS; constrained devices stay at 30 FPS.
+    // The user's lower frame-rate preference always takes precedence.
+    val karaokeFrameRateCeiling = if (useLowCostLyricsRendering) 30 else 60
     val karaokeFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
         active = isPlaying && isKaraokeMode,
         maximumFrameRate = karaokeFrameRateCeiling
@@ -280,9 +285,10 @@ internal fun SyncedLyricsCompose(
 
     SideEffect {
         CrashDiagnostics.updateLyricsRendering(
-            "Synced lyrics; renderer=${if (forceLowCostRendering) "compact panel text-only" else "cached TextLayoutResult + direct drawText"}; " +
+            "Synced lyrics; renderer=${if (useLowCostLyricsRendering) "cached timed sweep, low-cost paint (no glyph outline/glow)" else "cached TextLayoutResult + direct drawText + premium paint"}; " +
                 "prepared=$isLyricsPrepared; lines=${lyrics.size}; karaoke=$isKaraokeMode; " +
-                "playing=$isPlaying; frameCap=${karaokeFrameRateCeiling?.let { "$it FPS" } ?: "user/device setting"}"
+                "playing=$isPlaying; constrained=$isConstrainedLyricsDevice; " +
+                "frameCap=$karaokeFrameRateCeiling FPS"
         )
     }
 
