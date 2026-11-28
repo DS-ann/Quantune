@@ -656,7 +656,8 @@ private fun LyricLineItem(
             }
         }
         val lowCostColor = when (lyricsColorStyle) {
-            "White", "UI Matching", "Home Studio Gradient" -> Color.White
+            "UI Matching" -> accentColor
+            "White", "Home Studio Gradient" -> Color.White
             else -> contentColor
         }
         val lowCostHighlightBrush = if (lyricsColorStyle == "Home Studio Gradient") {
@@ -821,7 +822,8 @@ private fun LyricLineItem(
         dsmusicHomeStudioGradientBrush()
     } else null
     val renderedColor = when (lyricsColorStyle) {
-        "White", "UI Matching", "Home Studio Gradient" -> Color.White
+        "UI Matching" -> accentColor
+        "White", "Home Studio Gradient" -> Color.White
         else -> contentColor
     }
     // Match the previous layer opacity directly in the text paint.
