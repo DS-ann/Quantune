@@ -708,7 +708,7 @@ internal fun PlainLyricsPage(
                                 Text(
                                     text = line,
                                     color = when (lyricsColorStyle) {
-                                    "Home Studio Gradient" -> Color.Unspecified
+                                    "Home Studio Gradient" -> Color.White.copy(alpha = 0.22f)
                                     "White", "UI Matching" -> Color.White
                                     else -> contentColor
                                 },
@@ -721,9 +721,7 @@ internal fun PlainLyricsPage(
                                             else -> GoogleSansFlexNonRounded
                                         },
                                         fontWeight = FontWeight.ExtraBold,
-                                        brush = if (lyricsColorStyle == "Home Studio Gradient") {
-                                            dsmusicHomeStudioGradientBrush()
-                                        } else null,
+                                        brush = null,
                                         platformStyle = androidx.compose.ui.text.PlatformTextStyle(
                                             includeFontPadding = false
                                         )
@@ -973,7 +971,7 @@ internal fun PlainLyricsSideView(
                         Text(
                             text = line,
                             color = when (lyricsColorStyle) {
-                                "Home Studio Gradient" -> Color.Unspecified
+                                "Home Studio Gradient" -> Color.White.copy(alpha = 0.22f)
                                 "White", "UI Matching" -> Color.White
                                 else -> contentColor
                             },
@@ -986,9 +984,7 @@ internal fun PlainLyricsSideView(
                                     else -> GoogleSansFlexNonRounded
                                 },
                                 fontWeight = FontWeight.ExtraBold,
-                                brush = if (lyricsColorStyle == "Home Studio Gradient") {
-                                    dsmusicHomeStudioGradientBrush()
-                                } else null,
+                                brush = null,
                                 platformStyle = androidx.compose.ui.text.PlatformTextStyle(
                                     includeFontPadding = false
                                 )
