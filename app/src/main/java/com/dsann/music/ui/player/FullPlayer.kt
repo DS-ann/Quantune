@@ -390,7 +390,6 @@ private fun PortraitSyncedLyricPreview(
 @Composable
 private fun LandscapePlayerDetailsPane(
     modifier: Modifier = Modifier,
-    onOpenFullScreenLyrics: () -> Unit,
     syncedLyrics: List<LyricLine>?,
     plainLyrics: String?,
     isLyricsLoading: Boolean,
@@ -1615,10 +1614,13 @@ fun FullPlayer(
                             style = playerButtonStyle,
                             icon = painterResource(id = R.drawable.ic_lyrics),
                             label = "Lyrics",
-                            isSelected = showPlainLyricsPage,
+                            isSelected = showPlainLyricsPage ||
+                                (useWidePlayer && isLandscapeWindow && isPlayerVisible),
                             onClick = {
                                 viewModel.setQueueExpanded(false)
-                                showPlainLyricsPage = true
+                                if (!useWidePlayer || !isLandscapeWindow) {
+                                    showPlainLyricsPage = true
+                                }
                             },
                             contentColor = contentColor,
                             accentColor = dynamicAccentColor,
