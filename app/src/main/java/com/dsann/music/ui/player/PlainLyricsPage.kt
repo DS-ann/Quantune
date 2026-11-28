@@ -327,7 +327,7 @@ private fun SyncedLyricsPageContent(
                         positionState = positionState,
                         preparedSpans = prepared.mainWordSpans,
                         style = lineTextStyle,
-                        baseColor = contentColor.copy(alpha = 0.36f),
+                        baseColor = contentColor.copy(alpha = 0.22f),
                         highlightBrush = highlightBrush,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -362,7 +362,7 @@ private fun SyncedLyricsPageContent(
                             positionState = positionState,
                             preparedSpans = prepared.backgroundWordSpans,
                             style = backgroundStyle,
-                            baseColor = contentColor.copy(alpha = 0.28f),
+                            baseColor = contentColor.copy(alpha = 0.18f),
                             highlightBrush = highlightBrush,
                             modifier = Modifier.fillMaxWidth()
                         )
