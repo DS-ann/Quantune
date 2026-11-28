@@ -159,10 +159,31 @@ internal fun buildLyricsScrollBoundaries(lines: List<LyricLine>): LyricsScrollBo
     for (index in completionTimes.indices) {
         val currentLine = lines[lyricIndices[index]]
         val nextLine = lines[lyricIndices[index + 1]]
-        val finalWordEnd = currentLine.words
-            .maxOfOrNull { it.absoluteStartTimeMs + it.durationMs }
+        val finalWordEnd = currentLine.takeIf { it.isWordByWord && it.words.isNotEmpty() }
+            ?.words
+            ?.asSequence()
+            ?.filter { it.durationMs > 0L }
+            ?.map { it.absoluteStartTimeMs + it.durationMs }
+            ?.maxOrNull()
             ?.takeIf { it > 0L }
-        val completionTime = finalWordEnd ?: nextLine.startTimeMs
+        val nextStart = if (nextLine.isWordByWord && nextLine.words.isNotEmpty()) {
+            nextLine.words.minOfOrNull { it.absoluteStartTimeMs } ?: nextLine.startTimeMs
+        } else {
+            nextLine.startTimeMs
+        }
+        // Word-timed lines begin scrolling as soon as their final word ends. Ordinary
+        // line-synced sources have no explicit end; reserve the last third of the
+        // inter-line interval (up to 500 ms) for a timed transition.
+        val interval = (nextStart - currentLine.startTimeMs).coerceAtLeast(0L)
+        val inferredLeadWindow = minOf(
+            interval,
+            (interval / 3L).coerceAtLeast(1L).coerceAtMost(500L)
+        )
+        val completionTime = if (finalWordEnd != null && finalWordEnd < nextStart) {
+            finalWordEnd
+        } else {
+            (nextStart - inferredLeadWindow).coerceAtLeast(currentLine.startTimeMs)
+        }
         greatestCompletionTime = maxOf(greatestCompletionTime, completionTime)
         completionTimes[index] = greatestCompletionTime
     }
@@ -226,7 +247,7 @@ internal fun SyncedLyricsCompose(
     lyricsAlignment: String,
     lyricsFontFamily: String,
     gradientFontBorderWidth: Dp = 1.dp,
-    centerLineLyrics: Boolean = false,
+    centerLineLyrics: Boolean = true,
     forceLowCostRendering: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -464,26 +485,24 @@ internal fun SyncedLyricsCompose(
                 .firstOrNull { !displayItems[it].line.isInterlude }
             val previousLine = previousLineIndex?.let { displayItems[it].line }
             val nextLine = displayItems[scrollTargetIndex].line
-            val lastWordEndMs = previousLine?.words
-                ?.maxOfOrNull { it.absoluteStartTimeMs + it.durationMs }
-            val nextFirstWordStartMs = nextLine.words
-                .minOfOrNull { it.absoluteStartTimeMs }
-                ?: nextLine.startTimeMs
-
-            val gapMs = lastWordEndMs?.let {
-                (nextFirstWordStartMs - it).coerceAtLeast(0L)
-            } ?: 0L
+            val nextFirstWordStartMs = if (nextLine.isWordByWord && nextLine.words.isNotEmpty()) {
+                nextLine.words.minOfOrNull { it.absoluteStartTimeMs } ?: nextLine.startTimeMs
+            } else {
+                nextLine.startTimeMs
+            }
             val playbackPositionMs = lyricClock.intValue.toLong()
-            val remainingGapMs = (nextFirstWordStartMs - playbackPositionMs).coerceAtLeast(0L)
+            val remainingUntilNextLineMs =
+                (nextFirstWordStartMs - playbackPositionMs).coerceAtLeast(0L)
             val playbackSpeed = playbackSpeedProvider()
                 .takeIf { it.isFinite() && it > 0f } ?: 1f
-            val scrollDurationMs = if (gapMs > 0L && remainingGapMs > 0L) {
-                (remainingGapMs.toDouble() / playbackSpeed.toDouble())
-                    .roundToInt()
-                    .coerceAtLeast(16)
+            // Finish 50 ms before the next line starts so that the newly highlighted
+            // line is already at the centre anchor when its first word begins.
+            val finishLeadMs = if (remainingUntilNextLineMs > 80L) 50L else 0L
+            val scrollDurationMs = if (remainingUntilNextLineMs > 0L) {
+                ((remainingUntilNextLineMs - finishLeadMs).coerceAtLeast(16L) /
+                    playbackSpeed).roundToInt().coerceIn(16, 1_200)
             } else {
-                // No timed gap exists (ordinary LRC or overlapping karaoke words).
-                140
+                16
             }
 
             performSmoothedScroll(
@@ -634,8 +653,7 @@ private fun LyricLineItem(
             }
         }
         val lowCostColor = when (lyricsColorStyle) {
-            "White" -> Color.White
-            "UI Matching" -> accentColor
+            "White", "UI Matching", "Home Studio Gradient" -> Color.White
             else -> contentColor
         }
         val lowCostHighlightBrush = if (lyricsColorStyle == "Home Studio Gradient") {
@@ -800,10 +818,7 @@ private fun LyricLineItem(
         dsmusicHomeStudioGradientBrush()
     } else null
     val renderedColor = when (lyricsColorStyle) {
-        "White" -> Color.White
-        // UI Matching uses the app accent for the active lyric line, so it remains
-        // visually distinct from the explicit pure-white mode on dark themes.
-        "UI Matching" -> accentColor
+        "White", "UI Matching", "Home Studio Gradient" -> Color.White
         else -> contentColor
     }
     // Match the previous layer opacity directly in the text paint.
