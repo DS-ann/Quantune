@@ -97,6 +97,7 @@ internal object CrashDiagnostics {
     @Volatile private var overlayScreenContext: String? = null
     @Volatile private var uiDiagnosticDetails: String = "Not available"
     @Volatile private var lyricsRenderingDetails: String = "Not available"
+    @Volatile private var lyricsPreparationDetails: String = "Not started"
 
     /** Called from the root Compose navigation host; contains labels only, never song data. */
     fun updateBaseScreen(screen: String) {
@@ -116,6 +117,11 @@ internal object CrashDiagnostics {
     /** Records the actual lyrics drawing path selected for this device. */
     fun updateLyricsRendering(details: String) {
         lyricsRenderingDetails = sanitizeDiagnosticValue(details)
+    }
+
+    /** Tracks whether synced lyric preprocessing started, completed, or was cancelled. */
+    fun updateLyricsPreparation(details: String) {
+        lyricsPreparationDetails = sanitizeDiagnosticValue(details)
     }
 
     fun recordLyricsDraw(durationNanos: Long) {
@@ -149,6 +155,7 @@ internal object CrashDiagnostics {
     }
 
     private fun resetLyricsMetrics() {
+        lyricsPreparationDetails = "Not started"
         lyricsDrawCount.set(0L); lyricsDrawTotalNanos.set(0L); lyricsDrawMaxNanos.set(0L)
         lyricsLastDrawElapsedNanos.set(0L); lyricsTextLayoutCount.set(0L)
         lyricsMaxTextLength.set(0); lyricsMaxLayoutLines.set(0)
@@ -565,6 +572,7 @@ internal object CrashDiagnostics {
         output.appendLine("UI context: ${currentScreenContext()}")
         output.appendLine("UI details: $uiDiagnosticDetails")
         output.appendLine("Lyrics rendering details: $lyricsRenderingDetails")
+        output.appendLine("Lyrics preparation: $lyricsPreparationDetails")
         output.appendLine("ANR watchdog details: $anrWatchdogDetails")
         output.appendLine("Device hardware: ${Build.HARDWARE}; board: ${Build.BOARD}; device code: ${Build.DEVICE}")
         if (Build.VERSION.SDK_INT >= 31) {
