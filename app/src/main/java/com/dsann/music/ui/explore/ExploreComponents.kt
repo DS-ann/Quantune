@@ -173,8 +173,8 @@ fun ShimmerModifier(
 
 @Composable
 fun Modifier.shimmerEffect(): Modifier {
-    // Cached/inactive tabs and low-RAM devices use a static skeleton. All visible
-    // Home-feed placeholders read the same frame state instead of starting one
+    // Cached/inactive tabs use a static skeleton. All visible Home-feed
+    // placeholders read the same frame state instead of starting one
     // withFrameNanos coroutine per placeholder.
     val staticShimmerColor = DsmusicTheme.colorScheme.surfaceContainerHigh
     val frameTimeNanos = LocalExploreShimmerFrameTime.current
@@ -264,14 +264,10 @@ fun AnimatedEqualizerBars(
  */
 @Composable
 fun HomeFeedSkeleton() {
-    val context = LocalContext.current
-    val isLowRamDevice = (
-        context.getSystemService(android.content.Context.ACTIVITY_SERVICE)
-            as? android.app.ActivityManager
-        )?.isLowRamDevice == true
+    // RAM classification does not disable the feed's shared shimmer animation.
+    // Keep the existing Android 6 compatibility fallback and inactive-tab pause.
     val animateShimmer = LocalRootTabActive.current &&
-        Build.VERSION.SDK_INT > Build.VERSION_CODES.M &&
-        !isLowRamDevice
+        Build.VERSION.SDK_INT > Build.VERSION_CODES.M
     // Share one bounded frame subscription across all visible skeleton tiles.
     val sharedShimmerFrameTime = rememberAppAnimationFrameTimeNanos(active = animateShimmer)
 
