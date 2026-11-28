@@ -165,7 +165,7 @@ internal fun SplitLikeDislikeChip(
                 text = displayLikesText,
                 style = DsmusicTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = if (compactPill) 10.sp else 12.sp,
+                fontSize = 12.sp,
                 color = if (isLiked) accentColor else contentColor.copy(alpha = 0.8f)
             )
         }
