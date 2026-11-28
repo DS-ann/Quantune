@@ -1,5 +1,7 @@
 package com.dsann.music.ui.player
 
+import com.dsann.music.CrashDiagnostics
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.Dispatchers
@@ -226,8 +228,7 @@ internal fun KaraokeSweepText(
     highlightBrush: Brush,
     modifier: Modifier = Modifier,
     maxLines: Int = Int.MAX_VALUE,
-    outlineWidthPx: Float = 0f,
-    highlightShadow: androidx.compose.ui.graphics.Shadow? = null
+    outlineWidthPx: Float = 0f
 ) {
     // Brush, shadow and color changes do not alter glyph geometry. Keep the measured
     // layout alive across paint-only recompositions; Text replaces it via onTextLayout
@@ -265,58 +266,66 @@ internal fun KaraokeSweepText(
             val cachedRows = layout?.let(sweptRows::rowsFor)
 
             onDrawWithContent {
-                if (layout == null || cachedRows.isNullOrEmpty()) {
-                    drawContent()
-                    return@onDrawWithContent
-                }
-
-                // Base pass: every glyph is drawn once in its unsung colour.
-                drawText(
-                    textLayoutResult = layout,
-                    color = baseColor,
-                    topLeft = Offset.Zero
-                )
-
-                // Word geometry may still be preparing on a worker. Keep the
-                // unsung line visible and begin the sweep as soon as its spans arrive.
-                val readySpans = spans ?: return@onDrawWithContent
-                val sungOffset = calculateSungTextOffset(
-                    spans = readySpans,
-                    positionMs = positionState.value.toLong()
-                )
-                if (sungOffset <= 0f) return@onDrawWithContent
-
-                val sungClip = sweptRows.clipFor(
-                    layout = layout,
-                    sungOffset = sungOffset,
-                    width = size.width
-                )
-                if (sungClip.isEmpty) return@onDrawWithContent
-
-                // Both the optional contour and the active fill use the same layout
-                // and prefix clip. They are direct Canvas text draws, not extra layers.
-                clipPath(sungClip) {
-                    if (outlineWidthPx > 0f) {
-                        drawText(
-                            textLayoutResult = layout,
-                            brush = SolidColor(Color.Black),
-                            topLeft = Offset.Zero,
-                            drawStyle = Stroke(width = outlineWidthPx)
-                        )
+                val drawStartedAt = System.nanoTime()
+                try {
+                    if (layout == null || cachedRows.isNullOrEmpty()) {
+                        drawContent()
+                        return@onDrawWithContent
                     }
+
+                    // Base pass: every glyph is drawn once in its unsung colour.
                     drawText(
                         textLayoutResult = layout,
-                        brush = highlightBrush,
-                        topLeft = Offset.Zero,
-                        alpha = 1f,
-                        shadow = highlightShadow
+                        color = baseColor,
+                        topLeft = Offset.Zero
                     )
+
+                    // Word geometry may still be preparing on a worker. Keep the
+                    // unsung line visible and begin the sweep as soon as its spans arrive.
+                    val readySpans = spans ?: return@onDrawWithContent
+                    val sungOffset = calculateSungTextOffset(
+                        spans = readySpans,
+                        positionMs = positionState.value.toLong()
+                    )
+                    if (sungOffset <= 0f) return@onDrawWithContent
+
+                    val sungClip = sweptRows.clipFor(
+                        layout = layout,
+                        sungOffset = sungOffset,
+                        width = size.width
+                    )
+                    if (sungClip.isEmpty) return@onDrawWithContent
+
+                    // The word sweep uses one cached layout and direct Canvas draws.
+                    // Avoid blurred shadow filters here: they trigger extra GPU work
+                    // on every frame even though the text geometry is unchanged.
+                    clipPath(sungClip) {
+                        if (outlineWidthPx > 0f) {
+                            drawText(
+                                textLayoutResult = layout,
+                                brush = SolidColor(Color.Black),
+                                topLeft = Offset.Zero,
+                                drawStyle = Stroke(width = outlineWidthPx)
+                            )
+                        }
+                        drawText(
+                            textLayoutResult = layout,
+                            brush = highlightBrush,
+                            topLeft = Offset.Zero,
+                            alpha = 1f
+                        )
+                    }
+                } finally {
+                    CrashDiagnostics.recordLyricsDraw(System.nanoTime() - drawStartedAt)
                 }
             }
         },
         maxLines = maxLines,
         softWrap = true,
         overflow = TextOverflow.Clip,
-        onTextLayout = { layoutState.value = it }
+        onTextLayout = {
+            layoutState.value = it
+            CrashDiagnostics.recordLyricsTextLayout(text.length, it.lineCount)
+        }
     )
 }
