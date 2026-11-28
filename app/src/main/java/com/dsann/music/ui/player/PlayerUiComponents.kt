@@ -364,9 +364,14 @@ internal fun WavySliderWithLabels(
             // Landscape and paused playback follow Media3 updates instead of forcing
             // a hardware redraw on every display vsync.
             var lastDisplayedSecond = Int.MIN_VALUE
+            var lastProgressUpdateMs = 0L
             currentPositionFlow.collect { position ->
                 val latest = position.coerceAtLeast(0)
-                sliderPositionMs = latest
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (now - lastProgressUpdateMs >= 250L) {
+                    lastProgressUpdateMs = now
+                    sliderPositionMs = latest
+                }
                 val displayedSecond = latest / 1000
                 if (displayedSecond != lastDisplayedSecond) {
                     lastDisplayedSecond = displayedSecond
