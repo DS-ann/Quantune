@@ -247,7 +247,7 @@ internal fun SyncedLyricsCompose(
     lyricsAlignment: String,
     lyricsFontFamily: String,
     gradientFontBorderWidth: Dp = 1.dp,
-    centerLineLyrics: Boolean = true,
+    centerLineLyrics: Boolean = false,
     forceLowCostRendering: Boolean = false,
     modifier: Modifier = Modifier
 ) {
