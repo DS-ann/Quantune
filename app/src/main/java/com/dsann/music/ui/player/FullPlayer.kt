@@ -2136,7 +2136,16 @@ fun FullPlayer(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     content = playerControlsContent
                 )
-                Spacer(modifier = Modifier.weight(0.46f).fillMaxHeight())
+                LandscapeLyricsOpener(
+                    modifier = Modifier.weight(0.46f).fillMaxHeight(),
+                    contentColor = contentColor,
+                    secondaryColor = contentSecondary,
+                    accentColor = lyricsAccentColor,
+                    onClick = {
+                        viewModel.setQueueExpanded(false)
+                        showPlainLyricsPage = true
+                    }
+                )
             }
         } else {
             Column(
