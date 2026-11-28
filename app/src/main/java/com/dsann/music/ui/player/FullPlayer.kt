@@ -889,7 +889,8 @@ fun FullPlayer(
         // Stop hidden overlays and pause frame-driven recompositions during rotation.
         active = isPlayerVisible && uiState.isPlaying &&
             !showFullScreenVisualizer && !isLyricsModeEnabled && !showPlainLyricsPage &&
-            !orientationTransitionActive
+            !orientationTransitionActive &&
+            windowOrientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
     )
     val artistOptions = remember(
         uiState.currentSong?.artistRefs,
