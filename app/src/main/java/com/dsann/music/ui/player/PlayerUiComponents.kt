@@ -87,7 +87,7 @@ internal fun formatDuration(ms: Long): String {
 
 internal fun bestProgressContrastColor(backgroundColor: Color): Color {
     val dark = Color(0xFF1C1B1F)
-    val backgroundArgb = backgroundColor.toArgb()
+    val backgroundArgb = backgroundColor.copy(alpha = 1f).toArgb()
     val darkContrast = androidx.core.graphics.ColorUtils.calculateContrast(
         dark.toArgb(),
         backgroundArgb
@@ -97,6 +97,95 @@ internal fun bestProgressContrastColor(backgroundColor: Color): Color {
         backgroundArgb
     )
     return if (darkContrast >= lightContrast) dark else Color.White
+}
+
+/**
+ * Preserve the chosen progress hue whenever it is readable. If it blends into the
+ * player surface, move it only as far as needed toward the higher-contrast neutral.
+ */
+internal fun ensureProgressContrastColor(
+    foregroundColor: Color,
+    backgroundColor: Color,
+    minimumContrast: Double = 3.0
+): Color {
+    val backgroundArgb = backgroundColor.copy(alpha = 1f).toArgb()
+    val source = foregroundColor.copy(alpha = 1f)
+    if (
+        androidx.core.graphics.ColorUtils.calculateContrast(
+            source.toArgb(),
+            backgroundArgb
+        ) >= minimumContrast
+    ) {
+        return source
+    }
+
+    val dark = Color(0xFF111111)
+    val light = Color.White
+    val darkContrast = androidx.core.graphics.ColorUtils.calculateContrast(
+        dark.toArgb(),
+        backgroundArgb
+    )
+    val lightContrast = androidx.core.graphics.ColorUtils.calculateContrast(
+        light.toArgb(),
+        backgroundArgb
+    )
+    val target = if (darkContrast >= lightContrast) dark else light
+
+    var low = 0f
+    var high = 1f
+    repeat(16) {
+        val fraction = (low + high) / 2f
+        val candidate = Color(
+            red = source.red + (target.red - source.red) * fraction,
+            green = source.green + (target.green - source.green) * fraction,
+            blue = source.blue + (target.blue - source.blue) * fraction,
+            alpha = 1f
+        )
+        if (
+            androidx.core.graphics.ColorUtils.calculateContrast(
+                candidate.toArgb(),
+                backgroundArgb
+            ) >= minimumContrast
+        ) {
+            high = fraction
+        } else {
+            low = fraction
+        }
+    }
+
+    return Color(
+        red = source.red + (target.red - source.red) * high,
+        green = source.green + (target.green - source.green) * high,
+        blue = source.blue + (target.blue - source.blue) * high,
+        alpha = 1f
+    )
+}
+
+/** Keep the unplayed part of the seek bar visible at a measured 3:1 contrast. */
+internal fun progressTrackContrastColor(
+    backgroundColor: Color,
+    minimumContrast: Double = 3.0
+): Color {
+    val backgroundArgb = backgroundColor.copy(alpha = 1f).toArgb()
+    val trackColor = bestProgressContrastColor(backgroundColor)
+
+    var low = 0f
+    var high = 1f
+    repeat(16) {
+        val alpha = (low + high) / 2f
+        val candidate = trackColor.copy(alpha = alpha)
+        if (
+            androidx.core.graphics.ColorUtils.calculateContrast(
+                candidate.toArgb(),
+                backgroundArgb
+            ) >= minimumContrast
+        ) {
+            high = alpha
+        } else {
+            low = alpha
+        }
+    }
+    return trackColor.copy(alpha = high)
 }
 
 internal fun deriveArtworkSurfaceColor(
@@ -425,17 +514,19 @@ internal fun WavySliderWithLabels(
             .fillMaxWidth()
             .padding(horizontal = 8.dp)
     ) {
-        val contrastTrackColor = bestProgressContrastColor(backgroundSurfaceColor)
+        val inactiveTrackColor = progressTrackContrastColor(backgroundSurfaceColor)
         val requestedActiveColor = when (scrubberColor) {
             "White" -> Color.White
             "Cover" -> coverDerivedColor
             else -> DsmusicTheme.colorScheme.primary
         }
-        // The Progress color setting is an explicit visual choice. Do not silently
-        // replace Accent or White with a neutral colour based on the current artwork.
-        // Keep the inactive track contrast-aware, while the active track and marker
-        // both use the exact selected colour.
-        val activeColor = requestedActiveColor
+        // Keep the selected accent/cover/white identity unless its contrast against
+        // this exact player surface is too low. In that case, preserve the hue while
+        // shifting only enough toward black or white to reach 3:1 contrast.
+        val activeColor = ensureProgressContrastColor(
+            foregroundColor = requestedActiveColor,
+            backgroundColor = backgroundSurfaceColor
+        )
         val thickness = when (scrubberStyle) {
             "Hairline" -> 2.dp
             "Bold" -> 6.dp
@@ -456,7 +547,7 @@ internal fun WavySliderWithLabels(
             },
             enabled = safeDur != null,
             activeTrackColor = activeColor,
-            inactiveTrackColor = contrastTrackColor.copy(alpha = 0.40f),
+            inactiveTrackColor = inactiveTrackColor,
             thumbColor = activeColor,
             isPlaying = isPlaying && isPlayerVisible,
             trackHeight = thickness,

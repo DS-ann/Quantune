@@ -1714,21 +1714,6 @@ fun FullPlayer(
                             }
                         }
                     )
-                    IconButton(
-                        onClick = { if (!translationBusy) requestLyricsTranslation() },
-                        modifier = Modifier.align(Alignment.TopEnd).size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Translate,
-                            contentDescription = if (showTranslatedLyrics) {
-                                "Show original lyrics"
-                            } else {
-                                "Translate lyrics"
-                            },
-                            tint = if (showTranslatedLyrics) lyricsAccentColor else contentSecondary,
-                            modifier = Modifier.size(21.dp)
-                        )
-                    }
                 }
             } else {
                 Spacer(
