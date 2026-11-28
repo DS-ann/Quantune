@@ -913,6 +913,11 @@ internal fun FullScreenLyricsOverlay(
                 contentColor = contentColor,
                 dynamicAccentColor = dynamicAccentColor,
                 lyricsColorStyle = lyricsColorStyle,
+                // Reuse the asynchronously loaded settings; don't read SharedPreferences
+                // synchronously from the first synced-lyrics composition.
+                lyricsTextSize = lyricsTextSize,
+                lyricsAlignment = lyricsAlignment,
+                lyricsFontFamily = lyricsFontFamilyChoice,
                 onRetryLyrics = onRetryLyrics,
                 onFetchLyrics = onFetchLyrics,
                 onSeekTo = onSeekTo,
