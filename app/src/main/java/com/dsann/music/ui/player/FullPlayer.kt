@@ -1036,7 +1036,7 @@ fun FullPlayer(
     val isShuffleEnabled by viewModel.isShuffleEnabled.collectAsStateWithLifecycle()
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
     val currentSongIndex by viewModel.currentSongIndex.collectAsStateWithLifecycle()
-    // Back dismisses the one shared queue first, then the fullscreen lyrics overlay.
+    // Back dismisses the plain-text page, then the queue, then live synced lyrics.
     BackHandler(enabled = showPlainLyricsPage || isLyricsModeEnabled || queueExpandedForUi) {
         when {
             showPlainLyricsPage -> showPlainLyricsPage = false
