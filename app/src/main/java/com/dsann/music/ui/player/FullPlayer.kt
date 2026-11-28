@@ -1285,8 +1285,11 @@ fun FullPlayer(
     ) {
         // Use the actual player window constraints, not the physical display metrics.
         // Split-screen/freeform windows can be much smaller than LocalConfiguration's device size.
-        val screenWidth = maxWidth
         val screenHeight = maxHeight
+        val isPhysicalLandscapeWindow = maxWidth > maxHeight
+        // In landscape, size every player calculation against the left half so the
+        // existing portrait composition keeps its original proportions.
+        val screenWidth = if (isPhysicalLandscapeWindow) maxWidth * 0.5f else maxWidth
         // The artwork preference scales only the floating cover layer. The reserved
         // artwork slot remains constant so title, slider and transport controls do not move.
         // Keep the reserved slot identical to the shared artwork layer in
@@ -1987,7 +1990,7 @@ fun FullPlayer(
                 scrubberThumbStyle = scrubberThumbStyle,
                 coverDerivedColor = Color(uiState.playerBackgroundColor),
                 backgroundSurfaceColor = playerProgressBackgroundColor,
-                reduceAnimationLoad = isLandscapeWindow
+                reduceAnimationLoad = isPhysicalLandscapeWindow
             )
 
             Spacer(modifier = Modifier.height(if (compactLandscape) 6.dp else 16.dp))
@@ -2119,7 +2122,27 @@ fun FullPlayer(
             Spacer(modifier = Modifier.weight(1f, fill = true))
         }
 
-        if (useWidePlayer && !isLandscapeWindow) {
+        if (isPhysicalLandscapeWindow) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.5f)
+                        .statusBarsPadding()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 20.dp)
+                        .padding(
+                            top = if (compactLandscape) 8.dp else 12.dp,
+                            bottom = if (compactLandscape) 0.dp else 12.dp
+                        )
+                        .clipToBounds(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    content = playerControlsContent
+                )
+                // Deliberately empty: no lyrics, queue, controls, or secondary pane.
+                Box(modifier = Modifier.weight(1f).fillMaxHeight())
+            }
+        } else if (useWidePlayer && !isLandscapeWindow) {
             Row(
                 modifier = Modifier
                     .fillMaxSize()
