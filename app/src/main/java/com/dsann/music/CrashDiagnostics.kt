@@ -587,8 +587,7 @@ internal object CrashDiagnostics {
         if (processMemoryAvailable) {
             output.appendLine(
                 "App process PSS: total=${processMemory.totalPss} KiB, dalvik=${processMemory.dalvikPss} KiB, " +
-                    "native=${processMemory.nativePss} KiB, other=${processMemory.otherPss} KiB, " +
-                    "graphics=${processMemory.graphicsPss} KiB"
+                    "native=${processMemory.nativePss} KiB, other=${processMemory.otherPss} KiB"
             )
         } else output.appendLine("App process PSS: unavailable")
         output.appendLine(
