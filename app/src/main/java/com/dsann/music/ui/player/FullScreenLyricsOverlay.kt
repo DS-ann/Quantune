@@ -71,6 +71,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
@@ -404,7 +405,17 @@ internal fun PlayerLyricsContent(
                                 text = lyricLine.ifEmpty { " " },
                                 style = plainLyricsStyle,
                                 color = plainLyricsColor,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth().drawWithContent {
+                                    val drawStartedAt = System.nanoTime()
+                                    try {
+                                        drawContent()
+                                    } finally {
+                                        CrashDiagnostics.recordLyricsDraw(System.nanoTime() - drawStartedAt)
+                                    }
+                                },
+                                onTextLayout = {
+                                    CrashDiagnostics.recordLyricsTextLayout(lyricLine.length, it.lineCount)
+                                }
                             )
                         }
                         item(key = "plain-lyrics-metadata-footer") {
