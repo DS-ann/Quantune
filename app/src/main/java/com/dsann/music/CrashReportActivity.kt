@@ -246,6 +246,26 @@ private fun DiagnosticReport.toCompactShareText(): String {
         appendLine("Device: " + field("Device"))
         val abi = field("ABI", "")
         if (abi.isNotBlank()) appendLine("ABI: " + abi)
+
+        // Keep the context needed to distinguish a UI workload from a native
+        // renderer/driver stall in reports shared from the app. The full on-device
+        // report already contains these fields; the compact export used to drop them.
+        listOf(
+            "Activity",
+            "UI context",
+            "UI details",
+            "Lyrics rendering details",
+            "Device hardware",
+            "System RAM",
+            "System low-RAM device flag",
+            "App Java heap",
+            "Process CPU time",
+            "Build fingerprint"
+        ).forEach { name ->
+            val value = field(name, "")
+            if (value.isNotBlank()) appendLine("$name: ${value.take(700)}")
+        }
+
         val thread = field("Thread", "")
         if (thread.isNotBlank()) appendLine("Thread: " + thread)
 
