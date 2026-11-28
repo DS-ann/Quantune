@@ -358,11 +358,7 @@ internal fun PlayerLyricsContent(
                     }
                     val plainLyricsScale = (configuredLyricsScale * viewportScale)
                         .coerceIn(0.48f, 1.18f)
-                    val plainLyricsBrush = if (lyricsColorStyle == "Home Studio Gradient") {
-                        dsmusicHomeStudioGradientBrush()
-                    } else {
-                        null
-                    }
+                    val plainLyricsBrush: Brush? = null
                     val plainLyricsStyle = DsmusicTheme.typography.headlineMedium.copy(
                         brush = plainLyricsBrush,
                         fontFamily = plainLyricsFontFamily,
@@ -373,7 +369,7 @@ internal fun PlayerLyricsContent(
                         textAlign = plainLyricsTextAlign
                     )
                     val plainLyricsColor = when (lyricsColorStyle) {
-                        "Home Studio Gradient" -> Color.Unspecified
+                        "Home Studio Gradient" -> Color.White.copy(alpha = 0.22f)
                         "White", "UI Matching" -> Color.White
                         else -> contentColor.copy(alpha = 0.9f)
                     }
