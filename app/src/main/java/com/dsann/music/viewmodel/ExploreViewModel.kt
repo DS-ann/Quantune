@@ -401,8 +401,8 @@ class ExploreViewModel(application: Application) : AndroidViewModel(application)
                         )
                     }
                     searchContinuation = searchResult.continuation
-                    // Only warm visible artwork and the first likely playback target. Larger prefetch
-                    // bursts compete with scrolling and playback on low-RAM/older Android devices.
+                    // Keep search-result prefetch bounded on every device: visible rows
+                    // load their own artwork, while the leading results warm the image cache.
                     prefetchThumbnails(uniqueItems.take(6))
                     uniqueItems
                         .filterIsInstance<SearchItem.Song>()
