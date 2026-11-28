@@ -398,8 +398,7 @@ internal fun PlainLyricsSideView(
         displayLines = withContext(Dispatchers.Default) {
             val source = plainLyrics?.takeIf { it.isNotBlank() }
                 ?: convertSyncedLyricsToPlainText(syncedLyrics.orEmpty())
-            source.replace("\\r\\n", "\\n").replace('\\r', '\\n')
-                .split('\\n').map { it.trimEnd() }
+            source.lineSequence().map { it.trimEnd() }.toList()
         }
         prepared = true
     }
