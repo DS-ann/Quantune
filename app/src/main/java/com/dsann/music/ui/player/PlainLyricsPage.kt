@@ -66,6 +66,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /**
@@ -92,6 +94,16 @@ internal fun convertSyncedLyricsToPlainText(lyrics: List<LyricLine>): String {
 }
 
 
+private data class PreparedSyncedPageLine(
+    val entry: LineSyncedLyricTimeline.Entry,
+    val mainWordSpans: List<KaraokeWordSpan>,
+    val backgroundWordSpans: List<KaraokeWordSpan>
+)
+
+private data class PreparedSyncedPageLyrics(
+    val lines: List<PreparedSyncedPageLine>
+)
+
 /**
  * Lightweight playback-synced lyrics surface for the standalone page.
  *
@@ -111,19 +123,48 @@ private fun SyncedLyricsPageContent(
     lyricsColorStyle: String,
     onSeekTo: (Int) -> Unit
 ) {
-    var preparedTimeline by remember(lyrics) {
-        mutableStateOf<List<LineSyncedLyricTimeline.Entry>?>(null)
+    var preparedPageLyrics by remember(lyrics) {
+        mutableStateOf<PreparedSyncedPageLyrics?>(null)
     }
     LaunchedEffect(lyrics) {
-        preparedTimeline = null
-        preparedTimeline = withContext(Dispatchers.Default) {
-            LineSyncedLyricTimeline.build(lyrics)
+        preparedPageLyrics = null
+        val preparationContext = currentCoroutineContext()
+        preparedPageLyrics = withContext(Dispatchers.Default) {
+            val entries = LineSyncedLyricTimeline.build(lyrics)
+            val preparedLines = ArrayList<PreparedSyncedPageLine>(entries.size)
+            entries.forEach { entry ->
+                preparationContext.ensureActive()
+                val line = entry.line
+                val mainSpans = if (line.isWordByWord && line.words.isNotEmpty()) {
+                    buildKaraokeWordSpans(line.content, line.words, 0) {
+                        preparationContext.ensureActive()
+                    }
+                } else {
+                    emptyList()
+                }
+                val backgroundSpans = if (
+                    !line.backgroundContent.isNullOrBlank() && line.backgroundWords.isNotEmpty()
+                ) {
+                    buildKaraokeWordSpans(line.backgroundContent, line.backgroundWords, 0) {
+                        preparationContext.ensureActive()
+                    }
+                } else {
+                    emptyList()
+                }
+                preparedLines += PreparedSyncedPageLine(
+                    entry = entry,
+                    mainWordSpans = mainSpans,
+                    backgroundWordSpans = backgroundSpans
+                )
+            }
+            PreparedSyncedPageLyrics(preparedLines)
         }
     }
 
-    val timeline = preparedTimeline.orEmpty()
-    val hasKaraoke = remember(timeline) {
-        timeline.any { it.line.isWordByWord && it.line.words.isNotEmpty() }
+    val preparedLines = preparedPageLyrics?.lines.orEmpty()
+    val timeline = remember(preparedLines) { preparedLines.map { it.entry } }
+    val hasKaraoke = remember(preparedLines) {
+        preparedLines.any { it.mainWordSpans.isNotEmpty() }
     }
     val trackKey = currentSong?.videoId?.takeIf { it.isNotBlank() }
         ?: currentSong?.path?.takeIf { it.isNotBlank() }
@@ -144,7 +185,7 @@ private fun SyncedLyricsPageContent(
         currentPositionProvider,
         playbackSpeedProvider
     ) {
-        if (preparedTimeline == null) return@LaunchedEffect
+        if (preparedPageLyrics == null) return@LaunchedEffect
         val initialPosition = currentPositionProvider().coerceAtLeast(0)
         playbackClock.reset(initialPosition)
         positionState.intValue = initialPosition
@@ -249,9 +290,10 @@ private fun SyncedLyricsPageContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         itemsIndexed(
-            items = timeline,
-            key = { index, entry -> "synced-page-${entry.line.startTimeMs}-$index" }
-        ) { index, entry ->
+            items = preparedLines,
+            key = { index, prepared -> "synced-page-${prepared.entry.line.startTimeMs}-$index" }
+        ) { index, prepared ->
+            val entry = prepared.entry
             val line = entry.line
             val active = index == activeIndex
             val lineTextStyle = DsmusicTheme.typography.bodyLarge.copy(
@@ -281,6 +323,7 @@ private fun SyncedLyricsPageContent(
                         words = line.words,
                         wordOffset = 0,
                         positionState = positionState,
+                        preparedSpans = prepared.mainWordSpans,
                         style = lineTextStyle,
                         baseColor = contentColor.copy(alpha = 0.36f),
                         highlightBrush = highlightBrush,
@@ -315,6 +358,7 @@ private fun SyncedLyricsPageContent(
                             words = line.backgroundWords,
                             wordOffset = 0,
                             positionState = positionState,
+                            preparedSpans = prepared.backgroundWordSpans,
                             style = backgroundStyle,
                             baseColor = contentColor.copy(alpha = 0.28f),
                             highlightBrush = highlightBrush,
