@@ -2,6 +2,7 @@ package com.dsann.music.ui.player
 
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -255,9 +256,7 @@ private fun SyncedLyricsPageContent(
                         val interval = (nextStart - entry.startTimeMs).coerceAtLeast(0L)
                         val leadWindow = minOf(
                             interval,
-                            500L.coerceAtLeast(120L).coerceAtMost(
-                                (interval / 3L).coerceAtLeast(1L)
-                            )
+                            (interval / 3L).coerceIn(120L, 500L)
                         )
                         (nextStart - leadWindow).coerceAtLeast(entry.startTimeMs)
                     }
@@ -708,7 +707,11 @@ internal fun PlainLyricsPage(
                             } else {
                                 Text(
                                     text = line,
-                                    color = if (lyricsColorStyle == "Home Studio Gradient") Color.Unspecified else contentColor,
+                                    color = when (lyricsColorStyle) {
+                                    "Home Studio Gradient" -> Color.Unspecified
+                                    "White", "UI Matching" -> Color.White
+                                    else -> contentColor
+                                },
                                     style = DsmusicTheme.typography.bodyLarge.copy(
                                         fontSize = 44.sp,
                                         lineHeight = 58.sp,
@@ -969,7 +972,11 @@ internal fun PlainLyricsSideView(
                     if (line.isNotBlank()) {
                         Text(
                             text = line,
-                            color = if (lyricsColorStyle == "Home Studio Gradient") Color.Unspecified else contentColor,
+                            color = when (lyricsColorStyle) {
+                                "Home Studio Gradient" -> Color.Unspecified
+                                "White", "UI Matching" -> Color.White
+                                else -> contentColor
+                            },
                             style = DsmusicTheme.typography.bodyLarge.copy(
                                 fontSize = 22.sp,
                                 lineHeight = 29.sp,
@@ -1034,6 +1041,7 @@ internal fun PlainLyricsSideView(
  * animate only the measured correction distance; initial placement and large
  * seeks re-anchor immediately to avoid long off-screen animations.
  */
+@OptIn(ExperimentalFoundationApi::class)
 private suspend fun scrollLyricLineToCenter(
     listState: androidx.compose.foundation.lazy.LazyListState,
     index: Int,
@@ -1051,7 +1059,9 @@ private suspend fun scrollLyricLineToCenter(
     var item = layout.visibleItemsInfo.firstOrNull { it.index == index }
     if (item == null) {
         // This is normally only reached for the initial mid-song placement or a seek.
-        listState.scrollToItem(index)
+        val viewportCenter = (layout.viewportStartOffset + layout.viewportEndOffset) / 2f
+        val initialOffset = -(viewportCenter - estimatedItemHalfHeightPx).roundToInt()
+        listState.scrollToItem(index, scrollOffset = initialOffset)
         withFrameNanos { }
         layout = listState.layoutInfo
         item = layout.visibleItemsInfo.firstOrNull { it.index == index } ?: return
