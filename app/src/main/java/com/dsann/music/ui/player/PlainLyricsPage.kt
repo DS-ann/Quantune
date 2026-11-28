@@ -104,7 +104,7 @@ internal fun PlainLyricsPage(
     var displayLines by remember { mutableStateOf<List<String>>(emptyList()) }
     var hasPreparedContent by remember { mutableStateOf(false) }
 
-    LaunchedEffect(plainLyrics, syncedLyrics) {
+    LaunchedEffect(currentSong?.id, plainLyrics, syncedLyrics) {
         hasPreparedContent = false
         displayLines = withContext(Dispatchers.Default) {
             val source = plainLyrics?.takeIf { it.isNotBlank() }
