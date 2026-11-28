@@ -1595,7 +1595,11 @@ fun FullPlayer(
                 val isDownloading = realDownloadProgress != null ||
                     com.dsann.music.util.SongDownloader.isDownloading(songForActions?.videoId)
 
+                // Treat the legacy "lyrics" action as an alias of the new plain-lyrics
+                // action, then deduplicate saved layouts that contain both keys.
                 val orderedButtons = playerButtons
+                    .map { action -> if (action == "lyrics") "plain_lyrics" else action }
+                    .distinct()
                 // Video is a playback-mode control. Keep it visible while video is active,
                 // even when it is outside the user-selected action order.
                 val showVideoSwitch = isVideoMode || !songForActions?.videoId.isNullOrBlank()
@@ -1625,19 +1629,6 @@ fun FullPlayer(
                             contentColor = contentColor,
                             accentColor = dynamicAccentColor,
                             isDark = isDark
-                        )
-                        "lyrics" -> PillChip(
-                            style = playerButtonStyle,
-                            icon = painterResource(id = R.drawable.ic_lyrics),
-                            label = "Lyrics",
-                            isSelected = showPlainLyricsPage,
-                            onClick = {
-                                viewModel.setQueueExpanded(false)
-                                showPlainLyricsPage = true
-                            },
-                            contentColor = contentColor,
-                            accentColor = dynamicAccentColor,
-                            isDark = isDark,
                         )
                         "video" -> if (showVideoSwitch) {
                             PillChip(
