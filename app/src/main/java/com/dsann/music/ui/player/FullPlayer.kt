@@ -2163,7 +2163,7 @@ fun FullPlayer(
                 contentColor = lyricsTextColor,
                 secondaryColor = lyricsSecondaryColor,
                 accentColor = lyricsAccentColor,
-                        lyricsColorStyle = lyricsColorStyle,
+                lyricsColorStyle = lyricsColorStyle,
                 showTranslatedLyrics = showTranslatedLyrics,
                 isTranslating = translationBusy,
                 translationMessage = translationMessage,
