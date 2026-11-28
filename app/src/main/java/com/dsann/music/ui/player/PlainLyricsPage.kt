@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -94,6 +96,10 @@ internal fun PlainLyricsPage(
     secondaryColor: Color,
     accentColor: Color,
     lyricsColorStyle: String,
+    showTranslatedLyrics: Boolean,
+    isTranslating: Boolean,
+    translationMessage: String,
+    onTranslateLyrics: () -> Unit,
     providerResults: Map<String, LyricsResult>,
     selectedProvider: String?,
     onProviderSelected: (String) -> Unit,
@@ -200,6 +206,17 @@ internal fun PlainLyricsPage(
                         )
                     }
                     IconButton(
+                        onClick = { if (!isTranslating) onTranslateLyrics() },
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Translate,
+                            contentDescription = if (showTranslatedLyrics) "Show original lyrics" else "Translate lyrics",
+                            tint = if (showTranslatedLyrics) accentColor else contentColor,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    IconButton(
                         onClick = { showProviderPicker = true },
                         modifier = Modifier.size(44.dp)
                     ) {
@@ -238,6 +255,15 @@ internal fun PlainLyricsPage(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (translationMessage.isNotBlank()) {
+                        Text(
+                            text = translationMessage,
+                            color = secondaryColor,
+                            style = DsmusicTheme.typography.labelSmall,
+                            maxLines = 2,
+                            modifier = Modifier.padding(top = 5.dp)
+                        )
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 7.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -369,6 +395,55 @@ internal fun PlainLyricsPage(
 }
 
 
+
+/** Landscape right-pane affordance; tapping opens the standalone lyrics page. */
+@Composable
+internal fun LandscapeLyricsOpener(
+    modifier: Modifier = Modifier,
+    contentColor: Color,
+    secondaryColor: Color,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(24.dp)
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(contentColor.copy(alpha = 0.035f), shape)
+            .clickable(onClick = onClick)
+            .padding(18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(68.dp)
+                .background(accentColor.copy(alpha = 0.14f), RoundedCornerShape(22.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Fullscreen,
+                contentDescription = "Open full-screen lyrics",
+                tint = accentColor,
+                modifier = Modifier.size(34.dp)
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = "Open full-screen lyrics",
+            color = contentColor,
+            style = DsmusicTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = "View the lyrics on the full screen",
+            color = secondaryColor,
+            style = DsmusicTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 5.dp)
+        )
+    }
+}
+
 /** Compact embedded variant of the standalone plain-lyrics page for landscape players. */
 @Composable
 internal fun PlainLyricsSideView(
@@ -390,16 +465,16 @@ internal fun PlainLyricsSideView(
     onFetchLyrics: () -> Unit
 ) {
     var showProviderPicker by remember { mutableStateOf(false) }
-    var displayLines by remember { mutableStateOf<List<String>>(emptyList()) }
-    var prepared by remember { mutableStateOf(false) }
+    var displayLines by remember(currentSong?.id) { mutableStateOf<List<String>>(emptyList()) }
+    var prepared by remember(currentSong?.id) { mutableStateOf(false) }
 
-    LaunchedEffect(currentSong?.id, plainLyrics, syncedLyrics) {
-        prepared = false
-        displayLines = withContext(Dispatchers.Default) {
+    LaunchedEffect(plainLyrics, syncedLyrics) {
+        val nextLines = withContext(Dispatchers.Default) {
             val source = plainLyrics?.takeIf { it.isNotBlank() }
                 ?: convertSyncedLyricsToPlainText(syncedLyrics.orEmpty())
             source.lineSequence().map { it.trimEnd() }.toList()
         }
+        if (nextLines != displayLines) displayLines = nextLines
         prepared = true
     }
 
