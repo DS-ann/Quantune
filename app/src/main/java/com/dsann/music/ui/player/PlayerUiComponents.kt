@@ -315,6 +315,7 @@ internal fun WavySliderWithLabels(
     scrubberThumbStyle: String = "Auto",
     coverDerivedColor: Color = dynamicAccentColor,
     backgroundSurfaceColor: Color = Color.Black,
+    reduceAnimationLoad: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var isScrubbing by remember { mutableStateOf(false) }
@@ -340,14 +341,18 @@ internal fun WavySliderWithLabels(
     var labelPositionMs by remember(currentPositionFlow) {
         mutableIntStateOf(currentPositionFlow.value.coerceAtLeast(0))
     }
+    var sliderPositionMs by remember(currentPositionFlow) {
+        mutableIntStateOf(currentPositionFlow.value.coerceAtLeast(0))
+    }
 
-    LaunchedEffect(isPlayerVisible, isPlaying, currentPositionFlow) {
-        if (liveProgressEnabled) {
+    LaunchedEffect(isPlayerVisible, isPlaying, currentPositionFlow, reduceAnimationLoad) {
+        if (liveProgressEnabled && !reduceAnimationLoad) {
             var lastDisplayedSecond = Int.MIN_VALUE
             while (true) {
-                // One read per display frame, but only one state update per displayed second.
+                // Portrait retains frame-synchronous progress and wave animation.
                 withFrameNanos {
                     val latest = latestPositionProvider.value().coerceAtLeast(0)
+                    sliderPositionMs = latest
                     val displayedSecond = latest / 1000
                     if (displayedSecond != lastDisplayedSecond) {
                         lastDisplayedSecond = displayedSecond
@@ -356,10 +361,15 @@ internal fun WavySliderWithLabels(
                 }
             }
         } else if (isPlayerVisible) {
-            // While paused, only seek/track StateFlow events can change the elapsed label.
+            // Landscape and paused playback follow Media3 updates instead of forcing
+            // a hardware redraw on every display vsync.
+            var lastDisplayedSecond = Int.MIN_VALUE
             currentPositionFlow.collect { position ->
                 val latest = position.coerceAtLeast(0)
-                if (latest / 1000 != labelPositionMs / 1000) {
+                sliderPositionMs = latest
+                val displayedSecond = latest / 1000
+                if (displayedSecond != lastDisplayedSecond) {
+                    lastDisplayedSecond = displayedSecond
                     labelPositionMs = latest
                 }
             }
@@ -371,6 +381,11 @@ internal fun WavySliderWithLabels(
     } else {
         currentPositionProvider().coerceAtLeast(0)
     }
+    val sliderPosition = if (isPlayerVisible) {
+        sliderPositionMs
+    } else {
+        currentPosition
+    }
     // A missing duration is not a one-millisecond track. Treat progress as unknown/zero
     // until Media3 publishes a valid duration, otherwise any restored position renders full.
     val safeDur = duration.takeIf { it > 0 }?.toFloat()
@@ -380,10 +395,10 @@ internal fun WavySliderWithLabels(
         currentPosition
     }
     val progressRatio = safeDur?.let {
-        (currentPosition.toFloat() / it).coerceIn(0f, 1f)
+        (sliderPosition.toFloat() / it).coerceIn(0f, 1f)
     } ?: 0f
     val liveProgressProvider: (() -> Float)? = safeDur
-        ?.takeIf { liveProgressEnabled && !isScrubbing }
+        ?.takeIf { liveProgressEnabled && !isScrubbing && !reduceAnimationLoad }
         ?.let { liveDuration ->
             {
                 (currentPositionProvider().coerceAtLeast(0).toFloat() / liveDuration)
@@ -412,7 +427,8 @@ internal fun WavySliderWithLabels(
             "Bold" -> 6.dp
             else -> 4.dp
         } * scrubberThickness.coerceIn(0.6f, 2f)
-        val waveEnabled = scrubberStyle == "Waveform" &&
+        val waveEnabled = !reduceAnimationLoad &&
+            scrubberStyle == "Waveform" &&
             android.os.Build.VERSION.SDK_INT > android.os.Build.VERSION_CODES.M
         WavyMusicSlider(
             value = if (isScrubbing && safeDur != null) sliderScrubPos else progressRatio,
