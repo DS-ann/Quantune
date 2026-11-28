@@ -66,4 +66,64 @@ class OptimizedKaraokeSweepTest {
         assertTrue(spans.isEmpty())
         assertEquals(0f, calculateSungTextOffset(spans, 1_500L), 0.001f)
     }
+    @Test
+    fun rejectsDefaultOneCharacterRangeWhenItPointsAtAnotherWord() {
+        val spans = buildKaraokeWordSpans(
+            text = "I am ready",
+            words = listOf(
+                LyricWord("I", 1_000L, 200L),
+                LyricWord("am", 1_250L, 250L),
+                LyricWord("ready", 1_600L, 500L, 0..0)
+            )
+        )
+
+        assertEquals(3, spans.size)
+        assertEquals(0, spans[0].startOffset)
+        assertEquals(2, spans[1].startOffset)
+        assertEquals(5, spans[2].startOffset)
+        assertEquals(10f, calculateSungTextOffset(spans, 2_100L), 0.001f)
+    }
+
+    @Test
+    fun rejectsExplicitRangeThatDoesNotMatchItsWordText() {
+        val spans = buildKaraokeWordSpans(
+            text = "Sing this song",
+            words = listOf(
+                LyricWord("Sing", 1_000L, 300L, 0..3),
+                LyricWord("this", 1_400L, 300L, 5..8),
+                LyricWord("song", 1_800L, 300L, 5..8)
+            )
+        )
+
+        assertEquals(3, spans.size)
+        assertEquals(10, spans[2].startOffset)
+        assertEquals(14, spans[2].endOffsetExclusive)
+    }
+
+    @Test
+    fun doesNotInventAHighlightForUnmatchedProviderText() {
+        val spans = buildKaraokeWordSpans(
+            text = "The displayed lyric",
+            words = listOf(LyricWord("unrelated", 1_000L, 500L))
+        )
+
+        assertTrue(spans.isEmpty())
+        assertEquals(0f, calculateSungTextOffset(spans, 2_000L), 0.001f)
+    }
+
+    @Test
+    fun supportsCaseDifferencesWhenResolvingMissingRanges() {
+        val spans = buildKaraokeWordSpans(
+            text = "HELLO WORLD",
+            words = listOf(
+                LyricWord("hello", 1_000L, 300L),
+                LyricWord("world", 1_400L, 300L)
+            )
+        )
+
+        assertEquals(2, spans.size)
+        assertEquals(0, spans[0].startOffset)
+        assertEquals(6, spans[1].startOffset)
+    }
+
 }
