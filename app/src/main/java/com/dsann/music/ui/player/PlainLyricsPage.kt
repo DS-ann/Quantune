@@ -132,6 +132,7 @@ private fun SyncedLyricsPageContent(
     playbackSpeedProvider: () -> Float,
     isPlaying: Boolean,
     contentColor: Color,
+    accentColor: Color,
     lyricsColorStyle: String,
     lyricsFontFamily: String,
     onSeekTo: (Int) -> Unit
@@ -329,9 +330,11 @@ private fun SyncedLyricsPageContent(
     val gradientEnabled = lyricsColorStyle == "Home Studio Gradient"
     // A gradient is reserved for the highlighted line/word sweep. Inactive lines
     // use a neutral, low-opacity white just like the White colour mode.
-    val lyricBaseColor = if (
-        gradientEnabled || lyricsColorStyle == "White" || lyricsColorStyle == "UI Matching"
-    ) Color.White else contentColor
+    val lyricBaseColor = when (lyricsColorStyle) {
+        "UI Matching" -> accentColor
+        "White", "Home Studio Gradient" -> Color.White
+        else -> contentColor
+    }
     val highlightBrush = if (gradientEnabled) {
         dsmusicHomeStudioGradientBrush()
     } else {
@@ -677,6 +680,7 @@ internal fun PlainLyricsPage(
                         playbackSpeedProvider = playbackSpeedProvider,
                         isPlaying = isPlaying,
                         contentColor = contentColor,
+                        accentColor = accentColor,
                         lyricsColorStyle = lyricsColorStyle,
                         lyricsFontFamily = lyricsFontFamily,
                         onSeekTo = onSeekTo
@@ -709,7 +713,8 @@ internal fun PlainLyricsPage(
                                     text = line,
                                     color = when (lyricsColorStyle) {
                                     "Home Studio Gradient" -> Color.White.copy(alpha = 0.22f)
-                                    "White", "UI Matching" -> Color.White
+                                    "UI Matching" -> accentColor
+                                    "White" -> Color.White
                                     else -> contentColor
                                 },
                                     style = DsmusicTheme.typography.bodyLarge.copy(
@@ -957,6 +962,7 @@ internal fun PlainLyricsSideView(
                 playbackSpeedProvider = playbackSpeedProvider,
                 isPlaying = isPlaying,
                 contentColor = contentColor,
+                accentColor = accentColor,
                 lyricsColorStyle = lyricsColorStyle,
                 lyricsFontFamily = lyricsFontFamily,
                 onSeekTo = onSeekTo
@@ -972,7 +978,8 @@ internal fun PlainLyricsSideView(
                             text = line,
                             color = when (lyricsColorStyle) {
                                 "Home Studio Gradient" -> Color.White.copy(alpha = 0.22f)
-                                "White", "UI Matching" -> Color.White
+                                "UI Matching" -> accentColor
+                                "White" -> Color.White
                                 else -> contentColor
                             },
                             style = DsmusicTheme.typography.bodyLarge.copy(
