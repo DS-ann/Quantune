@@ -246,6 +246,25 @@ private fun DiagnosticReport.toCompactShareText(): String {
         appendLine("Device: " + field("Device"))
         val abi = field("ABI", "")
         if (abi.isNotBlank()) appendLine("ABI: " + abi)
+
+        // Keep UI and graphics context in shared exports; the full on-device
+        // report already contains these details but the compact export dropped them.
+        listOf(
+            "Activity",
+            "UI context",
+            "UI details",
+            "Lyrics rendering details",
+            "Device hardware",
+            "System RAM",
+            "System low-RAM device flag",
+            "App Java heap",
+            "Process CPU time",
+            "Build fingerprint"
+        ).forEach { name ->
+            val value = field(name, "")
+            if (value.isNotBlank()) appendLine("$name: ${value.take(700)}")
+        }
+
         val thread = field("Thread", "")
         if (thread.isNotBlank()) appendLine("Thread: " + thread)
 
