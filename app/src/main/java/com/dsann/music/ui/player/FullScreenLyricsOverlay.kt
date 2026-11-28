@@ -335,6 +335,11 @@ internal fun PlayerLyricsContent(
                 selectedProvider = selectedProvider,
                 providerResults = providerResults,
                 lyricsColorStyle = lyricsColorStyle,
+                // Reuse the async settings loaded by PlayerLyricsContent; avoid
+                // blocking SharedPreferences reads during synced-lyrics composition.
+                lyricsTextSize = lyricsTextSize,
+                lyricsAlignment = lyricsAlignment,
+                lyricsFontFamily = lyricsFontFamilyChoice,
                 gradientFontBorderWidth = gradientFontBorderWidth,
                 centerLineLyrics = centerLineLyrics,
                 // Landscape also uses the cached direct-draw karaoke renderer;
@@ -913,11 +918,6 @@ internal fun FullScreenLyricsOverlay(
                 contentColor = contentColor,
                 dynamicAccentColor = dynamicAccentColor,
                 lyricsColorStyle = lyricsColorStyle,
-                // Reuse the asynchronously loaded settings; don't read SharedPreferences
-                // synchronously from the first synced-lyrics composition.
-                lyricsTextSize = lyricsTextSize,
-                lyricsAlignment = lyricsAlignment,
-                lyricsFontFamily = lyricsFontFamilyChoice,
                 onRetryLyrics = onRetryLyrics,
                 onFetchLyrics = onFetchLyrics,
                 onSeekTo = onSeekTo,
