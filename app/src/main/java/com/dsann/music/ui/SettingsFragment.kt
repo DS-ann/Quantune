@@ -562,11 +562,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     private val availablePlayerButtons = listOf(
-        "lyrics", "video", "queue", "share", "download", "like", "dislike",
+        "lyrics", "plain_lyrics", "video", "queue", "share", "download", "like", "dislike",
         "sleep", "shuffle", "listen_together", "repeat", "visualizer"
     )
     private val defaultPlayerButtons = listOf(
-        "lyrics", "video", "queue", "share", "download", "listen_together", "repeat", "visualizer"
+        "lyrics", "plain_lyrics", "video", "queue", "share", "download", "listen_together", "repeat", "visualizer"
     )
     private fun readPlayerButtons(): List<String> {
         val stored = prefs.getString("player_buttons", null)
@@ -577,7 +577,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             val repeatIndex = merged.indexOf("repeat").takeIf { it >= 0 } ?: merged.size
             merged.add(repeatIndex, "listen_together")
         }
-        val withoutVisualizer = merged.filterNot { it == "visualizer" }.take(7)
+        val withoutVisualizer = merged.filterNot { it == "visualizer" }.take(8)
         val visualizerIndex = merged.indexOf("visualizer")
             .takeIf { it >= 0 }?.coerceAtMost(withoutVisualizer.size) ?: withoutVisualizer.size
         val safe = withoutVisualizer.toMutableList().apply {
@@ -589,7 +589,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val playerButtons: StateFlow<List<String>> = _playerButtons.asStateFlow()
     fun setPlayerButtons(buttons: List<String>) {
         val filtered = buttons.filter { it in availablePlayerButtons }.distinct()
-        val withoutVisualizer = filtered.filterNot { it == "visualizer" }.take(7)
+        val withoutVisualizer = filtered.filterNot { it == "visualizer" }.take(8)
         val visualizerIndex = filtered.indexOf("visualizer")
             .takeIf { it >= 0 }?.coerceAtMost(withoutVisualizer.size) ?: withoutVisualizer.size
         val safe = withoutVisualizer.toMutableList().apply {
@@ -4362,7 +4362,8 @@ private fun SessionButtonsSettings(
 }
 
 private val playerButtonNames = linkedMapOf(
-    "lyrics" to "Lyrics",
+    "lyrics" to "Live lyrics",
+    "plain_lyrics" to "Lyrics",
     "video" to "Video",
     "queue" to "Up next",
     "share" to "Share",
@@ -4388,7 +4389,7 @@ private fun PlayerButtonsSettings(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                "Choose 3 to 8 actions and arrange their order. Visualizer is always included; move it to change its position.",
+                "Choose 3 to 9 actions and arrange their order. Visualizer is always included; move it to change its position.",
                 style = DsmusicTheme.typography.bodySmall,
                 color = DsmusicTheme.colorScheme.onSurfaceVariant
             )
@@ -4439,9 +4440,9 @@ private fun PlayerButtonsSettings(
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         com.dsann.music.ui.theme.Checkbox(
                             checked = false,
-                            enabled = orderedSelected.size < 8,
+                            enabled = orderedSelected.size < 9,
                             onCheckedChange = { enabled ->
-                                if (enabled && orderedSelected.size < 8) {
+                                if (enabled && orderedSelected.size < 9) {
                                     onSelectionChanged(orderedSelected + key)
                                 }
                             }
@@ -4457,13 +4458,13 @@ private fun PlayerButtonsSettings(
                 }
             }
             Text(
-                "${selected.size}/8 selected",
+                "${selected.size}/9 selected",
                 color = DsmusicTheme.colorScheme.primary,
                 style = DsmusicTheme.typography.labelSmall
             )
             DsmusicTextButton(onClick = {
                 onSelectionChanged(listOf(
-                    "lyrics", "video", "queue", "share", "download", "listen_together", "repeat", "visualizer"
+                    "lyrics", "plain_lyrics", "video", "queue", "share", "download", "listen_together", "repeat", "visualizer"
                 ))
             }) { Text("Restore default buttons") }
         }
