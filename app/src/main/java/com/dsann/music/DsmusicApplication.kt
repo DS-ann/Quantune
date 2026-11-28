@@ -48,9 +48,9 @@ class DsmusicApplication : Application(), ImageLoaderFactory {
             .okHttpClient { InnerTubeClient.httpClient }
             .memoryCache {
                 MemoryCache.Builder(this)
-                    // Keep the decoded-artwork working set bounded on low-memory legacy devices.
-                    // Original image files remain in the disk cache and can be decoded on demand.
-                    .maxSizePercent(0.06)
+                    // Use a larger decoded-artwork cache to reduce repeated image decoding.
+                    // Android's critical-memory callbacks below still release the cache when needed.
+                    .maxSizePercent(0.20)
                     .strongReferencesEnabled(true)
                     .weakReferencesEnabled(true)
                     .build()
