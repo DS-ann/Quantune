@@ -1445,7 +1445,9 @@ fun FullPlayer(
             if (screenHeight < 760.dp) 0.34f else 0.50f
         val portraitArtHeightLimit = screenHeight * portraitArtHeightFactor
         val albumArtSlotSize = if (isPhysicalLandscapeWindow) {
-            minOf(screenHeight * 0.14f, screenWidth * 0.30f) *
+            // Match the shared ArtworkPager's landscape reservation. A smaller
+            // controls-only slot lets the floating cover extend into the title row.
+            minOf(screenHeight * landscapeArtHeightFactor, screenWidth * 0.30f) *
                 (albumArtScale / 0.9f)
         } else if (isLandscapeWindow) {
             minOf(screenHeight * landscapeArtHeightFactor, screenWidth * 0.30f) *
@@ -1462,7 +1464,7 @@ fun FullPlayer(
         // Shared-artwork target: keep the portrait and landscape player content
         // slightly lower to avoid the top-heavy layout reported on compact phones.
         val minTopOffset = statusBarTopDp + when {
-            isPhysicalLandscapeWindow -> 48.dp
+            isPhysicalLandscapeWindow -> 60.dp
             isLandscapeWindow && useWidePlayer -> 84.dp
             isLandscapeWindow -> 60.dp
             else -> 76.dp
@@ -1800,7 +1802,7 @@ fun FullPlayer(
                 playerButtonsForDisplay.forEach { action ->
                     when (action) {
                         "plain_lyrics" -> if (!isLandscapeWindow) PillChip(
-                            style = playerButtonStyle,
+                            style = if (isPhysicalLandscapeWindow) "CompactPill" else playerButtonStyle,
                             icon = painterResource(id = R.drawable.ic_lyrics),
                             label = "Lyrics",
                             isSelected = showPlainLyricsPage,
