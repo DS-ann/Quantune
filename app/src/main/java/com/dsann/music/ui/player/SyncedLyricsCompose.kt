@@ -258,37 +258,19 @@ internal fun SyncedLyricsCompose(
             currentPositionProvider
         }
     }
-    // The shared clock publishes on display VSYNC and respects the global frame-rate
-    // preference. Cache the device capability check; do not query ActivityManager on
-    // every animated lyric recomposition.
-    // ActivityManager capability queries can cross Binder. Do not run them
-    // synchronously in composition, especially while the full-screen lyrics
-    // window is opening. Start conservatively and lift the cap after the probe.
-    var isConstrainedLyricsDevice by remember(context) { mutableStateOf(true) }
-    LaunchedEffect(context) {
-        isConstrainedLyricsDevice = withContext(Dispatchers.IO) {
-            runCatching { isLowCostLyricsDevice(context.applicationContext) }
-                .getOrDefault(true)
-        }
-    }
-    // The capability probe defaults conservatively to the low-cost path until it
-    // completes. Do not just cap frame updates: route constrained devices away from
-    // the more expensive outlined/glowing glyph renderer as well.
-    val useLowCostLyricsRendering = forceLowCostRendering || isConstrainedLyricsDevice
-    // Keep every device at or below 60 FPS; constrained devices stay at 30 FPS.
-    // The user's lower frame-rate preference always takes precedence.
-    val karaokeFrameRateCeiling = if (useLowCostLyricsRendering) 30 else 60
+    // Rendering quality is not reduced based on the device's RAM classification.
+    // Only an explicit caller request may select the optional low-cost presentation.
+    val useLowCostLyricsRendering = forceLowCostRendering
+    // Follow the selected app/device frame rate without a RAM-based FPS ceiling.
     val karaokeFrameTimeNanos = rememberAppAnimationFrameTimeNanos(
-        active = isPlaying && isKaraokeMode,
-        maximumFrameRate = karaokeFrameRateCeiling
+        active = isPlaying && isKaraokeMode
     )
 
     SideEffect {
         CrashDiagnostics.updateLyricsRendering(
-            "Synced lyrics; renderer=${if (useLowCostLyricsRendering) "cached timed sweep, low-cost paint (no glyph outline/glow)" else "cached TextLayoutResult + direct drawText + premium paint"}; " +
+            "Synced lyrics; renderer=${if (useLowCostLyricsRendering) "cached timed sweep, low-cost paint (explicit caller mode)" else "cached TextLayoutResult + direct drawText + premium paint"}; " +
                 "prepared=$isLyricsPrepared; lines=${lyrics.size}; karaoke=$isKaraokeMode; " +
-                "playing=$isPlaying; constrained=$isConstrainedLyricsDevice; " +
-                "frameCap=$karaokeFrameRateCeiling FPS"
+                "playing=$isPlaying; frameRate=app/device setting"
         )
     }
 
