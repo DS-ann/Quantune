@@ -1447,7 +1447,9 @@ fun FullPlayer(
         val albumArtSlotSize = if (isPhysicalLandscapeWindow) {
             // Match the shared ArtworkPager's landscape reservation. A smaller
             // controls-only slot lets the floating cover extend into the title row.
-            minOf(screenHeight * landscapeArtHeightFactor, screenWidth * 0.30f) *
+            // PlayerBottomSheetCompose sizes the shared cover against the full
+            // landscape window width; use that same slot cap to keep the title below it.
+            minOf(screenHeight * landscapeArtHeightFactor, maxWidth * 0.30f) *
                 (albumArtScale / 0.9f)
         } else if (isLandscapeWindow) {
             minOf(screenHeight * landscapeArtHeightFactor, screenWidth * 0.30f) *
@@ -1464,7 +1466,7 @@ fun FullPlayer(
         // Shared-artwork target: keep the portrait and landscape player content
         // slightly lower to avoid the top-heavy layout reported on compact phones.
         val minTopOffset = statusBarTopDp + when {
-            isPhysicalLandscapeWindow -> 60.dp
+            isPhysicalLandscapeWindow -> if (maxWidth >= 600.dp) 84.dp else 60.dp
             isLandscapeWindow && useWidePlayer -> 84.dp
             isLandscapeWindow -> 60.dp
             else -> 76.dp
