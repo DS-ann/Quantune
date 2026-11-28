@@ -452,16 +452,7 @@ internal fun PlayerLyricsContent(
     }
 }
 
-@Composable
-internal fun FullScreenLyricsOverlay(
-    currentSong: SongItem?,
-    syncedLyrics: List<LyricLine>?,
-    plainLyrics: String?,
-    isLoading: Boolean,
-    isPlaying: Boolean,
-    lyricsError: Throwable?,
-    currentPositionProvider: () -> Int,
-    playbackSpeedProvider: () -> Float = { 1f },
+,
     contentReady: Boolean,
     backgroundBrush: Brush,
     contentColor: Color,
