@@ -165,7 +165,7 @@ internal fun SplitLikeDislikeChip(
                 text = displayLikesText,
                 style = DsmusicTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 12.sp,
+                fontSize = if (compactPill) 10.sp else 12.sp,
                 color = if (isLiked) accentColor else contentColor.copy(alpha = 0.8f)
             )
         }
@@ -219,12 +219,17 @@ internal fun PillChip(
     val tintColor = if (isSelected) accentColor else contentColor.copy(alpha = 0.8f)
     val progressColor = accentColor.copy(alpha = if (isDark) 0.35f else 0.25f)
     val noBackground = style == "None"
+    val compactPill = style == "CompactPill"
     val chipShape = when (style) {
-        "Round", "Pill" -> CircleShape
+        "Round", "Pill", "CompactPill" -> CircleShape
         "Square" -> RoundedCornerShape(5.dp)
         else -> RoundedCornerShape(0.dp)
     }
-    val chipHeight = if (style == "Pill") 36.dp else 40.dp
+    val chipHeight = when {
+        compactPill -> 28.dp
+        style == "Pill" -> 36.dp
+        else -> 40.dp
+    }
     val chipBackground = if (noBackground) Color.Transparent else backgroundColor
     
     val animatedFill by animateFloatAsState(
@@ -261,10 +266,14 @@ internal fun PillChip(
     ) {
         Row(
             modifier = Modifier.padding(
-                horizontal = if (noBackground) 8.dp else 14.dp
+                horizontal = when {
+                    compactPill -> 9.dp
+                    noBackground -> 8.dp
+                    else -> 14.dp
+                }
             ),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (compactPill) 4.dp else 6.dp)
         ) {
             when (icon) {
                 is ImageVector -> {
@@ -272,7 +281,7 @@ internal fun PillChip(
                         imageVector = icon,
                         contentDescription = label,
                         tint = tintColor,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(if (compactPill) 14.dp else 18.dp)
                     )
                 }
                 is Painter -> {
