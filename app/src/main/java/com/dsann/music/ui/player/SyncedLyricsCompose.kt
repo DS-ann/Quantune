@@ -221,9 +221,9 @@ internal fun SyncedLyricsCompose(
     }
     val isLandscape = LocalConfiguration.current.orientation ==
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
-    // Cached direct drawing is the normal renderer on every device. Compact landscape
-    // callers may explicitly request the simpler static text presentation.
-    val useLowCostLyricsRendering = forceLowCostRendering
+    // Compact landscape callers and devices with constrained graphics/memory
+    // use the same timed renderer with simpler paint: no glyph outline or glow layer.
+    // This deliberately keeps karaoke word timing and the visible sweep intact.
 
     val currentView = LocalView.current
     DisposableEffect(currentView) {
@@ -284,8 +284,10 @@ internal fun SyncedLyricsCompose(
     // Do not let high-refresh displays silently force this GPU-heavy text
     // sweep to 90/120 updates per second. Keep constrained devices at 30 FPS and
     // cap all other devices at 60 FPS; a lower user-selected rate still wins.
-    val karaokeFrameRateCeiling =
-        if (forceLowCostRendering || isConstrainedLyricsDevice) 30 else 60
+    // Route constrained devices away from expensive outlined/glowing glyph paint
+    // as well as limiting frame updates. The capability probe defaults to low-cost.
+    val useLowCostLyricsRendering = forceLowCostRendering || isConstrainedLyricsDevice
+    val karaokeFrameRateCeiling = if (useLowCostLyricsRendering) 30 else 60
     LaunchedEffect(karaokeFrameRateCeiling) {
         if (BuildConfig.DEBUG) {
             Log.i("QuantuneANRTest", "LYRICS_FRAME_RATE_CEILING=$karaokeFrameRateCeiling")
@@ -298,9 +300,9 @@ internal fun SyncedLyricsCompose(
 
     SideEffect {
         CrashDiagnostics.updateLyricsRendering(
-            "Synced lyrics; renderer=${if (forceLowCostRendering) "compact panel text-only" else "cached TextLayoutResult + direct drawText"}; " +
+            "Synced lyrics; renderer=${if (useLowCostLyricsRendering) "cached timed sweep, low-cost paint (no glyph outline/glow)" else "cached TextLayoutResult + direct drawText + premium paint"}; " +
                 "prepared=$isLyricsPrepared; lines=${lyrics.size}; karaoke=$isKaraokeMode; " +
-                "playing=$isPlaying; frameCap=${karaokeFrameRateCeiling?.let { "$it FPS" } ?: "user/device setting"}"
+                "playing=$isPlaying; constrained=$isConstrainedLyricsDevice; frameCap=$karaokeFrameRateCeiling FPS"
         )
     }
 
