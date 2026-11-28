@@ -260,7 +260,7 @@ internal fun PlayerLyricsContent(
     selectedProvider: String?,
     providerResults: Map<String, LyricsResult>,
     gradientFontBorderWidth: Dp = 1.dp,
-    centerLineLyrics: Boolean = true,
+    centerLineLyrics: Boolean = false,
     forceLowCostRendering: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -374,8 +374,7 @@ internal fun PlayerLyricsContent(
                     )
                     val plainLyricsColor = when (lyricsColorStyle) {
                         "Home Studio Gradient" -> Color.Unspecified
-                        "White" -> Color.White
-                        "UI Matching" -> dynamicAccentColor
+                        "White", "UI Matching" -> Color.White
                         else -> contentColor.copy(alpha = 0.9f)
                     }
                     // Plain (untimed) lyrics do not need a second stroked text layer.
