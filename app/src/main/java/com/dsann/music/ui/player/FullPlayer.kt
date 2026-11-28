@@ -2199,6 +2199,10 @@ fun FullPlayer(
             PlainLyricsPage(
                 currentSong = uiState.currentSong,
                 syncedLyrics = visibleSyncedLyrics,
+                currentPositionProvider = currentPositionProvider,
+                playbackSpeedProvider = playbackSpeedProvider,
+                isPlaying = uiState.isPlaying,
+                onSeekTo = onSeekTo,
                 plainLyrics = visiblePlainLyrics,
                 isLoading = isLyricsLoading,
                 lyricsError = lyricsError,
