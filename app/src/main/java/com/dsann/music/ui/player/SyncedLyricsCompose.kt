@@ -57,7 +57,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -76,7 +75,6 @@ import com.dsann.music.data.lyrics.LyricLine
 import com.dsann.music.data.lyrics.LyricsResult
 import com.dsann.music.model.SongItem
 import com.dsann.music.ui.theme.GoogleSansFlexNonRounded
-import com.dsann.music.ui.theme.observeKey
 
 // ════════════════════════════════════════════════════════════════════════════════
 // ─ Data Classes & Constants
@@ -224,19 +222,15 @@ internal fun SyncedLyricsCompose(
     selectedProvider: String? = null,
     providerResults: Map<String, LyricsResult> = emptyMap(),
     lyricsColorStyle: String = "Home Studio Gradient",
+    lyricsTextSize: String,
+    lyricsAlignment: String,
+    lyricsFontFamily: String,
     gradientFontBorderWidth: Dp = 1.dp,
     centerLineLyrics: Boolean = false,
     forceLowCostRendering: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
-    val context = LocalContext.current
-    val appearancePreferences = remember(context) {
-        context.getSharedPreferences("AppSettings", android.content.Context.MODE_PRIVATE)
-    }
-    val lyricsTextSize by appearancePreferences.observeKey("lyrics_text_size", "Standard")
-    val lyricsAlignment by appearancePreferences.observeKey("lyrics_alignment", "Original")
-    val lyricsFontFamily by appearancePreferences.observeKey("lyrics_font_family", "Rounded")
     val configuredLyricsScale = when (lyricsTextSize) {
         "Small" -> 0.85f
         "Large" -> 1.18f
@@ -264,8 +258,31 @@ internal fun SyncedLyricsCompose(
     }
     LaunchedEffect(lyrics) {
         preparedSyncedLyrics = null
-        preparedSyncedLyrics = withContext(Dispatchers.Default) {
-            prepareSyncedLyrics(lyrics)
+        val preparationStartedAt = android.os.SystemClock.elapsedRealtime()
+        CrashDiagnostics.updateLyricsPreparation(
+            "started; inputLines=${lyrics.size}; callerThread=${Thread.currentThread().name}"
+        )
+        try {
+            val prepared = withContext(Dispatchers.Default) {
+                prepareSyncedLyrics(lyrics)
+            }
+            val elapsedMs = android.os.SystemClock.elapsedRealtime() - preparationStartedAt
+            CrashDiagnostics.updateLyricsPreparation(
+                "ready; inputLines=${lyrics.size}; displayLines=${prepared.displayItems.size}; " +
+                    "words=${prepared.totalWordCount}; elapsed=${elapsedMs}ms; worker=Dispatchers.Default"
+            )
+            preparedSyncedLyrics = prepared
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            CrashDiagnostics.updateLyricsPreparation(
+                "cancelled; inputLines=${lyrics.size}; elapsed=${android.os.SystemClock.elapsedRealtime() - preparationStartedAt}ms"
+            )
+            throw cancelled
+        } catch (failure: Exception) {
+            CrashDiagnostics.updateLyricsPreparation(
+                "failed; inputLines=${lyrics.size}; elapsed=${android.os.SystemClock.elapsedRealtime() - preparationStartedAt}ms; " +
+                    "error=${failure.javaClass.simpleName}: ${failure.message.orEmpty().take(180)}"
+            )
+            throw failure
         }
     }
     val isLyricsPrepared = preparedSyncedLyrics != null
