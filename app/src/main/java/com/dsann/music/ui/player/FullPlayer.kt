@@ -1818,7 +1818,7 @@ fun FullPlayer(
                         )
                         "video" -> if (showVideoSwitch) {
                             PillChip(
-                            style = playerButtonStyle,
+                            style = if (isPhysicalLandscapeWindow) "CompactPill" else playerButtonStyle,
                                 icon = painterResource(id = R.drawable.ic_youtube),
                                 label = if (isVideoMode) "Audio" else "Video",
                                 isSelected = isVideoMode,
@@ -1829,7 +1829,7 @@ fun FullPlayer(
                             )
                         }
                         "queue" -> PillChip(
-                            style = playerButtonStyle,
+                            style = if (isPhysicalLandscapeWindow) "CompactPill" else playerButtonStyle,
                             icon = painterResource(id = R.drawable.ic_keyboard_arrow_down),
                             label = "Up next",
                             isSelected = queueExpandedForUi,
@@ -1846,7 +1846,7 @@ fun FullPlayer(
                             isDark = isDark
                         )
                         "share" -> PillChip(
-                            style = playerButtonStyle,
+                            style = if (isPhysicalLandscapeWindow) "CompactPill" else playerButtonStyle,
                             icon = painterResource(id = R.drawable.ic_share),
                             label = "Share",
                             onClick = {
@@ -1873,7 +1873,7 @@ fun FullPlayer(
                                 else -> painterResource(id = R.drawable.ic_download)
                             }
                             PillChip(
-                            style = playerButtonStyle,
+                            style = if (isPhysicalLandscapeWindow) "CompactPill" else playerButtonStyle,
                                 icon = downloadIcon,
                                 label = downloadLabel,
                                 isSelected = realDownloaded || isDownloading,
@@ -1897,7 +1897,7 @@ fun FullPlayer(
                             )
                         }
                         "like" -> PillChip(
-                            style = playerButtonStyle,
+                            style = if (isPhysicalLandscapeWindow) "CompactPill" else playerButtonStyle,
                             icon = if (uiState.isCurrentSongFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                             label = "Like",
                             isSelected = uiState.isCurrentSongFavorite,
@@ -1907,7 +1907,7 @@ fun FullPlayer(
                             isDark = isDark
                         )
                         "dislike" -> PillChip(
-                            style = playerButtonStyle,
+                            style = if (isPhysicalLandscapeWindow) "CompactPill" else playerButtonStyle,
                             icon = Icons.Rounded.ThumbDown,
                             label = "Not for me",
                             isSelected = uiState.isCurrentSongDisliked,
@@ -1917,7 +1917,7 @@ fun FullPlayer(
                             isDark = isDark
                         )
                         "sleep" -> PillChip(
-                            style = playerButtonStyle,
+                            style = if (isPhysicalLandscapeWindow) "CompactPill" else playerButtonStyle,
                             icon = Icons.Rounded.NightsStay,
                             label = "Sleep timer",
                             isSelected = sleepTimerEndTime != null,
@@ -1927,7 +1927,7 @@ fun FullPlayer(
                             isDark = isDark
                         )
                         "shuffle" -> PillChip(
-                            style = playerButtonStyle,
+                            style = if (isPhysicalLandscapeWindow) "CompactPill" else playerButtonStyle,
                             icon = Icons.Rounded.Shuffle,
                             label = "Shuffle",
                             isSelected = isShuffleEnabled,
@@ -1937,7 +1937,7 @@ fun FullPlayer(
                             isDark = isDark
                         )
                         "listen_together" -> PillChip(
-                            style = playerButtonStyle,
+                            style = if (isPhysicalLandscapeWindow) "CompactPill" else playerButtonStyle,
                             icon = Icons.Rounded.Groups,
                             label = "Listen Together",
                             onClick = {
@@ -1949,7 +1949,7 @@ fun FullPlayer(
                             isDark = isDark
                         )
                         "visualizer" -> PillChip(
-                            style = playerButtonStyle,
+                            style = if (isPhysicalLandscapeWindow) "CompactPill" else playerButtonStyle,
                             icon = Icons.Rounded.GraphicEq,
                             label = "Visualizer",
                             onClick = { showFullScreenVisualizer = true },
@@ -1958,7 +1958,7 @@ fun FullPlayer(
                             isDark = isDark
                         )
                         "repeat" -> PillChip(
-                            style = playerButtonStyle,
+                            style = if (isPhysicalLandscapeWindow) "CompactPill" else playerButtonStyle,
                             icon = when (repeatMode) {
                                 PlayerSharedViewModel.REPEAT_ONCE ->
                                     painterResource(id = R.drawable.ic_repeat_one)
