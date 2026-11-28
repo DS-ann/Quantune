@@ -1956,7 +1956,12 @@ fun PlayerBottomSheetCompose(
                                 // with the visible mini-player progress.
                                 shape = if (isVideoMode) androidx.compose.ui.graphics.RectangleShape else playerArtworkShape
                                 clip = true
-                                shadowElevation = androidx.compose.ui.util.lerp(normalShadow, 6.dp.toPx(), lyricsT)
+                                // Hardware elevation shadows on the shared, clipped cover
+                                // force extra offscreen work during landscape expansion.
+                                // Keep the artwork shape and transition, but avoid that
+                                // costly shadow pass in the low-RAM landscape player.
+                                shadowElevation = if (isLandscapeWindow) 0f
+                                    else androidx.compose.ui.util.lerp(normalShadow, 6.dp.toPx(), lyricsT)
                                 alpha = artworkAlpha
                             }
                             // Put the click target inside the transformed layer. With clickable
