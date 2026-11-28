@@ -572,7 +572,20 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         val stored = prefs.getString("player_buttons", null)
         val parsed = stored?.split(",")?.map { it.trim().lowercase() }
             ?.filter { it in availablePlayerButtons }?.distinct().orEmpty()
-        val merged = (parsed + defaultPlayerButtons.filter { it !in parsed }).toMutableList()
+        val merged = if (parsed.isEmpty()) {
+            defaultPlayerButtons.toMutableList()
+        } else {
+            parsed.toMutableList().apply {
+                // Existing installs previously had room for seven non-visualizer actions.
+                // Insert the new plain-text Lyrics action before filling other defaults so
+                // it remains visible after the expanded eight-action limit is applied.
+                if ("plain_lyrics" !in this) {
+                    val liveLyricsIndex = indexOf("lyrics")
+                    add(if (liveLyricsIndex >= 0) liveLyricsIndex + 1 else size, "plain_lyrics")
+                }
+                addAll(defaultPlayerButtons.filter { it !in this })
+            }
+        }
         if ("listen_together" !in merged) {
             val repeatIndex = merged.indexOf("repeat").takeIf { it >= 0 } ?: merged.size
             merged.add(repeatIndex, "listen_together")
