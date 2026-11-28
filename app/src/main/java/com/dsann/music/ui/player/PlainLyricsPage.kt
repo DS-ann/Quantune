@@ -358,3 +358,133 @@ internal fun PlainLyricsPage(
         }
     }
 }
+
+
+/** Compact embedded variant of the standalone plain-lyrics page for landscape players. */
+@Composable
+internal fun PlainLyricsSideView(
+    modifier: Modifier = Modifier,
+    currentSong: SongItem?,
+    syncedLyrics: List<LyricLine>?,
+    plainLyrics: String?,
+    isLoading: Boolean,
+    lyricsError: Throwable?,
+    backgroundBrush: Brush,
+    contentColor: Color,
+    secondaryColor: Color,
+    accentColor: Color,
+    providerResults: Map<String, LyricsResult>,
+    selectedProvider: String?,
+    onProviderSelected: (String) -> Unit,
+    onRetryLyrics: () -> Unit,
+    onFetchLyrics: () -> Unit
+) {
+    var showProviderPicker by remember { mutableStateOf(false) }
+    var displayLines by remember { mutableStateOf<List<String>>(emptyList()) }
+    var prepared by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentSong?.id, plainLyrics, syncedLyrics) {
+        prepared = false
+        displayLines = withContext(Dispatchers.Default) {
+            val source = plainLyrics?.takeIf { it.isNotBlank() }
+                ?: convertSyncedLyricsToPlainText(syncedLyrics.orEmpty())
+            source.replace("\\r\\n", "\\n").replace('\\r', '\\n')
+                .split('\\n').map { it.trimEnd() }
+        }
+        prepared = true
+    }
+
+    Column(
+        modifier = modifier
+            .background(backgroundBrush, RoundedCornerShape(22.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "LYRICS",
+                    color = contentColor,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp,
+                    style = DsmusicTheme.typography.titleSmall
+                )
+                Text(
+                    text = currentSong?.title ?: "Plain text",
+                    color = secondaryColor,
+                    style = DsmusicTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            IconButton(onClick = { showProviderPicker = true }, modifier = Modifier.size(42.dp)) {
+                Icon(
+                    imageVector = Icons.Rounded.MoreVert,
+                    contentDescription = "Choose lyrics provider",
+                    tint = contentColor,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        Text(
+            text = selectedProvider ?: "Choose lyrics source",
+            color = accentColor,
+            style = DsmusicTheme.typography.labelSmall,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        when {
+            displayLines.isNotEmpty() -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                itemsIndexed(displayLines, key = { index, _ -> "landscape-plain-lyrics-$index" }) { _, line ->
+                    if (line.isNotBlank()) {
+                        Text(
+                            text = line,
+                            color = contentColor.copy(alpha = 0.94f),
+                            style = DsmusicTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Spacer(Modifier.height(4.dp))
+                    }
+                }
+            }
+            isLoading || !prepared -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                LoadingIndicator(color = accentColor)
+            }
+            else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = if (lyricsError != null) "Lyrics could not be loaded" else "No lyrics available",
+                        color = contentColor,
+                        style = DsmusicTheme.typography.titleSmall
+                    )
+                    TextButton(onClick = if (lyricsError != null) onRetryLyrics else onFetchLyrics) {
+                        Text(if (lyricsError != null) "Retry" else "Find lyrics", color = accentColor)
+                    }
+                }
+            }
+        }
+    }
+
+    if (showProviderPicker) {
+        LyricsProviderPickerSheet(
+            providerResults = providerResults,
+            selectedProvider = selectedProvider,
+            onProviderSelected = { provider ->
+                onProviderSelected(provider)
+                showProviderPicker = false
+            },
+            onRefindClick = onRetryLyrics,
+            accentColor = accentColor,
+            contentColor = contentColor,
+            backgroundBrush = backgroundBrush,
+            onDismissRequest = { showProviderPicker = false }
+        )
+    }
+}
