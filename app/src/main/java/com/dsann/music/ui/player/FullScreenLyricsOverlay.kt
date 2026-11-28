@@ -493,9 +493,8 @@ internal fun FullScreenLyricsOverlay(
                 "orientation=$orientation; loading=$isLoading; playing=$isPlaying; " +
                 "contentReady=$contentReady; lyricsContentReady=$lyricsContentReady; " +
                 "synced=${!syncedLyrics.isNullOrEmpty()}; plain=${!plainLyrics.isNullOrBlank()}; " +
-                "translationEnabled=$translationEnabled; translationBusy=$translationBusy; " +
-                "showSyncControls=$showSyncControls; providersSheet=$showProvidersSheet; " +
-                "providers=${providerResults.size}; selectedProviderPresent=${!selectedProvider.isNullOrBlank()}"
+                "providersSheet=$showProvidersSheet; providers=${providerResults.size}; " +
+                "selectedProviderPresent=${!selectedProvider.isNullOrBlank()}"
         )
         CrashDiagnostics.updateLyricsRendering(
             "Dialog presentation; lyrics content=${when { !syncedLyrics.isNullOrEmpty() -> "synced"; !plainLyrics.isNullOrBlank() -> "plain"; else -> "none/loading" }}"
@@ -691,6 +690,21 @@ internal fun FullScreenLyricsOverlay(
             delay(3000L)
             showSyncControls = false
         }
+    }
+
+    SideEffect {
+        CrashDiagnostics.updateUiDetails(
+            "Lyrics full-screen dialog; " +
+                "contentReady=$contentReady; lyricsContentReady=$lyricsContentReady; " +
+                "loading=$isLoading; playing=$isPlaying; " +
+                "synced=${!syncedLyrics.isNullOrEmpty()}; plain=${!plainLyrics.isNullOrBlank()}; " +
+                "translationEnabled=$translationEnabled; translationBusy=$translationBusy; " +
+                "translationSourceReady=$translationSourceReady; " +
+                "showTranslated=$showTranslatedLyrics; syncControls=$showSyncControls; " +
+                "providerSheet=$showProvidersSheet; providerCount=${providerResults.size}; " +
+                "songPresent=${currentSong != null}; " +
+                "plainChars=${plainLyrics?.length ?: 0}; syncedLines=${syncedLyrics?.size ?: 0}"
+        )
     }
 
     val effectivePositionProvider = remember(currentPositionProvider, syncOffsetMs) {
