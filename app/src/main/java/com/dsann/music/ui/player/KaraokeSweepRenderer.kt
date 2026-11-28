@@ -234,6 +234,7 @@ internal fun KaraokeSweepText(
     words: List<LyricWord>,
     wordOffset: Int,
     positionState: State<Int>,
+    preparedSpans: List<KaraokeWordSpan>? = null,
     style: TextStyle,
     baseColor: Color,
     highlightBrush: Brush,
@@ -250,10 +251,14 @@ internal fun KaraokeSweepText(
     // Provider word ranges can be large and may require fallback string searches.
     // Never resolve them during composition: prepare them on Default and let the
     // base text render immediately while the karaoke sweep data is being built.
-    val spanState = remember(text, words, wordOffset) {
-        mutableStateOf<List<KaraokeWordSpan>?>(null)
+    val spanState = remember(text, words, wordOffset, preparedSpans) {
+        mutableStateOf<List<KaraokeWordSpan>?>(preparedSpans)
     }
-    LaunchedEffect(text, words, wordOffset) {
+    LaunchedEffect(text, words, wordOffset, preparedSpans) {
+        if (preparedSpans != null) {
+            spanState.value = preparedSpans
+            return@LaunchedEffect
+        }
         spanState.value = null
         val preparationContext = currentCoroutineContext()
         spanState.value = withContext(Dispatchers.Default) {
