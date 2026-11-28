@@ -10,8 +10,12 @@ import android.os.Handler
 import androidx.core.os.HandlerCompat
 import android.os.Looper
 import android.os.Process
+import android.os.Debug
+import android.os.HandlerThread
 import android.os.SystemClock
 import android.util.Log
+import android.view.FrameMetrics
+import android.view.Window
 import java.io.File
 import java.io.FileOutputStream
 import java.io.PrintWriter
@@ -19,8 +23,10 @@ import java.io.StringWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.system.exitProcess
 
 internal data class DiagnosticReport(
@@ -50,11 +56,41 @@ internal object CrashDiagnostics {
     private const val ANR_TIMEOUT_MS = 5_000L
     private const val HEARTBEAT_INTERVAL_MS = 500L
     private const val WATCHDOG_POLL_INTERVAL_MS = 500L
-    private const val MAX_REPORT_CHARS = 320_000
+    private const val MAX_REPORT_CHARS = 900_000
 
     private val installed = AtomicBoolean(false)
     private val anrAlreadyRecorded = AtomicBoolean(false)
     private val fileLock = Any()
+    private val lyricsMetricsLock = Any()
+
+    private val lyricsDrawCount = AtomicLong()
+    private val lyricsDrawTotalNanos = AtomicLong()
+    private val lyricsDrawMaxNanos = AtomicLong()
+    private val lyricsLastDrawElapsedNanos = AtomicLong()
+    private val lyricsTextLayoutCount = AtomicLong()
+    private val lyricsMaxTextLength = AtomicInteger()
+    private val lyricsMaxLayoutLines = AtomicInteger()
+    private val windowFrameCount = AtomicLong()
+    private val windowFrameDropReports = AtomicLong()
+    private val windowSlowFrameCount = AtomicLong()
+    private val windowJankyFrameCount = AtomicLong()
+    private val windowMaxTotalNanos = AtomicLong()
+    private val windowMaxDrawNanos = AtomicLong()
+    private val windowMaxLayoutNanos = AtomicLong()
+    private val windowMaxSyncNanos = AtomicLong()
+    private val windowMaxCommandNanos = AtomicLong()
+    private val windowMaxSwapNanos = AtomicLong()
+    private val windowMaxGpuNanos = AtomicLong()
+    private val windowLastTotalNanos = AtomicLong()
+    private val windowLastDrawNanos = AtomicLong()
+    private val windowLastGpuNanos = AtomicLong()
+    @Volatile private var windowGpuMetricAvailable = false
+    @Volatile private var windowRefreshRateHz = 0f
+    @Volatile private var frameMetricsWindow: Window? = null
+    @Volatile private var frameMetricsThread: HandlerThread? = null
+    @Volatile private var frameMetricsListener: Window.OnFrameMetricsAvailableListener? = null
+    @Volatile private var activeActivityReference: WeakReference<Activity>? = null
+    @Volatile private var anrWatchdogDetails: String = "Not available"
 
     @Volatile private var activeActivityClass: String = "Unknown"
     @Volatile private var baseScreenContext: String = "Unknown"
@@ -80,6 +116,108 @@ internal object CrashDiagnostics {
     /** Records the actual lyrics drawing path selected for this device. */
     fun updateLyricsRendering(details: String) {
         lyricsRenderingDetails = sanitizeDiagnosticValue(details)
+    }
+
+    fun recordLyricsDraw(durationNanos: Long) {
+        if (durationNanos <= 0L) return
+        lyricsDrawCount.incrementAndGet()
+        lyricsDrawTotalNanos.addAndGet(durationNanos)
+        updateMaximum(lyricsDrawMaxNanos, durationNanos)
+        lyricsLastDrawElapsedNanos.set(SystemClock.elapsedRealtimeNanos())
+    }
+
+    fun recordLyricsTextLayout(textLength: Int, lineCount: Int) {
+        lyricsTextLayoutCount.incrementAndGet()
+        updateMaximum(lyricsMaxTextLength, textLength.coerceAtLeast(0))
+        updateMaximum(lyricsMaxLayoutLines, lineCount.coerceAtLeast(0))
+    }
+
+    private fun updateMaximum(target: AtomicLong, value: Long) {
+        var previous = target.get()
+        while (value > previous) {
+            if (target.compareAndSet(previous, value)) return
+            previous = target.get()
+        }
+    }
+
+    private fun updateMaximum(target: AtomicInteger, value: Int) {
+        var previous = target.get()
+        while (value > previous) {
+            if (target.compareAndSet(previous, value)) return
+            previous = target.get()
+        }
+    }
+
+    private fun resetLyricsMetrics() {
+        lyricsDrawCount.set(0L); lyricsDrawTotalNanos.set(0L); lyricsDrawMaxNanos.set(0L)
+        lyricsLastDrawElapsedNanos.set(0L); lyricsTextLayoutCount.set(0L)
+        lyricsMaxTextLength.set(0); lyricsMaxLayoutLines.set(0)
+        windowFrameCount.set(0L); windowFrameDropReports.set(0L)
+        windowSlowFrameCount.set(0L); windowJankyFrameCount.set(0L)
+        windowMaxTotalNanos.set(0L); windowMaxDrawNanos.set(0L)
+        windowMaxLayoutNanos.set(0L); windowMaxSyncNanos.set(0L)
+        windowMaxCommandNanos.set(0L); windowMaxSwapNanos.set(0L)
+        windowMaxGpuNanos.set(0L); windowLastTotalNanos.set(0L)
+        windowLastDrawNanos.set(0L); windowLastGpuNanos.set(0L)
+        windowGpuMetricAvailable = false; windowRefreshRateHz = 0f
+    }
+
+    fun startLyricsWindowFrameMetrics(window: Window?) {
+        stopLyricsWindowFrameMetrics()
+        resetLyricsMetrics()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || window == null) return
+
+        val thread = HandlerThread("Quantune-Lyrics-FrameMetrics").apply { start() }
+        val refreshRate = runCatching { window.decorView.display?.refreshRate ?: 0f }.getOrDefault(0f)
+        windowRefreshRateHz = refreshRate
+        val listener = Window.OnFrameMetricsAvailableListener { _, metrics, droppedReports ->
+            runCatching {
+                val total = metrics.getMetric(FrameMetrics.TOTAL_DURATION).coerceAtLeast(0L)
+                val draw = metrics.getMetric(FrameMetrics.DRAW_DURATION).coerceAtLeast(0L)
+                val layout = metrics.getMetric(FrameMetrics.LAYOUT_MEASURE_DURATION).coerceAtLeast(0L)
+                val sync = metrics.getMetric(FrameMetrics.SYNC_DURATION).coerceAtLeast(0L)
+                val command = metrics.getMetric(FrameMetrics.COMMAND_ISSUE_DURATION).coerceAtLeast(0L)
+                val swap = metrics.getMetric(FrameMetrics.SWAP_BUFFERS_DURATION).coerceAtLeast(0L)
+                val gpu = if (Build.VERSION.SDK_INT >= 31) {
+                    windowGpuMetricAvailable = true
+                    metrics.getMetric(FrameMetrics.GPU_DURATION).coerceAtLeast(0L)
+                } else 0L
+                windowFrameCount.incrementAndGet()
+                if (droppedReports > 0) windowFrameDropReports.addAndGet(droppedReports.toLong())
+                val budget = if (refreshRate > 1f) (2_000_000_000.0 / refreshRate).toLong() else 33_333_333L
+                if (total > budget) windowSlowFrameCount.incrementAndGet()
+                if (total >= 50_000_000L) windowJankyFrameCount.incrementAndGet()
+                updateMaximum(windowMaxTotalNanos, total); updateMaximum(windowMaxDrawNanos, draw)
+                updateMaximum(windowMaxLayoutNanos, layout); updateMaximum(windowMaxSyncNanos, sync)
+                updateMaximum(windowMaxCommandNanos, command); updateMaximum(windowMaxSwapNanos, swap)
+                if (gpu > 0L) updateMaximum(windowMaxGpuNanos, gpu)
+                windowLastTotalNanos.set(total); windowLastDrawNanos.set(draw); windowLastGpuNanos.set(gpu)
+            }
+        }
+        synchronized(lyricsMetricsLock) {
+            frameMetricsWindow = window; frameMetricsThread = thread; frameMetricsListener = listener
+            runCatching {
+                window.addOnFrameMetricsAvailableListener(listener, Handler(thread.looper))
+            }.onFailure {
+                frameMetricsWindow = null; frameMetricsThread = null; frameMetricsListener = null
+                thread.quitSafely()
+                Log.w(TAG, "Could not attach Window FrameMetrics listener", it)
+            }
+        }
+    }
+
+    fun stopLyricsWindowFrameMetrics(window: Window? = null) {
+        val oldWindow: Window?
+        val oldListener: Window.OnFrameMetricsAvailableListener?
+        val oldThread: HandlerThread?
+        synchronized(lyricsMetricsLock) {
+            oldWindow = frameMetricsWindow; oldListener = frameMetricsListener; oldThread = frameMetricsThread
+            frameMetricsWindow = null; frameMetricsListener = null; frameMetricsThread = null
+        }
+        if (oldWindow != null && oldListener != null) {
+            runCatching { oldWindow.removeOnFrameMetricsAvailableListener(oldListener) }
+        }
+        oldThread?.quitSafely()
     }
 
     private fun sanitizeDiagnosticValue(value: String): String =
@@ -172,12 +310,15 @@ internal object CrashDiagnostics {
         val startedActivities = AtomicInteger(0)
         // Handler.postDelayed uses uptimeMillis. Use the same clock for the heartbeat.
         val lastMainResponse = java.util.concurrent.atomic.AtomicLong(SystemClock.uptimeMillis())
+        val lastProcessCpuTime = AtomicLong(Process.getElapsedCpuTime())
+        val lastPollCpuDelta = AtomicLong(0L)
 
         // Android may suspend/freeze a cached background process. A heartbeat gap while
         // no Quantune Activity is visible is not a user-facing main-thread ANR.
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 startedActivities.incrementAndGet()
+                activeActivityReference = WeakReference(activity)
                 activeActivityClass = activity.javaClass.name
                 // Give the UI a fresh response window when it becomes visible again.
                 lastMainResponse.set(SystemClock.uptimeMillis())
@@ -185,6 +326,7 @@ internal object CrashDiagnostics {
 
             override fun onActivityStopped(activity: Activity) {
                 val remaining = startedActivities.decrementAndGet()
+                if (activeActivityReference?.get() === activity) activeActivityReference = null
                 if (remaining <= 0) {
                     startedActivities.set(0)
                     activeActivityClass = "None (background)"
@@ -216,7 +358,13 @@ internal object CrashDiagnostics {
                     break
                 }
 
-                // Reset the baseline while backgrounded. Cached/frozen time must not
+                // Sample process CPU at watchdog cadence to separate active CPU work
+                // from a mostly blocked main/UI thread.
+                val cpuNow = Process.getElapsedCpuTime()
+                val cpuBefore = lastProcessCpuTime.getAndSet(cpuNow)
+                lastPollCpuDelta.set((cpuNow - cpuBefore).coerceAtLeast(0L))
+
+                // Reset the baseline while backgrounded; cached/frozen time must not
                 // accumulate into a false ANR when Android schedules the process again.
                 if (startedActivities.get() <= 0) {
                     lastMainResponse.set(SystemClock.uptimeMillis())
@@ -239,12 +387,19 @@ internal object CrashDiagnostics {
                         appendLine()
                         append(captureCriticalThreadSamples())
                     }
+                    anrWatchdogDetails =
+                        "blockedFor=${blockedForMs}ms; watchdogPoll=${WATCHDOG_POLL_INTERVAL_MS}ms; " +
+                            "visibleActivities=${startedActivities.get()}; processCpuLastPoll=${lastPollCpuDelta.get()}ms"
                     val report = buildReport(
                         context = application,
                         type = "ANR — APP NOT RESPONDING",
-                        summary = "The main thread did not process an asynchronous heartbeat for approximately $blockedForMs ms while a Quantune activity was visible.",
+                        summary = "The main thread missed its asynchronous heartbeat for approximately $blockedForMs ms while Quantune was visible. Process CPU consumed in the last watchdog poll: ${lastPollCpuDelta.get()} ms.",
                         threadName = mainThread?.name ?: "main",
-                        body = stackDump
+                        body = buildString {
+                            appendLine(stackDump)
+                            appendLine()
+                            append(captureNativeThreadInventory())
+                        }
                     )
                     persistReport(application, report)
 
@@ -309,9 +464,9 @@ internal object CrashDiagnostics {
             "===== THREAD: ${thread.name} | STATE: ${thread.state} | " +
                 "ID: ${thread.id} | PRIORITY: ${thread.priority} ====="
         )
-        stack.take(80).forEach { frame -> output.appendLine("\tat $frame") }
-        if (stack.size > 80) {
-            output.appendLine("... ${stack.size - 80} additional frames omitted.")
+        stack.take(120).forEach { frame -> output.appendLine("\tat $frame") }
+        if (stack.size > 120) {
+            output.appendLine("... ${stack.size - 120} additional frames omitted.")
         }
     }
 
@@ -322,12 +477,12 @@ internal object CrashDiagnostics {
                     threadDiagnosticPriority(it.key)
                 }.thenBy { it.key.name }
             )
-            .take(64)
+            .take(96)
 
         return buildString {
             appendLine(
                 "Thread stacks are ordered with main first, followed by graphics, " +
-                    "Binder, media and remaining workers. Up to 64 threads are included."
+                    "Binder, media and remaining workers. Up to 96 Java threads are included."
             )
             val graphicsFound = entries.any { isGraphicsThread(it.key) }
             appendLine("Java graphics/render thread present in this snapshot: $graphicsFound")
@@ -342,7 +497,7 @@ internal object CrashDiagnostics {
      * frames help identify a persistent RenderThread/driver synchronization wait.
      */
     private fun captureCriticalThreadSamples(): String = buildString {
-        for (sampleIndex in 0 until 3) {
+        for (sampleIndex in 0 until 5) {
             val stacks = Thread.getAllStackTraces()
             val critical = stacks.entries
                 .filter { it.key.name == "main" || isGraphicsThread(it.key) }
@@ -354,26 +509,44 @@ internal object CrashDiagnostics {
 
             appendLine()
             appendLine(
-                "===== MAIN / GRAPHICS THREAD SAMPLE ${sampleIndex + 1}/3 " +
-                    "(approximately ${sampleIndex * 140} ms after detection) ====="
+                "===== MAIN / GRAPHICS THREAD SAMPLE ${sampleIndex + 1}/5 " +
+                    "(approximately ${sampleIndex * 180} ms after detection) ====="
             )
             if (critical.isEmpty()) {
                 appendLine("No main or Java graphics thread stack was available.")
             } else {
-                critical.take(12).forEach { entry ->
+                critical.take(24).forEach { entry ->
                     appendThreadSnapshot(this, entry.key, entry.value)
                 }
             }
 
-            if (sampleIndex < 2) {
+            if (sampleIndex < 4) {
                 try {
-                    Thread.sleep(140L)
+                    Thread.sleep(180L)
                 } catch (_: InterruptedException) {
                     Thread.currentThread().interrupt()
                     return@buildString
                 }
             }
         }
+    }
+
+    private fun captureNativeThreadInventory(): String = buildString {
+        val taskDirectory = File("/proc/self/task")
+        val tasks = runCatching { taskDirectory.listFiles()?.sortedBy { it.name.toLongOrNull() ?: Long.MAX_VALUE } }
+            .getOrNull().orEmpty()
+        appendLine("===== NATIVE PROCESS THREAD INVENTORY =====")
+        appendLine("Linux task count: ${tasks.size}; details are read from /proc/self/task.")
+        tasks.take(128).forEach { task ->
+            val tid = task.name
+            val name = runCatching { File(task, "comm").readText().trim() }.getOrDefault("unavailable")
+            val stat = runCatching { File(task, "stat").readText() }.getOrDefault("")
+            val closeParen = stat.lastIndexOf(')')
+            val state = if (closeParen >= 0) stat.substring(closeParen + 1).trim().firstOrNull()?.toString()
+                ?: "unknown" else "unknown"
+            appendLine("tid=$tid; name=$name; state=$state")
+        }
+        if (tasks.size > 128) appendLine("... ${tasks.size - 128} further native thread names omitted.")
     }
 
     private fun appendRuntimeDiagnostics(output: StringBuilder, context: Context) {
@@ -383,34 +556,102 @@ internal object CrashDiagnostics {
             activityManager?.getMemoryInfo(memoryInfo)
             activityManager != null
         }.getOrDefault(false)
-
         val runtime = Runtime.getRuntime()
         val heapUsed = (runtime.totalMemory() - runtime.freeMemory()).coerceAtLeast(0L)
-        fun mib(bytes: Long): String = String.format(
-            Locale.US,
-            "%.1f MiB",
-            bytes.toDouble() / (1024.0 * 1024.0)
-        )
+        fun mib(bytes: Long): String = String.format(Locale.US, "%.1f MiB", bytes.toDouble() / (1024.0 * 1024.0))
+        fun ms(nanos: Long): String = String.format(Locale.US, "%.2f ms", nanos / 1_000_000.0)
 
         output.appendLine("Activity: $activeActivityClass")
         output.appendLine("UI context: ${currentScreenContext()}")
         output.appendLine("UI details: $uiDiagnosticDetails")
         output.appendLine("Lyrics rendering details: $lyricsRenderingDetails")
+        output.appendLine("ANR watchdog details: $anrWatchdogDetails")
         output.appendLine("Device hardware: ${Build.HARDWARE}; board: ${Build.BOARD}; device code: ${Build.DEVICE}")
+        if (Build.VERSION.SDK_INT >= 31) {
+            output.appendLine("Device SoC model: ${runCatching { Build.SOC_MODEL }.getOrDefault("unavailable")}")
+        }
         if (memoryAvailable) {
             output.appendLine(
                 "System RAM: total=${mib(memoryInfo.totalMem)}, available=${mib(memoryInfo.availMem)}, " +
                     "threshold=${mib(memoryInfo.threshold)}, lowMemory=${memoryInfo.lowMemory}"
             )
             output.appendLine("System low-RAM device flag: ${activityManager?.isLowRamDevice ?: "unknown"}")
-        } else {
-            output.appendLine("System RAM snapshot: unavailable")
-        }
+        } else output.appendLine("System RAM snapshot: unavailable")
+
         output.appendLine(
             "App Java heap: used=${mib(heapUsed)}, allocated=${mib(runtime.totalMemory())}, " +
-                "max=${mib(runtime.maxMemory())}"
+                "free=${mib(runtime.freeMemory())}, max=${mib(runtime.maxMemory())}"
+        )
+        val processMemory = Debug.MemoryInfo()
+        val processMemoryAvailable = runCatching { Debug.getMemoryInfo(processMemory); true }.getOrDefault(false)
+        if (processMemoryAvailable) {
+            output.appendLine(
+                "App process PSS: total=${processMemory.totalPss} KiB, dalvik=${processMemory.dalvikPss} KiB, " +
+                    "native=${processMemory.nativePss} KiB, other=${processMemory.otherPss} KiB, " +
+                    "graphics=${processMemory.graphicsPss} KiB"
+            )
+        } else output.appendLine("App process PSS: unavailable")
+        output.appendLine(
+            "Native heap: allocated=${mib(Debug.getNativeHeapAllocatedSize())}, " +
+                "free=${mib(Debug.getNativeHeapFreeSize())}, size=${mib(Debug.getNativeHeapSize())}"
         )
         output.appendLine("Process CPU time: ${Process.getElapsedCpuTime()} ms")
+        output.appendLine("Runtime GC/alloc stats: " + runCatching {
+            Debug.getRuntimeStats().entries.take(24).joinToString("; ") { "${it.key}=${it.value}" }
+        }.getOrDefault("unavailable"))
+
+        val activity = activeActivityReference?.get()
+        val window = activity?.window
+        val decor = window?.decorView
+        val display = runCatching {
+            if (Build.VERSION.SDK_INT >= 30) activity?.display
+            else {
+                @Suppress("DEPRECATION")
+                activity?.windowManager?.defaultDisplay
+            }
+        }.getOrNull()
+        output.appendLine(
+            "Visible window: activity=${activity?.javaClass?.name ?: activeActivityClass}; " +
+                "root=${decor?.javaClass?.name ?: "unavailable"}; " +
+                "size=${decor?.width ?: -1}x${decor?.height ?: -1}px; " +
+                "hardwareAccelerated=${decor?.isHardwareAccelerated ?: "unknown"}; " +
+                "rootLayerType=${decor?.layerType ?: -1}; attached=${decor?.isAttachedToWindow ?: false}"
+        )
+        output.appendLine(
+            "Display: refreshRateHz=${display?.refreshRate ?: windowRefreshRateHz}; " +
+                "widthPx=${runCatching { display?.mode?.physicalWidth }.getOrNull() ?: -1}; " +
+                "heightPx=${runCatching { display?.mode?.physicalHeight }.getOrNull() ?: -1}; " +
+                "densityDpi=${runCatching { activity?.resources?.displayMetrics?.densityDpi }.getOrNull() ?: -1}"
+        )
+
+        val lastDrawAt = lyricsLastDrawElapsedNanos.get()
+        val drawAge = if (lastDrawAt > 0L) ms(SystemClock.elapsedRealtimeNanos() - lastDrawAt) else "unavailable"
+        output.appendLine(
+            "Lyrics Canvas draw calls: count=${lyricsDrawCount.get()}, total=${ms(lyricsDrawTotalNanos.get())}, " +
+                "max=${ms(lyricsDrawMaxNanos.get())}, textLayouts=${lyricsTextLayoutCount.get()}, " +
+                "maxTextChars=${lyricsMaxTextLength.get()}, maxLayoutLines=${lyricsMaxLayoutLines.get()}, lastDrawAge=$drawAge"
+        )
+        output.appendLine(
+            "Dialog Window FrameMetrics: frames=${windowFrameCount.get()}, droppedReports=${windowFrameDropReports.get()}, " +
+                "slowFrames(>2vsync)=${windowSlowFrameCount.get()}, jankyFrames(>=50ms)=${windowJankyFrameCount.get()}, " +
+                "refreshRateHz=$windowRefreshRateHz, maxTotal=${ms(windowMaxTotalNanos.get())}, " +
+                "maxDraw=${ms(windowMaxDrawNanos.get())}, maxLayoutMeasure=${ms(windowMaxLayoutNanos.get())}, " +
+                "maxSync=${ms(windowMaxSyncNanos.get())}, maxCommandIssue=${ms(windowMaxCommandNanos.get())}, " +
+                "maxSwap=${ms(windowMaxSwapNanos.get())}, GPUmetricAvailable=$windowGpuMetricAvailable, " +
+                "maxGPU=${ms(windowMaxGpuNanos.get())}, lastTotal=${ms(windowLastTotalNanos.get())}, " +
+                "lastDraw=${ms(windowLastDrawNanos.get())}, lastGPU=${ms(windowLastGpuNanos.get())}"
+        )
+        val procStatus = runCatching {
+            File("/proc/self/status").readLines().filter { line ->
+                line.startsWith("VmPeak:") || line.startsWith("VmSize:") || line.startsWith("VmHWM:") ||
+                    line.startsWith("VmRSS:") || line.startsWith("VmData:") || line.startsWith("VmSwap:") ||
+                    line.startsWith("Threads:") || line.startsWith("voluntary_ctxt_switches:") ||
+                    line.startsWith("nonvoluntary_ctxt_switches:")
+            }
+        }.getOrDefault(emptyList())
+        output.appendLine("Process /proc/self/status:")
+        if (procStatus.isEmpty()) output.appendLine("unavailable") else procStatus.forEach { output.appendLine(it) }
+        output.appendLine("Open file descriptor count: ${runCatching { File("/proc/self/fd").list()?.size ?: -1 }.getOrDefault(-1)}")
         output.appendLine("Build fingerprint: ${Build.FINGERPRINT}")
     }
 
