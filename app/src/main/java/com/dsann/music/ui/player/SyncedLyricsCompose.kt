@@ -291,25 +291,6 @@ internal fun SyncedLyricsCompose(
         active = isPlaying && isKaraokeMode
     )
 
-    SideEffect {
-        val prepared = preparedSyncedLyrics
-        val visibleRows = listState.layoutInfo.visibleItemsInfo.size
-        val frameRate = AppAnimationFrameRateController.frameRate.value
-        CrashDiagnostics.updateLyricsRendering(
-            "Synced/Karaoke; renderer=${if (isKaraokeMode) "cached TextLayoutResult + direct Canvas word sweep" else "single TextLayoutResult + Canvas contour"}; " +
-                "prepared=$isLyricsPrepared; lines=${prepared?.displayItems?.size ?: lyrics.size}; " +
-                "visibleRows=$visibleRows; totalWords=${prepared?.totalWordCount ?: -1}; " +
-                "maxWordsPerLine=${prepared?.maxWordsPerLine ?: -1}; " +
-                "totalTextChars=${prepared?.totalTextCharacters ?: -1}; " +
-                "longestLineChars=${prepared?.longestLineCharacters ?: -1}; " +
-                "backgroundLines=${prepared?.linesWithBackground ?: -1}; " +
-                "activeIndex=$activeIndex; scrollTarget=$scrollTargetIndex; " +
-                "karaoke=$isKaraokeMode; playing=$isPlaying; frameRatePref=$frameRate; " +
-                "rowAlpha=colour modulation; offscreenRowLayers=disabled; karaokeBlur=disabled; " +
-                "outlineWidthDp=$gradientFontBorderWidth"
-        )
-    }
-
     // The prepared row list and all word-time boundaries were built off-main.
     // Keep the empty fallback stable while the worker result is being prepared.
     val displayItems = preparedSyncedLyrics?.displayItems.orEmpty()
@@ -427,6 +408,25 @@ internal fun SyncedLyricsCompose(
                 positionMs = lyricClock.intValue.toLong()
             )
         }
+    }
+
+    SideEffect {
+        val prepared = preparedSyncedLyrics
+        val visibleRows = listState.layoutInfo.visibleItemsInfo.size
+        val frameRate = AppAnimationFrameRateController.frameRate.value
+        CrashDiagnostics.updateLyricsRendering(
+            "Synced/Karaoke; renderer=${if (isKaraokeMode) "cached TextLayoutResult + direct Canvas word sweep" else "single TextLayoutResult + Canvas contour"}; " +
+                "prepared=$isLyricsPrepared; lines=${prepared?.displayItems?.size ?: lyrics.size}; " +
+                "visibleRows=$visibleRows; totalWords=${prepared?.totalWordCount ?: -1}; " +
+                "maxWordsPerLine=${prepared?.maxWordsPerLine ?: -1}; " +
+                "totalTextChars=${prepared?.totalTextCharacters ?: -1}; " +
+                "longestLineChars=${prepared?.longestLineCharacters ?: -1}; " +
+                "backgroundLines=${prepared?.linesWithBackground ?: -1}; " +
+                "activeIndex=$activeIndex; scrollTarget=$scrollTargetIndex; " +
+                "karaoke=$isKaraokeMode; playing=$isPlaying; frameRatePref=$frameRate; " +
+                "rowAlpha=colour modulation; offscreenRowLayers=disabled; karaokeBlur=disabled; " +
+                "outlineWidthDp=$gradientFontBorderWidth"
+        )
     }
     val density = LocalDensity.current
     // The first frame after opening a long track should position immediately. A long
