@@ -1408,8 +1408,8 @@ fun FullPlayer(
         }
 
         // Dense controls are used for landscape and short-height resized player windows.
-        val compactLandscape = isLandscapeWindow || screenHeight < 760.dp ||
-            isCompactPortraitMultiWindow
+        val compactLandscape = isPhysicalLandscapeWindow || isLandscapeWindow ||
+            screenHeight < 760.dp || isCompactPortraitMultiWindow
         // Move the title group down and reduce the gap before the action chips while
         // keeping their shared vertical anchor unchanged. Preserve landscape spacing.
         val titleToActionsSpacerWeight =
@@ -1444,7 +1444,10 @@ fun FullPlayer(
         val widePortraitArtHeightFactor =
             if (screenHeight < 760.dp) 0.34f else 0.50f
         val portraitArtHeightLimit = screenHeight * portraitArtHeightFactor
-        val albumArtSlotSize = if (isLandscapeWindow) {
+        val albumArtSlotSize = if (isPhysicalLandscapeWindow) {
+            minOf(screenHeight * 0.14f, screenWidth * 0.30f) *
+                (albumArtScale / 0.9f)
+        } else if (isLandscapeWindow) {
             minOf(screenHeight * landscapeArtHeightFactor, screenWidth * 0.30f) *
                 (albumArtScale / 0.9f)
         } else if (useWidePlayer) {
@@ -1459,13 +1462,18 @@ fun FullPlayer(
         // Shared-artwork target: keep the portrait and landscape player content
         // slightly lower to avoid the top-heavy layout reported on compact phones.
         val minTopOffset = statusBarTopDp + when {
+            isPhysicalLandscapeWindow -> 48.dp
             isLandscapeWindow && useWidePlayer -> 84.dp
             isLandscapeWindow -> 60.dp
             else -> 76.dp
         }
         // Preserve the shared-artwork vertical anchor; only the transport spacing compacts
         // when a portrait window becomes short.
-        val headerHeight = if (isLandscapeWindow) 44.dp else 68.dp
+        val headerHeight = when {
+            isPhysicalLandscapeWindow -> 40.dp
+            isLandscapeWindow -> 44.dp
+            else -> 68.dp
+        }
 
         // Calculate top offset to perfectly match yEndPx in PlayerBottomSheetCompose
         val topOffset = if (useWidePlayer) minTopOffset
@@ -1572,9 +1580,10 @@ fun FullPlayer(
                         ),
                     horizontalAlignment = if (titleIsLeftAligned) Alignment.Start else Alignment.CenterHorizontally
                 ) {
-                    val titleSize = when (playerTitleSize) {
-                        "Small" -> 23.sp
-                        "Large" -> 34.sp
+                    val titleSize = when {
+                        isPhysicalLandscapeWindow -> 18.sp
+                        playerTitleSize == "Small" -> 23.sp
+                        playerTitleSize == "Large" -> 34.sp
                         else -> 29.sp
                     }
                     val titleWeight = when (playerTitleWeight) {
@@ -1614,6 +1623,7 @@ fun FullPlayer(
                             uiState.currentSong?.artist ?: "Unknown Artist"
                         },
                         style = DsmusicTheme.typography.bodyMedium,
+                        fontSize = if (isPhysicalLandscapeWindow) 12.sp else DsmusicTheme.typography.bodyMedium.fontSize,
                         color = contentSecondary,
                         maxLines = 1,
                         textAlign = titleTextAlignment,
@@ -1998,7 +2008,7 @@ fun FullPlayer(
 
             val noTransportBackground = playerButtonStyle == "None"
             val roundTransport = playerButtonStyle == "Round"
-            val transportSize = if (compactLandscape) 60.dp else 76.dp
+            val transportSize = if (isPhysicalLandscapeWindow) 44.dp else if (compactLandscape) 60.dp else 76.dp
             val transportShape = when (playerButtonStyle) {
                 "Round", "Pill" -> CircleShape
                 "Square" -> RoundedCornerShape(5.dp)
@@ -2095,7 +2105,7 @@ fun FullPlayer(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (compactLandscape) 36.dp else 48.dp)
+                    .height(if (isPhysicalLandscapeWindow) 24.dp else if (compactLandscape) 36.dp else 48.dp)
                     .pointerInput(Unit) {
                         detectVerticalDragGestures { _, dragAmount ->
                             if (dragAmount < -10f && !queueExpandedForUi && !isLyricsModeEnabled) {
@@ -2116,7 +2126,7 @@ fun FullPlayer(
                     contentDescription = "Open Queue",
                     tint = contentColor.copy(alpha = 0.5f),
                     modifier = Modifier
-                        .size(if (compactLandscape) 27.dp else 32.dp)
+                        .size(if (isPhysicalLandscapeWindow) 20.dp else if (compactLandscape) 27.dp else 32.dp)
                         .graphicsLayer { rotationZ = 180f }
                 )
             }
