@@ -643,10 +643,12 @@ private fun LyricLineItem(
         } else {
             SolidColor(lowCostColor)
         }
+        // Match the dim text paint used by the full-cost renderer: only the
+        // active line is fully lit; surrounding lines stay deliberately subdued.
         val lowCostAlpha = when {
             isActive -> 1f
-            isPast -> 0.60f
-            else -> 0.38f
+            isPast -> 0.21f
+            else -> 0.13f
         }
         val lowCostFont = when (fontFamilyChoice) {
             "Sans" -> FontFamily.SansSerif
@@ -740,7 +742,7 @@ private fun LyricLineItem(
                     Text(
                         text = line.backgroundContent,
                         style = lowCostBackgroundStyle,
-                        color = lowCostColor.copy(alpha = if (isActive) 0.68f else 0.32f),
+                        color = lowCostColor.copy(alpha = if (isActive) 0.32f else 0.16f),
                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                         maxLines = 2
                     )
