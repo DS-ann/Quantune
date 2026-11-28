@@ -79,6 +79,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.platform.LocalContext
 import com.dsann.music.util.NetworkFailureClassifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -490,8 +491,11 @@ internal fun FullScreenLyricsOverlay(
         CrashDiagnostics.updateUiDetails(
             "Lyrics full-screen dialog; window=${configuration.screenWidthDp}x${configuration.screenHeightDp}dp; " +
                 "orientation=$orientation; loading=$isLoading; playing=$isPlaying; " +
+                "contentReady=$contentReady; lyricsContentReady=$lyricsContentReady; " +
                 "synced=${!syncedLyrics.isNullOrEmpty()}; plain=${!plainLyrics.isNullOrBlank()}; " +
-                "providers=${providerResults.size}"
+                "translationEnabled=$translationEnabled; translationBusy=$translationBusy; " +
+                "showSyncControls=$showSyncControls; providersSheet=$showProvidersSheet; " +
+                "providers=${providerResults.size}; selectedProviderPresent=${!selectedProvider.isNullOrBlank()}"
         )
         CrashDiagnostics.updateLyricsRendering(
             "Dialog presentation; lyrics content=${when { !syncedLyrics.isNullOrEmpty() -> "synced"; !plainLyrics.isNullOrBlank() -> "plain"; else -> "none/loading" }}"
@@ -704,6 +708,13 @@ internal fun FullScreenLyricsOverlay(
     }
 
     val view = LocalView.current
+    val dialogWindow = (view.parent as? DialogWindowProvider)?.window
+    DisposableEffect(dialogWindow) {
+        CrashDiagnostics.startLyricsWindowFrameMetrics(dialogWindow)
+        onDispose {
+            CrashDiagnostics.stopLyricsWindowFrameMetrics(dialogWindow)
+        }
+    }
     DisposableEffect(view) {
         view.keepScreenOn = true
         onDispose {
