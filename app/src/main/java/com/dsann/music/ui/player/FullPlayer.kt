@@ -871,6 +871,12 @@ fun FullPlayer(
     val orientationTransitionActive = orientationChangeDetected || suppressQueueForRotation
     LaunchedEffect(windowOrientation) {
         if (settledWindowOrientation != windowOrientation) {
+            if (windowOrientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+                // Landscape is the player-only layout: dismiss any lyrics surface carried
+                // over from portrait and leave the player in its normal playback mode.
+                showPlainLyricsPage = false
+                onLyricsModeChanged(false)
+            }
             suppressQueueForRotation = true
             viewModel.setQueueExpanded(false)
             delay(450L)
@@ -1778,12 +1784,11 @@ fun FullPlayer(
                 }
                 playerButtonsForDisplay.forEach { action ->
                     when (action) {
-                        "plain_lyrics" -> PillChip(
+                        "plain_lyrics" -> if (!isLandscapeWindow) PillChip(
                             style = playerButtonStyle,
                             icon = painterResource(id = R.drawable.ic_lyrics),
                             label = "Lyrics",
-                            isSelected = showPlainLyricsPage ||
-                                (useWidePlayer && isLandscapeWindow && isPlayerVisible),
+                            isSelected = showPlainLyricsPage,
                             onClick = {
                                 viewModel.setQueueExpanded(false)
                                 showPlainLyricsPage = true
@@ -2112,7 +2117,7 @@ fun FullPlayer(
             Spacer(modifier = Modifier.weight(1f, fill = true))
         }
 
-        if (useWidePlayer) {
+        if (useWidePlayer && !isLandscapeWindow) {
             Row(
                 modifier = Modifier
                     .fillMaxSize()
@@ -2131,16 +2136,7 @@ fun FullPlayer(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     content = playerControlsContent
                 )
-                LandscapeLyricsOpener(
-                    modifier = Modifier.weight(0.46f).fillMaxHeight(),
-                    contentColor = contentColor,
-                    secondaryColor = contentSecondary,
-                    accentColor = lyricsAccentColor,
-                    onClick = {
-                        viewModel.setQueueExpanded(false)
-                        showPlainLyricsPage = true
-                    }
-                )
+                Spacer(modifier = Modifier.weight(0.46f).fillMaxHeight())
             }
         } else {
             Column(
@@ -2154,7 +2150,7 @@ fun FullPlayer(
                 content = playerControlsContent
             )
         }
-        if (showPlainLyricsPage) {
+        if (showPlainLyricsPage && !isLandscapeWindow) {
             PlainLyricsPage(
                 currentSong = uiState.currentSong,
                 syncedLyrics = visibleSyncedLyrics,
