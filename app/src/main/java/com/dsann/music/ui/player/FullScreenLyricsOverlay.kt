@@ -260,7 +260,7 @@ internal fun PlayerLyricsContent(
     selectedProvider: String?,
     providerResults: Map<String, LyricsResult>,
     gradientFontBorderWidth: Dp = 1.dp,
-    centerLineLyrics: Boolean = false,
+    centerLineLyrics: Boolean = true,
     forceLowCostRendering: Boolean = false,
     modifier: Modifier = Modifier
 ) {
