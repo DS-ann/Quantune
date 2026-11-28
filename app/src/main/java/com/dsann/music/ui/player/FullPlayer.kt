@@ -1986,7 +1986,8 @@ fun FullPlayer(
                 scrubberThickness = scrubberThickness,
                 scrubberThumbStyle = scrubberThumbStyle,
                 coverDerivedColor = Color(uiState.playerBackgroundColor),
-                backgroundSurfaceColor = playerProgressBackgroundColor
+                backgroundSurfaceColor = playerProgressBackgroundColor,
+                reduceAnimationLoad = isLandscapeWindow
             )
 
             Spacer(modifier = Modifier.height(if (compactLandscape) 6.dp else 16.dp))
