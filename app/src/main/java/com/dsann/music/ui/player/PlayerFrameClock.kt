@@ -1,7 +1,6 @@
 package com.dsann.music.ui.player
 
 import android.content.Context
-import android.app.ActivityManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -67,21 +66,6 @@ internal object AppAnimationFrameRateController {
  * buckets, so player progress, waveform, visualizer, karaoke and other visual loops
  * remain aligned to the device's presented frames.
  */
-/**
- * Keep expensive fullscreen lyric rendering on a conservative frame budget on
- * lower-memory devices. This is a UI-only heuristic; playback timing stays native.
- */
-internal fun isLowCostLyricsDevice(context: Context): Boolean {
-    val activityManager = context.applicationContext
-        .getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
-    if (activityManager.isLowRamDevice) return true
-
-    val memoryInfo = ActivityManager.MemoryInfo()
-    activityManager.getMemoryInfo(memoryInfo)
-    val sixGiB = 6L * 1024L * 1024L * 1024L
-    return memoryInfo.totalMem in 1L..sixGiB
-}
-
 @Composable
 internal fun rememberAppAnimationFrameTimeNanos(
     active: Boolean,
